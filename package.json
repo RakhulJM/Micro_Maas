@@ -9,7 +9,8 @@
     "prebuild": "node scripts/sync-maps.mjs",
     "build": "astro build",
     "preview": "astro preview",
-    "check": "astro check"
+    "check": "astro check",
+    "terrain:download": "node scripts/download-terrain.mjs"
   },
   "dependencies": {
     "astro": "^5.14.3",
