@@ -179,12 +179,59 @@ import 'leaflet/dist/leaflet.css';
       }).addTo(map);
 
       /*
-       * Each building gets a fixed label size calculated from its own
-       * bounding box at the base map zoom. The label then stays the
-       * same screen size while zooming.
+       * Building labels scale with the actual on-screen building bounds.
+       * Every label is hard-limited to 8px–18px.
        */
       const buildingLabels = [];
-      const labelBaseZoom = 18;
+
+      const clampLabelSize = (value) =>
+        Math.max(8, Math.min(18, value));
+
+      const measureTextAtOnePx = (text) => {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+
+        if (!context) return Math.max(1, text.length * 0.55);
+
+        context.font = "500 1px 'DM Sans', sans-serif";
+        return Math.max(1, context.measureText(text).width);
+      };
+
+      const updateBuildingLabels = () => {
+        const zoom = map.getZoom();
+
+        for (const item of buildingLabels) {
+          const northWest = map.project(item.bounds.getNorthWest(), zoom);
+          const southEast = map.project(item.bounds.getSouthEast(), zoom);
+
+          const buildingWidth = Math.max(1, Math.abs(southEast.x - northWest.x));
+          const buildingHeight = Math.max(1, Math.abs(southEast.y - northWest.y));
+
+          // Keep text comfortably inside the building footprint.
+          const availableWidth = buildingWidth * 0.82;
+          const availableHeight = buildingHeight * 0.48;
+
+          // Estimate the largest one-line size that fits the building width.
+          const textWidthAtOnePx = measureTextAtOnePx(item.name);
+          const widthBasedSize = availableWidth / textWidthAtOnePx;
+
+          // Also limit by the building height so text never dominates a small building.
+          const heightBasedSize = availableHeight;
+
+          item.fontSize = clampLabelSize(
+            Math.min(widthBasedSize, heightBasedSize)
+          );
+
+          item.label.style.setProperty(
+            '--building-label-size',
+            item.fontSize + 'px'
+          );
+          item.label.style.setProperty(
+            '--building-label-width',
+            availableWidth + 'px'
+          );
+        }
+      };
 
       for (const feature of campusData.features || []) {
         const name = feature?.properties?.name;
@@ -198,29 +245,19 @@ import 'leaflet/dist/leaflet.css';
 
         if (!bounds.isValid()) continue;
 
-        const northWest = map.project(bounds.getNorthWest(), labelBaseZoom);
-        const southEast = map.project(bounds.getSouthEast(), labelBaseZoom);
-
-        const boxWidth = Math.max(1, Math.abs(southEast.x - northWest.x));
-        const boxHeight = Math.max(1, Math.abs(southEast.y - northWest.y));
-        const maxDimension = Math.max(boxWidth, boxHeight);
-
-        // Label size is derived from the building's maximum dimension.
-        const fontSize = Math.max(7, Math.min(13, maxDimension * 0.075));
-        const maxLabelWidth = Math.max(18, boxWidth * 0.82);
-
         const safeName = String(name)
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;');
 
-        const label = L.marker(bounds.getCenter(), {
+        const marker = L.marker(bounds.getCenter(), {
           icon: L.divIcon({
             className: 'building-label',
             html:
-              '<span style="--building-label-size:' + fontSize + 'px;--building-label-width:' +
-              maxLabelWidth + 'px">' + safeName + '</span>',
+              '<span style="--building-label-size:8px;--building-label-width:20px">' +
+              safeName +
+              '</span>',
             iconSize: [0, 0],
             iconAnchor: [0, 0]
           }),
@@ -228,7 +265,17 @@ import 'leaflet/dist/leaflet.css';
           keyboard: false
         }).addTo(map);
 
-        buildingLabels.push(label);
+        const label = marker.getElement()?.querySelector('span');
+
+        if (!label) continue;
+
+        buildingLabels.push({
+          name: String(name),
+          bounds,
+          marker,
+          label,
+          fontSize: 8
+        });
       }
 
       /*
@@ -316,11 +363,17 @@ import 'leaflet/dist/leaflet.css';
 
       // Do not snap zoom back to the 1 km minimum after an intentional override.
       map.on('zoomend', () => {
-        if (map.getZoom() < perimeterZoom) return;
-        constrainToPerimeter();
+        if (map.getZoom() >= perimeterZoom) {
+          constrainToPerimeter();
+        }
+
+        updateBuildingLabels();
       });
 
-      setTimeout(() => map.invalidateSize(), 100);
+      setTimeout(() => {
+        map.invalidateSize();
+        updateBuildingLabels();
+      }, 100);
 
       document.querySelectorAll('[data-map-action]').forEach((button) => {
         button.addEventListener('click', () => {
