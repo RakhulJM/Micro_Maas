@@ -231,10 +231,8 @@ import 'leaflet/dist/leaflet.css';
         interactive: false
       }).addTo(map);
 
-      const perimeterZoom = Math.max(
-        map.getBoundsZoom(circleBounds, false),
-        13
-      );
+      // Minimum zoom matches the current 1 km map view.
+      const perimeterZoom = 18;
 
       map.setMinZoom(perimeterZoom);
       map.setView(center, perimeterZoom, { animate: false });
