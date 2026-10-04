@@ -98,18 +98,20 @@ import 'leaflet/dist/leaflet.css';
 
   <script>
     import('leaflet').then(async ({ default: L }) => {
-      const [campusResponse, perimeterResponse] = await Promise.all([
+      const [campusResponse, perimeterResponse, pathResponse] = await Promise.all([
         fetch('/maps/export.geojson'),
-        fetch('/maps/perimeter.geojson')
+        fetch('/maps/perimeter.geojson'),
+        fetch('/maps/pedestrian_paths.geojson')
       ]);
 
-      if (!campusResponse.ok || !perimeterResponse.ok) {
+      if (!campusResponse.ok || !perimeterResponse.ok || !pathResponse.ok) {
         throw new Error('Campus map data could not be loaded.');
       }
 
-      const [campusData, perimeterData] = await Promise.all([
+      const [campusData, perimeterData, pedestrianPathData] = await Promise.all([
         campusResponse.json(),
-        perimeterResponse.json()
+        perimeterResponse.json(),
+        pathResponse.json()
       ]);
 
       const perimeterFeature = perimeterData.features[0];
@@ -250,17 +252,7 @@ import 'leaflet/dist/leaflet.css';
       roadCasing.addTo(map);
       roads.addTo(map);
 
-      const pedestrianPathKinds = new Set([
-        'footway',
-        'path',
-        'pedestrian',
-        'steps'
-      ]);
-
-      const isPedestrianPath = (feature) =>
-        pedestrianPathKinds.has(feature?.properties?.highway);
-
-      const pedestrianPathCasing = L.geoJSON(campusData, {
+      const pedestrianPathCasing = L.geoJSON(pedestrianPathData, {
         filter: isPedestrianPath,
         style: {
           color: '#ffffff',
@@ -272,7 +264,7 @@ import 'leaflet/dist/leaflet.css';
         interactive: false
       });
 
-      const pedestrianPaths = L.geoJSON(campusData, {
+      const pedestrianPaths = L.geoJSON(pedestrianPathData, {
         filter: isPedestrianPath,
         style: {
           color: '#2563eb',
