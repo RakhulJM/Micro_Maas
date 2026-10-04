@@ -281,6 +281,198 @@ a { color: inherit; text-decoration: none; }
   stroke-linejoin: round;
 }
 
+.edit-toggle {
+  position: absolute;
+  z-index: 1000;
+  right: 14px;
+  bottom: 203px;
+  display: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(20, 39, 62, .12);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .94);
+  color: #24364d;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, .12);
+  backdrop-filter: blur(10px);
+}
+
+.edit-toggle.is-visible {
+  display: grid;
+}
+
+.edit-toggle:hover {
+  background: #fff;
+}
+
+.edit-toggle.is-active {
+  border-color: rgba(37, 99, 235, .28);
+  background: rgba(37, 99, 235, .96);
+  color: #fff;
+}
+
+.edit-toggle svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.edit-card {
+  position: absolute;
+  z-index: 1150;
+  left: 14px;
+  bottom: 42px;
+  width: min(290px, calc(100vw - 28px));
+  padding: 11px 12px;
+  border: 1px solid rgba(20, 39, 62, .12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .94);
+  color: #24364d;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .14);
+  backdrop-filter: blur(10px);
+  display: none;
+}
+
+.edit-card.is-open {
+  display: block;
+}
+
+.edit-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.edit-card-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: #2563eb;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.edit-card-top strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.edit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.edit-action {
+  border: 1px solid rgba(20, 39, 62, .1);
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: rgba(248, 250, 252, .95);
+  color: #4f6075;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.edit-action-primary {
+  border-color: rgba(37, 99, 235, .24);
+  background: rgba(37, 99, 235, .1);
+  color: #2563eb;
+}
+
+.edit-point-marker {
+  width: 20px !important;
+  height: 20px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.edit-point-marker span {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .2);
+}
+
+.edit-mode-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  margin-bottom: 3px;
+}
+
+.edit-mode-setting > span {
+  min-width: 0;
+}
+
+.edit-mode-setting strong,
+.edit-mode-setting small {
+  display: block;
+}
+
+.edit-mode-setting strong {
+  color: #dfe8f6;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.edit-mode-setting small {
+  margin-top: 2px;
+  color: #697990;
+  font-size: 9px;
+}
+
+.edit-mode-setting input {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 18px;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 999px;
+  background: #15283e;
+  position: relative;
+  cursor: pointer;
+}
+
+.edit-mode-setting input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #7b8799;
+  transition: transform .15s ease;
+}
+
+.edit-mode-setting input:checked {
+  border-color: rgba(59, 130, 246, .5);
+  background: #2563eb;
+}
+
+.edit-mode-setting input:checked::after {
+  background: #fff;
+  transform: translateX(12px);
+}
+
 .route-card {
   position: absolute;
   z-index: 1100;
@@ -395,6 +587,11 @@ a { color: inherit; text-decoration: none; }
   .route-toggle {
     right: 10px;
     bottom: 157px;
+  }
+
+  .edit-toggle {
+    right: 10px;
+    bottom: 198px;
   }
 
   .route-card {
