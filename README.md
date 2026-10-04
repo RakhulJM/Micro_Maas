@@ -1,10 +1,10 @@
-# MaaS Prototype v1
+# Micro_Maas
 
 ## Clone
 
 ```bash
-git clone https://github.com/RakhulJM/maas-prototype-v1.git
-cd maas-prototype-v1
+git clone https://github.com/RakhulJM/Micro_Maas.git
+cd Micro_Maas
 ```
 
 ## Virtual Environment
