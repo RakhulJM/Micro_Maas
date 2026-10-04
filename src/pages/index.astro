@@ -726,14 +726,89 @@ import 'leaflet/dist/leaflet.css';
           graph.get(endKey).push({ node: startKey, distance: directDistance });
         }
 
+        class MinHeap {
+          constructor() {
+            this.items = [];
+          }
+
+          get size() {
+            return this.items.length;
+          }
+
+          push(item) {
+            this.items.push(item);
+
+            let index = this.items.length - 1;
+
+            while (index > 0) {
+              const parent = Math.floor((index - 1) / 2);
+
+              if (this.items[parent].distance <= this.items[index].distance) {
+                break;
+              }
+
+              [this.items[parent], this.items[index]] = [
+                this.items[index],
+                this.items[parent]
+              ];
+
+              index = parent;
+            }
+          }
+
+          pop() {
+            if (!this.items.length) return null;
+
+            const first = this.items[0];
+            const last = this.items.pop();
+
+            if (this.items.length && last) {
+              this.items[0] = last;
+
+              let index = 0;
+
+              while (true) {
+                const left = index * 2 + 1;
+                const right = left + 1;
+                let smallest = index;
+
+                if (
+                  left < this.items.length &&
+                  this.items[left].distance < this.items[smallest].distance
+                ) {
+                  smallest = left;
+                }
+
+                if (
+                  right < this.items.length &&
+                  this.items[right].distance < this.items[smallest].distance
+                ) {
+                  smallest = right;
+                }
+
+                if (smallest === index) break;
+
+                [this.items[index], this.items[smallest]] = [
+                  this.items[smallest],
+                  this.items[index]
+                ];
+
+                index = smallest;
+              }
+            }
+
+            return first;
+          }
+        }
+
         const distances = new Map([[startKey, 0]]);
         const previous = new Map();
         const visited = new Set();
-        const queue = [{ node: startKey, distance: 0 }];
+        const queue = new MinHeap();
+        queue.push({ node: startKey, distance: 0 });
 
-        while (queue.length) {
-          queue.sort((a, b) => a.distance - b.distance);
-          const current = queue.shift();
+        while (queue.size) {
+          const current = queue.pop();
 
           if (!current || visited.has(current.node)) continue;
           visited.add(current.node);
