@@ -15,18 +15,20 @@ import 'leaflet/dist/leaflet.css';
 
       <div class="top-actions">
         <button class="ghost-btn" type="button" id="locateBtn">◎ My location</button>
+        <button class="map-mode-toggle" type="button" id="mapModeToggle" aria-label="Switch map view" title="Switch map view">⇄</button>
         <button class="profile" type="button" aria-label="Profile">AR</button>
       </div>
     </header>
 
-    <div id="map" class="map" aria-label="Interactive campus map"></div>
+    <div id="map" class="map map-local" aria-label="Local campus map"></div>
+    <div id="googleMap" class="map map-google is-hidden" aria-label="Google campus map"></div>
 
     <div class="map-controls" aria-label="Map controls">
       <button type="button" data-map-action="zoom-in" aria-label="Zoom in">+</button>
       <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
     </div>
 
-    <div class="map-note">Campus map · 1 km boundary</div>
+    <div class="map-note" id="mapNote">Local map · 1 km boundary</div>
 
     <section class="dev-panel" id="devPanel" aria-hidden="true">
       <div class="dev-panel-shell">
@@ -79,9 +81,56 @@ import 'leaflet/dist/leaflet.css';
   </main>
 
   <script>
+    const googleApiKey = import.meta.env.PUBLIC_GOOGLE_MAPS_API_KEY || '';
+    const googleMapId = import.meta.env.PUBLIC_GOOGLE_MAP_ID || 'DEMO_MAP_ID';
+
+    const loadGoogleMaps = (() => {
+      let promise;
+
+      return () => {
+        if (promise) return promise;
+
+        promise = new Promise((resolve, reject) => {
+          if (window.google?.maps) {
+            resolve(window.google.maps);
+            return;
+          }
+
+          if (!googleApiKey) {
+            reject(new Error('PUBLIC_GOOGLE_MAPS_API_KEY is not configured.'));
+            return;
+          }
+
+          const script = document.createElement('script');
+          script.src =
+            'https://maps.googleapis.com/maps/api/js?key=' +
+            encodeURIComponent(googleApiKey) +
+            '&loading=async&v=weekly';
+          script.async = true;
+          script.defer = true;
+
+          script.onload = () => {
+            if (window.google?.maps) {
+              resolve(window.google.maps);
+            } else {
+              reject(new Error('Google Maps API loaded without maps.'));
+            }
+          };
+
+          script.onerror = () => {
+            reject(new Error('Google Maps API could not be loaded.'));
+          };
+
+          document.head.appendChild(script);
+        });
+
+        return promise;
+      };
+    })();
+
     import('leaflet').then(async ({ default: L }) => {
       const [campusResponse, perimeterResponse] = await Promise.all([
-        fetch('/maps/campus.geojson'),
+        fetch('/maps/export.geojson'),
         fetch('/maps/perimeter.geojson')
       ]);
 
@@ -564,7 +613,134 @@ import 'leaflet/dist/leaflet.css';
         }
       }
 
-      const devPanel = document.getElementById('devPanel');
+      const localMapElement = document.getElementById('map');
+      const googleMapElement = document.getElementById('googleMap');
+      const mapModeToggle = document.getElementById('mapModeToggle');
+      const mapNote = document.getElementById('mapNote');
+
+      let googleMap = null;
+      let googleBoundaryMask = null;
+      let googleMode = false;
+
+      const googleCenter = {
+        lat: center.lat,
+        lng: center.lng
+      };
+
+      const buildGoogleBoundaryMask = (googleMaps) => {
+        const outer = [
+          { lat: center.lat - 1, lng: center.lng - 1 },
+          { lat: center.lat - 1, lng: center.lng + 1 },
+          { lat: center.lat + 1, lng: center.lng + 1 },
+          { lat: center.lat + 1, lng: center.lng - 1 }
+        ];
+
+        const inner = ring
+          .map(([lon, lat]) => ({ lat, lng: lon }))
+          .reverse();
+
+        return new googleMaps.Polygon({
+          paths: [outer, inner],
+          strokeOpacity: 0,
+          fillColor: '#eef1f3',
+          fillOpacity: 0.94,
+          clickable: false,
+          map: googleMap
+        });
+      };
+
+      const showGoogleMap = async () => {
+        if (!googleMap) {
+          try {
+            const googleMaps = await loadGoogleMaps();
+            const mapsLibrary = await googleMaps.importLibrary('maps');
+
+            const Map = mapsLibrary.Map;
+
+            googleMap = new Map(googleMapElement, {
+              center: googleCenter,
+              zoom: 18,
+              minZoom: 1,
+              maxZoom: 23,
+              mapId: googleMapId,
+              streetViewControl: false,
+              fullscreenControl: false,
+              mapTypeControl: false,
+              zoomControl: false,
+              clickableIcons: false,
+              gestureHandling: 'greedy',
+              restriction: {
+                latLngBounds: {
+                  north: center.lat + latRadius,
+                  south: center.lat - latRadius,
+                  east: center.lng + lonRadius,
+                  west: center.lng - lonRadius
+                },
+                strictBounds: true
+              }
+            });
+
+            googleBoundaryMask = buildGoogleBoundaryMask(googleMaps);
+          } catch (error) {
+            console.error(error);
+            mapModeToggle?.classList.add('map-mode-error');
+            if (mapNote) {
+              mapNote.textContent = 'Google Maps requires an API key';
+            }
+            return;
+          }
+        }
+
+        googleMode = true;
+        localMapElement?.classList.add('is-hidden');
+        googleMapElement?.classList.remove('is-hidden');
+
+        const localCenter = map.getCenter();
+        googleMap.setCenter({
+          lat: localCenter.lat,
+          lng: localCenter.lng
+        });
+        googleMap.setZoom(map.getZoom());
+
+        mapNote && (mapNote.textContent = 'Google map · live');
+        mapModeToggle?.setAttribute('title', 'Switch to local map');
+      };
+
+      const showLocalMap = () => {
+        if (!googleMode) return;
+
+        googleMode = false;
+        googleMapElement?.classList.add('is-hidden');
+        localMapElement?.classList.remove('is-hidden');
+
+        if (googleMap) {
+          const googleCenterNow = googleMap.getCenter();
+          const googleZoomNow = googleMap.getZoom();
+
+          if (googleCenterNow) {
+            map.setView(
+              [googleCenterNow.lat(), googleCenterNow.lng()],
+              googleZoomNow,
+              { animate: false }
+            );
+          }
+        }
+
+        mapNote && (mapNote.textContent = 'Local map · 1 km boundary');
+        mapModeToggle?.setAttribute('title', 'Switch to Google map');
+
+        setTimeout(() => map.invalidateSize(), 50);
+      };
+
+      mapModeToggle?.addEventListener('click', () => {
+        if (googleMode) {
+          showLocalMap();
+        } else {
+          void showGoogleMap();
+        }
+      });
+
+            const devPanel = document.getElementById('devPanel');
 
       const closeDevPanel = () => {
         devPanel?.classList.remove('is-open');
@@ -599,6 +775,20 @@ import 'leaflet/dist/leaflet.css';
         button.addEventListener('click', () => {
           const action = button.getAttribute('data-map-action');
 
+          if (googleMode && googleMap) {
+            const current = googleMap.getZoom();
+
+            if (action === 'zoom-in') {
+              googleMap.setZoom(Math.min(maxZoom, current + 1));
+              return;
+            }
+
+            if (action === 'zoom-out') {
+              googleMap.setZoom(Math.max(1, current - 1));
+              return;
+            }
+          }
+
           if (action === 'zoom-in') {
             map.setZoom(Math.min(maxZoom, map.getZoom() + 1), { animate: true });
             return;
@@ -617,9 +807,19 @@ import 'leaflet/dist/leaflet.css';
         navigator.geolocation.getCurrentPosition(
           ({ coords }) => {
             const location = L.latLng(coords.latitude, coords.longitude);
-            if (center.distanceTo(location) <= radius) {
-              map.setView(location, Math.max(map.getZoom(), perimeterZoom));
+
+            if (center.distanceTo(location) > radius) return;
+
+            if (googleMode && googleMap) {
+              googleMap.setCenter({
+                lat: coords.latitude,
+                lng: coords.longitude
+              });
+              googleMap.setZoom(Math.max(googleMap.getZoom(), perimeterZoom));
+              return;
             }
+
+            map.setView(location, Math.max(map.getZoom(), perimeterZoom));
           },
           () => alert('Location permission was not granted.')
         );
