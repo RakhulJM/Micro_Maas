@@ -3,3 +3,6 @@ dist/
 .astro/
 .env
 .env.*
+
+# Local campus map data
+*.geojson
