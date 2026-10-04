@@ -150,7 +150,7 @@ import 'leaflet/dist/leaflet.css';
         ) * (2 ** zoom);
       };
 
-      const terrainLayer = L.GridLayer.extend({
+      const TerrainGridLayer = L.GridLayer.extend({
         createTile(coords, done) {
           const canvas = document.createElement('canvas');
           canvas.width = 256;
@@ -293,7 +293,7 @@ import 'leaflet/dist/leaflet.css';
         }
       });
 
-      const terrain = new terrainLayer({
+      const terrain = new TerrainGridLayer({
         tileSize: 256,
         updateWhenZooming: false,
         keepBuffer: 2,
