@@ -1,132 +1,24 @@
 # MaaS Prototype v1
 
-## Files
-
-```text
-router.py
-ad_router.py
-bus_stops.csv
-scooters.json
-```
-
-## `ad_router.py`
-
-Graph-based routing using NetworkX.
-
-Uses:
-
-```text
-Dijkstra shortest path
-```
-
-Optimization:
-
-```text
-time
-cost
-```
-
-Nodes:
-
-```text
-KEC Hostel
-Campus Gate
-Perundurai BS
-Erode BS
-Railway Station
-```
-
-Edge data:
-
-```text
-mode
-time
-cost
-co2
-```
-
-Run:
+## Clone
 
 ```bash
-python3 ad_router.py
+git clone https://github.com/<-->/maas-prototype-v1.git
+cd maas-prototype-v1
 ```
 
----
-
-## `router.py`
-
-Fixed multi-leg Erode route calculation.
-
-Uses:
-
-```text
-Pandas
-Geopy
-```
-
-Flow:
-
-```text
-KEC Hostel
-→ Campus Gate
-→ Perundurai BS
-→ Erode BS
-→ Erode Railway Station
-```
-
-Calculates:
-
-```text
-distance
-time
-fare
-CO2
-```
-
-Run:
+## Virtual Environment
 
 ```bash
-python3 router.py
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
----
+Windows:
 
-## `bus_stops.csv`
-
-Transit coordinate data.
-
-```text
-stop_id
-stop_name
-lat
-lon
+```bash
+.venv\Scripts\activate
 ```
-
-Current stops:
-
-```text
-T1  Kongu Campus Gate
-T2  Perundurai Bus Stand
-T3  Erode Bus Stand
-T4  Erode Railway Station
-```
-
----
-
-## `scooters.json`
-
-Local scooter data.
-
-```text
-id
-lat
-lon
-battery
-```
-
-Currently not connected to the routing logic.
-
----
 
 ## Dependencies
 
@@ -134,18 +26,22 @@ Currently not connected to the routing logic.
 pip install pandas networkx geopy
 ```
 
-## Main Engineering
+## Run
 
-```text
-CSV / JSON
-   ↓
-Mobility Data
-   ↓
-Graph / Coordinates
-   ↓
-Routing
-   ↓
-Time + Cost + CO2
-   ↓
-Trip Result
+### Graph Router
+
+```bash
+python3 ad_router.py
+```
+
+### Route Calculator
+
+```bash
+python3 router.py
+```
+
+## Deactivate
+
+```bash
+deactivate
 ```
