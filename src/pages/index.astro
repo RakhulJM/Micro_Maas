@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css';
 ---
 
 <MainLayout title="CampusMaaS · Map">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.css" />
   <main class="map-screen">
     <header class="floating-header">
       <a class="brand" href="/" aria-label="CampusMaaS home">
@@ -15,13 +16,13 @@ import 'leaflet/dist/leaflet.css';
 
       <div class="top-actions">
         <button class="ghost-btn" type="button" id="locateBtn">◎ My location</button>
-        <button class="map-mode-toggle" type="button" id="mapModeToggle" aria-label="Switch map view" title="Switch map view">⇄</button>
+        <button class="map-mode-toggle" type="button" id="mapModeToggle" aria-label="Switch map view" title="Switch to terrain map">⇄</button>
         <button class="profile" type="button" aria-label="Profile">AR</button>
       </div>
     </header>
 
     <div id="map" class="map map-local" aria-label="Local campus map"></div>
-    <div id="googleMap" class="map map-google is-hidden" aria-label="Google campus map"></div>
+    <div id="terrainMap" class="map map-terrain is-hidden" aria-label="Campus terrain map"></div>
 
     <div class="map-controls" aria-label="Map controls">
       <button type="button" data-map-action="zoom-in" aria-label="Zoom in">+</button>
@@ -81,53 +82,6 @@ import 'leaflet/dist/leaflet.css';
   </main>
 
   <script>
-    const googleApiKey = import.meta.env.PUBLIC_GOOGLE_MAPS_API_KEY || '';
-    const googleMapId = import.meta.env.PUBLIC_GOOGLE_MAP_ID || 'DEMO_MAP_ID';
-
-    const loadGoogleMaps = (() => {
-      let promise;
-
-      return () => {
-        if (promise) return promise;
-
-        promise = new Promise((resolve, reject) => {
-          if (window.google?.maps) {
-            resolve(window.google.maps);
-            return;
-          }
-
-          if (!googleApiKey) {
-            reject(new Error('PUBLIC_GOOGLE_MAPS_API_KEY is not configured.'));
-            return;
-          }
-
-          const script = document.createElement('script');
-          script.src =
-            'https://maps.googleapis.com/maps/api/js?key=' +
-            encodeURIComponent(googleApiKey) +
-            '&loading=async&v=weekly';
-          script.async = true;
-          script.defer = true;
-
-          script.onload = () => {
-            if (window.google?.maps) {
-              resolve(window.google.maps);
-            } else {
-              reject(new Error('Google Maps API loaded without maps.'));
-            }
-          };
-
-          script.onerror = () => {
-            reject(new Error('Google Maps API could not be loaded.'));
-          };
-
-          document.head.appendChild(script);
-        });
-
-        return promise;
-      };
-    })();
-
     import('leaflet').then(async ({ default: L }) => {
       const [campusResponse, perimeterResponse] = await Promise.all([
         fetch('/maps/export.geojson'),
@@ -614,133 +568,381 @@ import 'leaflet/dist/leaflet.css';
       }
 
       const localMapElement = document.getElementById('map');
-      const googleMapElement = document.getElementById('googleMap');
+      const terrainMapElement = document.getElementById('terrainMap');
       const mapModeToggle = document.getElementById('mapModeToggle');
       const mapNote = document.getElementById('mapNote');
 
-      let googleMap = null;
-      let googleBoundaryMask = null;
-      let googleMode = false;
+      let terrainMap = null;
+      let terrainMode = false;
+      let terrainLibraryPromise = null;
 
-      const googleCenter = {
-        lat: center.lat,
-        lng: center.lng
+      const loadMapLibre = () => {
+        if (terrainLibraryPromise) return terrainLibraryPromise;
+
+        terrainLibraryPromise = import(
+          /* @vite-ignore */
+          'https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.mjs'
+        );
+
+        return terrainLibraryPromise;
       };
 
-      const buildGoogleBoundaryMask = (googleMaps) => {
-        const outer = [
-          { lat: center.lat - 1, lng: center.lng - 1 },
-          { lat: center.lat - 1, lng: center.lng + 1 },
-          { lat: center.lat + 1, lng: center.lng + 1 },
-          { lat: center.lat + 1, lng: center.lng - 1 }
-        ];
+      const clampTerrainCenter = () => {
+        if (!terrainMap) return;
 
-        const inner = ring
-          .map(([lon, lat]) => ({ lat, lng: lon }))
-          .reverse();
+        const current = terrainMap.getCenter();
+        const currentLatLng = L.latLng(current.lat, current.lng);
+        const distance = center.distanceTo(currentLatLng);
 
-        return new googleMaps.Polygon({
-          paths: [outer, inner],
-          strokeOpacity: 0,
-          fillColor: '#eef1f3',
-          fillOpacity: 0.94,
-          clickable: false,
-          map: googleMap
+        if (distance <= radius) return;
+
+        const bearing = Math.atan2(
+          (current.lng - center.lng) * Math.cos(center.lat * Math.PI / 180),
+          current.lat - center.lat
+        );
+
+        const latOffset = Math.cos(bearing) * radius / 111320;
+        const lonOffset =
+          Math.sin(bearing) * radius /
+          (111320 * Math.cos(center.lat * Math.PI / 180));
+
+        terrainMap.jumpTo({
+          center: [
+            center.lng + lonOffset,
+            center.lat + latOffset
+          ],
+          zoom: Math.max(terrainMap.getZoom(), perimeterZoom)
         });
       };
 
-      const showGoogleMap = async () => {
-        if (!googleMap) {
+      const mapLibreStyle = {
+        version: 8,
+        sources: {
+          terrain: {
+            type: 'raster-dem',
+            tiles: [
+              'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'
+            ],
+            encoding: 'terrarium',
+            tileSize: 256,
+            minzoom: 0,
+            maxzoom: 14,
+            bounds: [
+              center.lng - lonRadius,
+              center.lat - latRadius,
+              center.lng + lonRadius,
+              center.lat + latRadius
+            ],
+            attribution: 'Terrain Tiles © Mapzen / open data sources'
+          },
+          campus: {
+            type: 'geojson',
+            data: campusData
+          },
+          perimeter: {
+            type: 'geojson',
+            data: {
+              type: 'FeatureCollection',
+              features: [perimeterFeature]
+            }
+          },
+          perimeterMask: {
+            type: 'geojson',
+            data: {
+              type: 'FeatureCollection',
+              features: [
+                {
+                  type: 'Feature',
+                  properties: {},
+                  geometry: {
+                    type: 'Polygon',
+                    coordinates: [[
+                      [center.lng - 1, center.lat - 1],
+                      [center.lng + 1, center.lat - 1],
+                      [center.lng + 1, center.lat + 1],
+                      [center.lng - 1, center.lat + 1],
+                      [center.lng - 1, center.lat - 1]
+                    ], ring.map(([lon, lat]) => [lon, lat]).reverse()]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        layers: [
+          {
+            id: 'terrain-background',
+            type: 'background',
+            paint: {
+              'background-color': '#e8e4d8'
+            }
+          },
+          {
+            id: 'terrain-relief',
+            type: 'hillshade',
+            source: 'terrain',
+            paint: {
+              'hillshade-method': 'standard',
+              'hillshade-illumination-direction': 315,
+              'hillshade-illumination-altitude': 45,
+              'hillshade-shadow-color': '#746957',
+              'hillshade-highlight-color': '#fffdf5',
+              'hillshade-accent-color': '#a99a7d',
+              'hillshade-exaggeration': 0.55
+            }
+          },
+          {
+            id: 'terrain-green',
+            type: 'fill',
+            source: 'campus',
+            filter: [
+              'any',
+              ['==', ['get', 'leisure'], 'park'],
+              ['==', ['get', 'landuse'], 'grass'],
+              ['==', ['get', 'landuse'], 'recreation_ground'],
+              ['==', ['get', 'landuse'], 'forest']
+            ],
+            paint: {
+              'fill-color': '#d8e3ce',
+              'fill-opacity': 0.6
+            }
+          },
+          {
+            id: 'terrain-water',
+            type: 'fill',
+            source: 'campus',
+            filter: [
+              'any',
+              ['==', ['get', 'natural'], 'water'],
+              ['==', ['get', 'waterway'], 'riverbank']
+            ],
+            paint: {
+              'fill-color': '#b9dbe4',
+              'fill-opacity': 0.82
+            }
+          },
+          {
+            id: 'terrain-buildings',
+            type: 'fill',
+            source: 'campus',
+            filter: ['has', 'building'],
+            paint: {
+              'fill-color': '#ddd8cd',
+              'fill-outline-color': '#bdb6a9',
+              'fill-opacity': 0.92
+            }
+          },
+          {
+            id: 'terrain-road-casing',
+            type: 'line',
+            source: 'campus',
+            filter: ['has', 'highway'],
+            paint: {
+              'line-color': '#c7c2b8',
+              'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                16, 2.2,
+                18, 4.8,
+                23, 12
+              ],
+              'line-opacity': 0.92,
+              'line-cap': 'round',
+              'line-join': 'round'
+            }
+          },
+          {
+            id: 'terrain-roads',
+            type: 'line',
+            source: 'campus',
+            filter: ['has', 'highway'],
+            paint: {
+              'line-color': [
+                'match',
+                ['get', 'highway'],
+                ['motorway', 'trunk', 'primary', 'secondary', 'tertiary'],
+                '#e9c67b',
+                ['footway', 'path', 'pedestrian', 'steps'],
+                '#d6d0c6',
+                '#ffffff'
+              ],
+              'line-width': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                16, 1.4,
+                18, 3,
+                23, 8
+              ],
+              'line-opacity': 0.98,
+              'line-cap': 'round',
+              'line-join': 'round'
+            }
+          },
+          {
+            id: 'terrain-building-labels',
+            type: 'symbol',
+            source: 'campus',
+            minzoom: 16,
+            filter: [
+              'all',
+              ['has', 'name'],
+              ['has', 'building']
+            ],
+            layout: {
+              'text-field': ['get', 'name'],
+              'text-size': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                16, 8,
+                18, 10,
+                23, 15
+              ],
+              'text-max-width': 6,
+              'text-allow-overlap': false,
+              'text-ignore-placement': false
+            },
+            paint: {
+              'text-color': '#5d646d',
+              'text-halo-color': '#fff',
+              'text-halo-width': 1.2,
+              'text-halo-blur': 0.2
+            }
+          },
+          {
+            id: 'terrain-perimeter-mask',
+            type: 'fill',
+            source: 'perimeterMask',
+            paint: {
+              'fill-color': '#eef1f3',
+              'fill-opacity': 0.94
+            }
+          }
+        ]
+      };
+
+      const showTerrainMap = async () => {
+        if (!terrainMap) {
           try {
-            const googleMaps = await loadGoogleMaps();
-            const mapsLibrary = await googleMaps.importLibrary('maps');
+            const { default: maplibregl } = await loadMapLibre();
 
-            const Map = mapsLibrary.Map;
-
-            googleMap = new Map(googleMapElement, {
-              center: googleCenter,
-              zoom: 18,
+            terrainMap = new maplibregl.Map({
+              container: terrainMapElement,
+              style: mapLibreStyle,
+              center: [center.lng, center.lat],
+              zoom: perimeterZoom,
               minZoom: 1,
-              maxZoom: 23,
-              mapId: googleMapId,
-              streetViewControl: false,
-              fullscreenControl: false,
-              mapTypeControl: false,
-              zoomControl: false,
-              clickableIcons: false,
-              gestureHandling: 'greedy',
-              restriction: {
-                latLngBounds: {
-                  north: center.lat + latRadius,
-                  south: center.lat - latRadius,
-                  east: center.lng + lonRadius,
-                  west: center.lng - lonRadius
-                },
-                strictBounds: true
-              }
+              maxZoom,
+              maxBounds: [
+                [center.lng - lonRadius, center.lat - latRadius],
+                [center.lng + lonRadius, center.lat + latRadius]
+              ],
+              renderWorldCopies: false,
+              attributionControl: false,
+              pitch: 0,
+              bearing: 0
             });
 
-            googleBoundaryMask = buildGoogleBoundaryMask(googleMaps);
+            terrainMap.scrollZoom.disable();
+
+            terrainMap.on('moveend', clampTerrainCenter);
+            terrainMap.on('dragend', clampTerrainCenter);
+
+            terrainMap.on('load', () => {
+              terrainMap.resize();
+              clampTerrainCenter();
+            });
+
+            const terrainCanvas = terrainMap.getCanvasContainer();
+
+            terrainCanvas.addEventListener('wheel', (event) => {
+              event.preventDefault();
+
+              const direction = event.deltaY > 0 ? -1 : 1;
+              const allowBeyondLimit = event.shiftKey;
+              const currentZoom = terrainMap.getZoom();
+
+              if (
+                direction < 0 &&
+                currentZoom <= perimeterZoom &&
+                !allowBeyondLimit
+              ) {
+                return;
+              }
+
+              const nextZoom = allowBeyondLimit
+                ? currentZoom + direction
+                : Math.max(perimeterZoom, currentZoom + direction);
+
+              terrainMap.setZoom(
+                Math.max(1, Math.min(maxZoom, nextZoom)),
+                { duration: 0 }
+              );
+            }, { passive: false });
           } catch (error) {
             console.error(error);
             mapModeToggle?.classList.add('map-mode-error');
+
             if (mapNote) {
-              mapNote.textContent = 'Google Maps requires an API key';
+              mapNote.textContent = 'Terrain map could not be loaded';
             }
+
             return;
           }
         }
 
-        googleMode = true;
+        terrainMode = true;
         localMapElement?.classList.add('is-hidden');
-        googleMapElement?.classList.remove('is-hidden');
+        terrainMapElement?.classList.remove('is-hidden');
 
         const localCenter = map.getCenter();
-        googleMap.setCenter({
-          lat: localCenter.lat,
-          lng: localCenter.lng
-        });
-        googleMap.setZoom(map.getZoom());
 
-        mapNote && (mapNote.textContent = 'Google map · live');
+        terrainMap.jumpTo({
+          center: [localCenter.lng, localCenter.lat],
+          zoom: map.getZoom()
+        });
+
+        terrainMap.resize();
+        mapNote && (
+          mapNote.textContent =
+            'Terrain map · 1 km boundary · Mapzen Terrain Tiles'
+        );
         mapModeToggle?.setAttribute('title', 'Switch to local map');
       };
 
       const showLocalMap = () => {
-        if (!googleMode) return;
+        if (!terrainMode) return;
 
-        googleMode = false;
-        googleMapElement?.classList.add('is-hidden');
+        terrainMode = false;
+        terrainMapElement?.classList.add('is-hidden');
         localMapElement?.classList.remove('is-hidden');
 
-        if (googleMap) {
-          const googleCenterNow = googleMap.getCenter();
-          const googleZoomNow = googleMap.getZoom();
-
-          if (googleCenterNow) {
-            map.setView(
-              [googleCenterNow.lat(), googleCenterNow.lng()],
-              googleZoomNow,
-              { animate: false }
-            );
-          }
+        if (terrainMap) {
+          const terrainCenter = terrainMap.getCenter();
+          map.setView(
+            [terrainCenter.lat, terrainCenter.lng],
+            terrainMap.getZoom(),
+            { animate: false }
+          );
         }
 
         mapNote && (mapNote.textContent = 'Local map · 1 km boundary');
-        mapModeToggle?.setAttribute('title', 'Switch to Google map');
+        mapModeToggle?.setAttribute('title', 'Switch to terrain map');
 
         setTimeout(() => map.invalidateSize(), 50);
       };
 
       mapModeToggle?.addEventListener('click', () => {
-        if (googleMode) {
+        if (terrainMode) {
           showLocalMap();
         } else {
-          void showGoogleMap();
+          void showTerrainMap();
         }
       });
 
-            const devPanel = document.getElementById('devPanel');
+      const devPanel = document.getElementById('devPanel');
 
       const closeDevPanel = () => {
         devPanel?.classList.remove('is-open');
@@ -775,16 +977,16 @@ import 'leaflet/dist/leaflet.css';
         button.addEventListener('click', () => {
           const action = button.getAttribute('data-map-action');
 
-          if (googleMode && googleMap) {
-            const current = googleMap.getZoom();
+          if (terrainMode && terrainMap) {
+            const current = terrainMap.getZoom();
 
             if (action === 'zoom-in') {
-              googleMap.setZoom(Math.min(maxZoom, current + 1));
+              terrainMap.setZoom(Math.min(maxZoom, current + 1));
               return;
             }
 
             if (action === 'zoom-out') {
-              googleMap.setZoom(Math.max(1, current - 1));
+              terrainMap.setZoom(Math.max(1, current - 1));
               return;
             }
           }
@@ -810,12 +1012,12 @@ import 'leaflet/dist/leaflet.css';
 
             if (center.distanceTo(location) > radius) return;
 
-            if (googleMode && googleMap) {
-              googleMap.setCenter({
+            if (terrainMode && terrainMap) {
+              terrainMap.setCenter({
                 lat: coords.latitude,
                 lng: coords.longitude
               });
-              googleMap.setZoom(Math.max(googleMap.getZoom(), perimeterZoom));
+              terrainMap.setZoom(Math.max(terrainMap.getZoom(), perimeterZoom));
               return;
             }
 
