@@ -575,6 +575,7 @@ import 'leaflet/dist/leaflet.css';
       let terrainMap = null;
       let terrainMode = false;
       let terrainLibraryPromise = null;
+      let terrainIsLocal = false;
 
       const loadMapLibre = () => {
         if (terrainLibraryPromise) return terrainLibraryPromise;
@@ -828,7 +829,6 @@ import 'leaflet/dist/leaflet.css';
           try {
             const maplibregl = await loadMapLibre();
 
-            let terrainIsLocal = false;
             try {
               const localTerrainManifest = await fetch(
                 '/maps/terrain/manifest.json',
