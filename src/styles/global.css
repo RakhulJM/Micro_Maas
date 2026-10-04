@@ -161,6 +161,14 @@ a { color: inherit; text-decoration: none; }
   background: #fff;
 }
 
+.map-switch-terrain .map-switch-thumb {
+  transform: translateX(13px);
+}
+
+.map-switch-terrain .map-switch-track {
+  background: #334155;
+}
+
 .profile {
   width: 32px;
   height: 32px;
