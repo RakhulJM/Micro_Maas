@@ -100,10 +100,21 @@ import 'leaflet/dist/leaflet.css';
         );
 
         const image = await tif.getImage();
-        const raster = await image.readRasters({ interleave: true });
         const width = image.getWidth();
         const height = image.getHeight();
-        const bbox = image.getBoundingBox();
+        const samplesPerPixel = image.getSamplesPerPixel();
+
+        let bbox;
+        try {
+          bbox = image.getBoundingBox();
+        } catch {
+          bbox = [
+            center.lng - lonRadius,
+            center.lat - latRadius,
+            center.lng + lonRadius,
+            center.lat + latRadius
+          ];
+        }
 
         const terrainBounds = {
           west: Number(bbox[0]),
@@ -112,33 +123,80 @@ import 'leaflet/dist/leaflet.css';
           north: Number(bbox[3])
         };
 
-        let minElevation = Infinity;
-        let maxElevation = -Infinity;
-
-        for (let index = 0; index < raster.length; index += 1) {
-          const value = Number(raster[index]);
-
-          if (!Number.isFinite(value)) continue;
-
-          minElevation = Math.min(minElevation, value);
-          maxElevation = Math.max(maxElevation, value);
-        }
-
         if (
-          !Number.isFinite(minElevation) ||
-          !Number.isFinite(maxElevation)
+          !Number.isFinite(terrainBounds.west) ||
+          !Number.isFinite(terrainBounds.south) ||
+          !Number.isFinite(terrainBounds.east) ||
+          !Number.isFinite(terrainBounds.north) ||
+          terrainBounds.east <= terrainBounds.west ||
+          terrainBounds.north <= terrainBounds.south
         ) {
-          throw new Error('COP30 GeoTIFF contains no valid elevation values.');
+          throw new Error('COP30 GeoTIFF has invalid geographic bounds.');
         }
 
-        const elevationRange =
-          Math.max(maxElevation - minElevation, 1);
+        // COP30 may be stored as either a single-band elevation raster
+        // or a visual multi-band raster. Support both without converting
+        // the GeoTIFF into PNG/JPG tiles.
+        let raster = null;
+        let rgb = null;
+
+        if (samplesPerPixel >= 3) {
+          rgb = await image.readRGB({
+            interleave: true,
+            enableAlpha: true
+          });
+        } else {
+          raster = await image.readRasters({
+            interleave: true
+          });
+        }
+
+        let minElevation = 0;
+        let maxElevation = 1;
+        let elevationRange = 1;
+
+        if (raster) {
+          minElevation = Infinity;
+          maxElevation = -Infinity;
+
+          for (let index = 0; index < raster.length; index += 1) {
+            const value = Number(raster[index]);
+
+            if (!Number.isFinite(value)) continue;
+
+            minElevation = Math.min(minElevation, value);
+            maxElevation = Math.max(maxElevation, value);
+          }
+
+          if (
+            !Number.isFinite(minElevation) ||
+            !Number.isFinite(maxElevation)
+          ) {
+            throw new Error('COP30 GeoTIFF contains no valid elevation values.');
+          }
+
+          elevationRange =
+            Math.max(maxElevation - minElevation, 1);
+        }
 
         const sampleElevation = (x, y) => {
           const clampedX = Math.max(0, Math.min(width - 1, x));
           const clampedY = Math.max(0, Math.min(height - 1, y));
 
           return Number(raster[clampedY * width + clampedX]);
+        };
+
+        const sampleRgb = (x, y) => {
+          const clampedX = Math.max(0, Math.min(width - 1, x));
+          const clampedY = Math.max(0, Math.min(height - 1, y));
+          const offset = (clampedY * width + clampedX) * 4;
+
+          return [
+            Number(rgb[offset]),
+            Number(rgb[offset + 1]),
+            Number(rgb[offset + 2]),
+            Number(rgb[offset + 3] ?? 255)
+          ];
         };
 
         const getTerrainColor = (elevation, shade) => {
@@ -268,6 +326,17 @@ import 'leaflet/dist/leaflet.css';
                 const x1 = Math.min(width - 1, x0 + 1);
                 const y1 = Math.min(height - 1, y0 + 1);
 
+                if (rgb) {
+                  const [red, green, blue, alpha] =
+                    sampleRgb(x0, y0);
+
+                  output[outIndex] = red;
+                  output[outIndex + 1] = green;
+                  output[outIndex + 2] = blue;
+                  output[outIndex + 3] = alpha;
+                  continue;
+                }
+
                 const fx = rasterX - x0;
                 const fy = rasterY - y0;
 
@@ -294,7 +363,6 @@ import 'leaflet/dist/leaflet.css';
                 const dx = right - left;
                 const dy = down - up;
 
-                // Simple northwest hillshade for a terrain-style appearance.
                 const slope =
                   Math.sqrt(dx * dx + dy * dy);
 
@@ -446,11 +514,14 @@ import 'leaflet/dist/leaflet.css';
 
         setTimeout(() => map.invalidateSize(), 100);
       } catch (error) {
-        console.error(error);
+        console.error('CampusMaaS terrain error:', error);
 
         if (note) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+
           note.textContent =
-            'Terrain failed to load · check local COP30 GeoTIFF';
+            `Terrain failed to load · ${message}`;
         }
       }
     });
