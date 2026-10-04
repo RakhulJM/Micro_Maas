@@ -79,12 +79,7 @@ import 'leaflet/dist/leaflet.css';
 
             <div class="zoom-setting">
               <span>Maximum zoom</span>
-              <strong>23</strong>
-            </div>
-
-            <div class="zoom-setting">
-              <span>Override</span>
-              <strong>Shift + wheel</strong>
+              <strong>25</strong>
             </div>
 
             <button type="button" class="dev-action" id="resetMapView">Reset map view</button>
@@ -133,9 +128,9 @@ import 'leaflet/dist/leaflet.css';
 
       const map = L.map('map', {
         zoomControl: false,
-        minZoom: 1,
-        maxZoom: 23,
-        scrollWheelZoom: false,
+        minZoom: 18,
+        maxZoom: 25,
+        scrollWheelZoom: true,
         maxBounds: circleBounds,
         maxBoundsViscosity: 1
       }).setView(center, 18);
@@ -253,7 +248,6 @@ import 'leaflet/dist/leaflet.css';
       roads.addTo(map);
 
       const pedestrianPathCasing = L.geoJSON(pedestrianPathData, {
-        filter: isPedestrianPath,
         style: {
           color: '#ffffff',
           weight: 7,
@@ -265,7 +259,6 @@ import 'leaflet/dist/leaflet.css';
       });
 
       const pedestrianPaths = L.geoJSON(pedestrianPathData, {
-        filter: isPedestrianPath,
         style: {
           color: '#2563eb',
           weight: 4,
@@ -398,40 +391,14 @@ import 'leaflet/dist/leaflet.css';
         interactive: false
       }).addTo(map);
 
-      // Normal zoom-out stops at the 1 km view.
+      // Keep the 1 km view as the normal zoom-out floor.
+      // All zooming uses the standard map interactions and +/- controls.
       const perimeterZoom = 18;
-      const maxZoom = 23;
+      const maxZoom = 25;
 
-      // Leaflet's real minimum is low enough for intentional overrides.
-      // The 1 km level is enforced by our normal interaction handlers.
-      map.setMinZoom(1);
+      map.setMinZoom(perimeterZoom);
       map.setMaxZoom(maxZoom);
       map.setView(center, perimeterZoom, { animate: false });
-
-      // Normal wheel scrolling respects the minimum zoom.
-      // Shift + wheel is the intentional override and may zoom farther out.
-      const mapElement = map.getContainer();
-
-      mapElement.addEventListener('wheel', (event) => {
-        event.preventDefault();
-
-        const direction = event.deltaY > 0 ? -1 : 1;
-        const allowBeyondLimit = event.shiftKey;
-        const currentZoom = map.getZoom();
-
-        if (direction < 0 && currentZoom <= perimeterZoom && !allowBeyondLimit) {
-          return;
-        }
-
-        const nextZoom = allowBeyondLimit
-          ? currentZoom + direction
-          : Math.max(perimeterZoom, currentZoom + direction);
-
-        map.setZoom(
-          Math.max(1, Math.min(maxZoom, nextZoom)),
-          { animate: false }
-        );
-      }, { passive: false });
 
       function constrainToPerimeter() {
         const current = map.getCenter();
@@ -661,28 +628,13 @@ import 'leaflet/dist/leaflet.css';
         button.addEventListener('click', () => {
           const action = button.getAttribute('data-map-action');
 
-          if (terrainMode && terrainMap) {
-            const current = terrainMap.getZoom();
-
-            if (action === 'zoom-in') {
-              terrainMap.setZoom(Math.min(maxZoom, current + 1));
-              return;
-            }
-
-            if (action === 'zoom-out') {
-              terrainMap.setZoom(Math.max(1, current - 1));
-              return;
-            }
-          }
-
           if (action === 'zoom-in') {
             map.setZoom(Math.min(maxZoom, map.getZoom() + 1), { animate: true });
             return;
           }
 
           if (action === 'zoom-out') {
-            // The +/- control is an explicit override of the normal 1 km limit.
-            map.setZoom(Math.max(1, map.getZoom() - 1), { animate: true });
+            map.setZoom(Math.max(perimeterZoom, map.getZoom() - 1), { animate: true });
           }
         });
       });
@@ -695,15 +647,6 @@ import 'leaflet/dist/leaflet.css';
             const location = L.latLng(coords.latitude, coords.longitude);
 
             if (center.distanceTo(location) > radius) return;
-
-            if (terrainMode && terrainMap) {
-              terrainMap.setCenter({
-                lat: coords.latitude,
-                lng: coords.longitude
-              });
-              terrainMap.setZoom(Math.max(terrainMap.getZoom(), perimeterZoom));
-              return;
-            }
 
             map.setView(location, Math.max(map.getZoom(), perimeterZoom));
           },
