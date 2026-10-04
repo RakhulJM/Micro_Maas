@@ -82,7 +82,7 @@ import 'leaflet/dist/leaflet.css';
           preferCanvas: true
         }).setView(center, perimeterZoom);
 
-        // Read the real local COP30 GeoTIFF. Nothing from export.geojson is used here.
+        // Read the real local COP30 GeoTIFF as the terrain map source.
         const GeoTIFFModule = await import(
           /* @vite-ignore */
           'https://cdn.jsdelivr.net/npm/geotiff@2.1.3/+esm'
