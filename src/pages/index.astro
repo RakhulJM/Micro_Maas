@@ -6,7 +6,6 @@ import 'leaflet/dist/leaflet.css';
 ---
 
 <MainLayout title="CampusMaaS · Map">
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.css" />
   <main class="map-screen">
     <header class="floating-header">
       <a class="brand" href="/" aria-label="CampusMaaS home">
@@ -574,366 +573,223 @@ import 'leaflet/dist/leaflet.css';
 
       let terrainMap = null;
       let terrainMode = false;
-      let terrainLibraryPromise = null;
-      let terrainIsLocal = false;
+      let terrainLayers = [];
 
-      const loadMapLibre = () => {
-        if (terrainLibraryPromise) return terrainLibraryPromise;
+      const terrainStyle = (feature) => {
+        const p = feature?.properties || {};
+        const highway = p.highway;
 
-        terrainLibraryPromise = import(
-          /* @vite-ignore */
-          'https://unpkg.com/maplibre-gl@6.11.2/dist/maplibre-gl.mjs'
-        );
+        if (p.natural === 'water' || p.waterway) {
+          return {
+            color: '#8fbfce',
+            weight: 0.8,
+            fillColor: '#b9dbe4',
+            fillOpacity: 0.9
+          };
+        }
 
-        return terrainLibraryPromise;
-      };
+        if (
+          p.leisure ||
+          ['grass', 'forest', 'recreation_ground', 'meadow', 'farmland'].includes(p.landuse)
+        ) {
+          return {
+            color: '#aebda5',
+            weight: 0.6,
+            fillColor: p.leisure === 'park' ? '#cfe0c5' : '#dbe6d3',
+            fillOpacity: 0.88
+          };
+        }
 
-      const clampTerrainCenter = () => {
-        if (!terrainMap) return;
+        if (p.amenity === 'parking') {
+          return {
+            color: '#c6c4bf',
+            weight: 0.6,
+            fillColor: '#dededb',
+            fillOpacity: 0.9
+          };
+        }
 
-        const current = terrainMap.getCenter();
-        const currentLatLng = L.latLng(current.lat, current.lng);
-        const distance = center.distanceTo(currentLatLng);
+        if (p.building) {
+          return {
+            color: '#a9a195',
+            weight: 0.8,
+            fillColor: '#e2d9c9',
+            fillOpacity: 1
+          };
+        }
 
-        if (distance <= radius) return;
+        if (highway) {
+          const major = [
+            'motorway',
+            'trunk',
+            'primary',
+            'secondary',
+            'tertiary'
+          ].includes(highway);
 
-        const bearing = Math.atan2(
-          (current.lng - center.lng) * Math.cos(center.lat * Math.PI / 180),
-          current.lat - center.lat
-        );
-
-        const latOffset = Math.cos(bearing) * radius / 111320;
-        const lonOffset =
-          Math.sin(bearing) * radius /
-          (111320 * Math.cos(center.lat * Math.PI / 180));
-
-        terrainMap.jumpTo({
-          center: [
-            center.lng + lonOffset,
-            center.lat + latOffset
-          ],
-          zoom: Math.max(terrainMap.getZoom(), perimeterZoom)
-        });
-      };
-
-      const mapLibreStyle = {
-        version: 8,
-        sources: {
-          terrain: {
-            type: 'raster-dem',
-            tiles: [
-              'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'
-            ],
-            encoding: 'terrarium',
-            tileSize: 256,
-            minzoom: 0,
-            maxzoom: 14,
-            bounds: [
-              center.lng - lonRadius,
-              center.lat - latRadius,
-              center.lng + lonRadius,
-              center.lat + latRadius
-            ],
-            attribution: 'Terrain Tiles © Mapzen / open data sources'
-          },
-          campus: {
-            type: 'geojson',
-            data: campusData
-          },
-          perimeter: {
-            type: 'geojson',
-            data: {
-              type: 'FeatureCollection',
-              features: [perimeterFeature]
-            }
-          },
-          perimeterMask: {
-            type: 'geojson',
-            data: {
-              type: 'FeatureCollection',
-              features: [
-                {
-                  type: 'Feature',
-                  properties: {},
-                  geometry: {
-                    type: 'Polygon',
-                    coordinates: [[
-                      [center.lng - 1, center.lat - 1],
-                      [center.lng + 1, center.lat - 1],
-                      [center.lng + 1, center.lat + 1],
-                      [center.lng - 1, center.lat + 1],
-                      [center.lng - 1, center.lat - 1]
-                    ], ring.map(([lon, lat]) => [lon, lat]).reverse()]
-                  }
-                }
-              ]
-            }
-          }
-        },
-        layers: [
-          {
-            id: 'terrain-background',
-            type: 'background',
-            paint: {
-              'background-color': '#e8e4d8'
-            }
-          },
-          {
-            id: 'terrain-relief',
-            type: 'hillshade',
-            source: 'terrain',
-            paint: {
-              'hillshade-method': 'standard',
-              'hillshade-illumination-direction': 315,
-              'hillshade-illumination-altitude': 45,
-              'hillshade-shadow-color': '#746957',
-              'hillshade-highlight-color': '#fffdf5',
-              'hillshade-accent-color': '#a99a7d',
-              'hillshade-exaggeration': 0.55
-            }
-          },
-          {
-            id: 'terrain-green',
-            type: 'fill',
-            source: 'campus',
-            filter: [
-              'any',
-              ['==', ['get', 'leisure'], 'park'],
-              ['==', ['get', 'landuse'], 'grass'],
-              ['==', ['get', 'landuse'], 'recreation_ground'],
-              ['==', ['get', 'landuse'], 'forest']
-            ],
-            paint: {
-              'fill-color': '#d8e3ce',
-              'fill-opacity': 0.6
-            }
-          },
-          {
-            id: 'terrain-water',
-            type: 'fill',
-            source: 'campus',
-            filter: [
-              'any',
-              ['==', ['get', 'natural'], 'water'],
-              ['==', ['get', 'waterway'], 'riverbank']
-            ],
-            paint: {
-              'fill-color': '#b9dbe4',
-              'fill-opacity': 0.82
-            }
-          },
-          {
-            id: 'terrain-buildings',
-            type: 'fill',
-            source: 'campus',
-            filter: ['has', 'building'],
-            paint: {
-              'fill-color': '#ddd8cd',
-              'fill-outline-color': '#bdb6a9',
-              'fill-opacity': 0.92
-            }
-          },
-          {
-            id: 'terrain-road-casing',
-            type: 'line',
-            source: 'campus',
-            filter: ['has', 'highway'],
-            paint: {
-              'line-color': '#c7c2b8',
-              'line-width': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                16, 2.2,
-                18, 4.8,
-                23, 12
-              ],
-              'line-opacity': 0.92,
-              'line-cap': 'round',
-              'line-join': 'round'
-            }
-          },
-          {
-            id: 'terrain-roads',
-            type: 'line',
-            source: 'campus',
-            filter: ['has', 'highway'],
-            paint: {
-              'line-color': [
-                'match',
-                ['get', 'highway'],
-                ['motorway', 'trunk', 'primary', 'secondary', 'tertiary'],
-                '#e9c67b',
-                ['footway', 'path', 'pedestrian', 'steps'],
-                '#d6d0c6',
-                '#ffffff'
-              ],
-              'line-width': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                16, 1.4,
-                18, 3,
-                23, 8
-              ],
-              'line-opacity': 0.98,
-              'line-cap': 'round',
-              'line-join': 'round'
-            }
-          },
-          {
-            id: 'terrain-building-labels',
-            type: 'symbol',
-            source: 'campus',
-            minzoom: 16,
-            filter: [
-              'all',
-              ['has', 'name'],
-              ['has', 'building']
-            ],
-            layout: {
-              'text-field': ['get', 'name'],
-              'text-size': [
-                'interpolate',
-                ['linear'],
-                ['zoom'],
-                16, 8,
-                18, 10,
-                23, 15
-              ],
-              'text-max-width': 6,
-              'text-allow-overlap': false,
-              'text-ignore-placement': false
-            },
-            paint: {
-              'text-color': '#5d646d',
-              'text-halo-color': '#fff',
-              'text-halo-width': 1.2,
-              'text-halo-blur': 0.2
-            }
-          },
-          {
-            id: 'terrain-perimeter-mask',
-            type: 'fill',
-            source: 'perimeterMask',
-            paint: {
-              'fill-color': '#eef1f3',
-              'fill-opacity': 0.94
-            }
-          }
-        ]
-      };
-
-      const showTerrainMap = async () => {
-        if (!terrainMap) {
-          try {
-            const maplibregl = await loadMapLibre();
-
-            try {
-              const localTerrainManifest = await fetch(
-                '/maps/terrain/manifest.json',
-                { cache: 'no-store' }
-              );
-              terrainIsLocal = localTerrainManifest.ok;
-            } catch {
-              terrainIsLocal = false;
-            }
-
-            const terrainStyle = {
-              ...mapLibreStyle,
-              sources: {
-                ...mapLibreStyle.sources,
-                terrain: {
-                  ...mapLibreStyle.sources.terrain,
-                  tiles: terrainIsLocal
-                    ? ['/maps/terrain/{z}/{x}/{y}.png']
-                    : mapLibreStyle.sources.terrain.tiles
-                }
-              }
+          if (['footway', 'path', 'pedestrian', 'steps'].includes(highway)) {
+            return {
+              color: '#c4baa9',
+              weight: 1.8,
+              opacity: 0.95
             };
+          }
 
-            terrainMap = new maplibregl.Map({
-              container: terrainMapElement,
-              style: terrainStyle,
-              center: [center.lng, center.lat],
-              zoom: perimeterZoom,
-              minZoom: 1,
-              maxZoom,
-              maxBounds: [
-                [center.lng - lonRadius, center.lat - latRadius],
-                [center.lng + lonRadius, center.lat + latRadius]
-              ],
-              renderWorldCopies: false,
-              attributionControl: false,
-              pitch: 0,
-              bearing: 0
+          return {
+            color: major ? '#d7ab5c' : '#ffffff',
+            weight: major ? 4.6 : 3.2,
+            opacity: 0.98,
+            lineCap: 'round',
+            lineJoin: 'round'
+          };
+        }
+
+        return {
+          color: '#c7c2b8',
+          weight: 0.6,
+          fillColor: '#ebe8df',
+          fillOpacity: 0.82
+        };
+      };
+
+      const createTerrainLayers = () => {
+        if (terrainLayers.length) return terrainLayers;
+
+        const outer = [
+          [center.lat - 1, center.lng - 1],
+          [center.lat - 1, center.lng + 1],
+          [center.lat + 1, center.lng + 1],
+          [center.lat + 1, center.lng - 1]
+        ];
+
+        const inner = ring
+          .map(([lon, lat]) => [lat, lon])
+          .reverse();
+
+        const mask = L.polygon([outer, inner], {
+          stroke: false,
+          fillColor: '#eef1f3',
+          fillOpacity: 0.9,
+          interactive: false
+        });
+
+        const vector = L.geoJSON(campusData, {
+          style: terrainStyle,
+          pointToLayer: () => L.circleMarker([0, 0], { radius: 0 })
+        });
+
+        const labels = L.geoJSON(campusData, {
+          filter: (feature) =>
+            Boolean(feature?.properties?.building && feature?.properties?.name),
+          style: {
+            stroke: false,
+            fill: false
+          },
+          onEachFeature: (feature, layer) => {
+            const name = String(feature.properties.name);
+            layer.bindTooltip(name, {
+              permanent: true,
+              direction: 'center',
+              className: 'terrain-label',
+              opacity: 0.9
             });
+          }
+        });
 
-            terrainMap.scrollZoom.disable();
+        terrainLayers = [vector, labels, mask];
+        return terrainLayers;
+      };
 
-            terrainMap.on('moveend', clampTerrainCenter);
-            terrainMap.on('dragend', clampTerrainCenter);
+      const showTerrainMap = () => {
+        if (!terrainMap) {
+          terrainMap = L.map('terrainMap', {
+            zoomControl: false,
+            minZoom: 1,
+            maxZoom,
+            scrollWheelZoom: false,
+            maxBounds: circleBounds,
+            maxBoundsViscosity: 1,
+            doubleClickZoom: true,
+            dragging: true
+          }).setView(center, perimeterZoom);
 
-            terrainMap.on('load', () => {
-              terrainMap.resize();
-              clampTerrainCenter();
-            });
+          for (const layer of createTerrainLayers()) {
+            layer.addTo(terrainMap);
+          }
 
-            const terrainCanvas = terrainMap.getCanvasContainer();
+          const terrainElement = terrainMap.getContainer();
 
-            terrainCanvas.addEventListener('wheel', (event) => {
-              event.preventDefault();
+          terrainElement.addEventListener('wheel', (event) => {
+            event.preventDefault();
 
-              const direction = event.deltaY > 0 ? -1 : 1;
-              const allowBeyondLimit = event.shiftKey;
-              const currentZoom = terrainMap.getZoom();
+            const direction = event.deltaY > 0 ? -1 : 1;
+            const allowBeyondLimit = event.shiftKey;
+            const currentZoom = terrainMap.getZoom();
 
-              if (
-                direction < 0 &&
-                currentZoom <= perimeterZoom &&
-                !allowBeyondLimit
-              ) {
-                return;
-              }
-
-              const nextZoom = allowBeyondLimit
-                ? currentZoom + direction
-                : Math.max(perimeterZoom, currentZoom + direction);
-
-              terrainMap.setZoom(
-                Math.max(1, Math.min(maxZoom, nextZoom)),
-                { duration: 0 }
-              );
-            }, { passive: false });
-          } catch (error) {
-            console.error(error);
-            mapModeToggle?.classList.add('map-mode-error');
-
-            if (mapNote) {
-              mapNote.textContent = 'Terrain map could not be loaded';
+            if (
+              direction < 0 &&
+              currentZoom <= perimeterZoom &&
+              !allowBeyondLimit
+            ) {
+              return;
             }
 
-            return;
-          }
+            const nextZoom = allowBeyondLimit
+              ? currentZoom + direction
+              : Math.max(perimeterZoom, currentZoom + direction);
+
+            terrainMap.setZoom(
+              Math.max(1, Math.min(maxZoom, nextZoom)),
+              { animate: false }
+            );
+          }, { passive: false });
+
+          const clampTerrainView = () => {
+            const current = terrainMap.getCenter();
+            const distance = center.distanceTo(current);
+
+            if (distance <= radius) return;
+
+            const bearing = Math.atan2(
+              (current.lng - center.lng) * Math.cos(center.lat * Math.PI / 180),
+              current.lat - center.lat
+            );
+
+            const latOffset = Math.cos(bearing) * radius / 111320;
+            const lonOffset =
+              Math.sin(bearing) * radius /
+              (111320 * Math.cos(center.lat * Math.PI / 180));
+
+            terrainMap.setView(
+              [center.lat + latOffset, center.lng + lonOffset],
+              Math.max(terrainMap.getZoom(), perimeterZoom),
+              { animate: false }
+            );
+          };
+
+          terrainMap.on('drag', clampTerrainView);
+          terrainMap.on('moveend', clampTerrainView);
+          terrainMap.on('zoomend', () => {
+            if (terrainMap.getZoom() >= perimeterZoom) {
+              clampTerrainView();
+            }
+          });
         }
 
         terrainMode = true;
         localMapElement?.classList.add('is-hidden');
         terrainMapElement?.classList.remove('is-hidden');
+        terrainMap.invalidateSize();
 
         const localCenter = map.getCenter();
-
-        terrainMap.jumpTo({
-          center: [localCenter.lng, localCenter.lat],
-          zoom: map.getZoom()
-        });
-
-        terrainMap.resize();
-        mapNote && (
-          mapNote.textContent =
-            'Terrain map · 1 km boundary · ' +
-            (terrainIsLocal ? 'Local terrain' : 'Mapzen Terrain Tiles')
+        terrainMap.setView(
+          [localCenter.lat, localCenter.lng],
+          map.getZoom(),
+          { animate: false }
         );
+
+        terrainMap.invalidateSize();
+        mapNote && (mapNote.textContent = 'Terrain vector map · 1 km boundary');
         mapModeToggle?.setAttribute('title', 'Switch to local map');
       };
 
@@ -963,7 +819,7 @@ import 'leaflet/dist/leaflet.css';
         if (terrainMode) {
           showLocalMap();
         } else {
-          void showTerrainMap();
+          showTerrainMap();
         }
       });
 
