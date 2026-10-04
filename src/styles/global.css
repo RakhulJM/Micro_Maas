@@ -38,7 +38,9 @@ a { color: inherit; text-decoration: none; }
   inset: 0;
   width: 100%;
   height: 100%;
-  background: #d7dde4;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,.25), transparent 58%),
+    #edf0f2;
 }
 
 .floating-header {
@@ -65,7 +67,7 @@ a { color: inherit; text-decoration: none; }
   padding: 6px 10px 6px 6px;
   border: 1px solid rgba(20, 39, 62, .12);
   border-radius: 12px;
-  background: rgba(255, 255, 255, .92);
+  background: rgba(255, 255, 255, .94);
   color: #0b1728;
   box-shadow: 0 5px 18px rgba(0, 0, 0, .12);
   backdrop-filter: blur(10px);
@@ -97,7 +99,7 @@ a { color: inherit; text-decoration: none; }
 .ghost-btn,
 .profile {
   border: 1px solid rgba(20, 39, 62, .12);
-  background: rgba(255, 255, 255, .92);
+  background: rgba(255, 255, 255, .94);
   color: #24364d;
   box-shadow: 0 5px 18px rgba(0, 0, 0, .12);
   backdrop-filter: blur(10px);
@@ -121,7 +123,7 @@ a { color: inherit; text-decoration: none; }
   position: absolute;
   z-index: 1000;
   right: 14px;
-  bottom: 14px;
+  bottom: 42px;
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -145,29 +147,31 @@ a { color: inherit; text-decoration: none; }
   background: #fff;
 }
 
-.campus-pin-wrap {
-  background: transparent;
-  border: 0;
+.map-note {
+  position: absolute;
+  z-index: 1000;
+  left: 12px;
+  bottom: 8px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .78);
+  color: #64748b;
+  font-size: 9px;
+  pointer-events: none;
+  backdrop-filter: blur(7px);
 }
 
-.campus-pin {
-  width: 15px;
-  height: 15px;
-  border: 3px solid white;
-  border-radius: 50%;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, .35);
+.leaflet-container {
+  font: inherit;
 }
-
-.campus-pin.destination { background: #2563eb; }
-.campus-pin.service { background: #059669; }
-.campus-pin.mobility { background: #d97706; }
 
 .leaflet-tooltip {
   border: 0;
   border-radius: 7px;
   padding: 5px 7px;
+  color: #263447;
   font-size: 11px;
-  box-shadow: 0 5px 20px rgba(0, 0, 0, .2);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, .16);
 }
 
 @media (max-width: 560px) {
@@ -183,6 +187,11 @@ a { color: inherit; text-decoration: none; }
 
   .map-controls {
     right: 10px;
-    bottom: 10px;
+    bottom: 38px;
+  }
+
+  .map-note {
+    left: 8px;
+    bottom: 6px;
   }
 }
