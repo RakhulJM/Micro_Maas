@@ -150,7 +150,7 @@ import 'leaflet/dist/leaflet.css';
               <input type="checkbox" id="editModeToggle" />
             </label>
 
-            <button type="button" class="dev-action" id="exportPathEdits">Export path edits</button>
+            <button type="button" class="dev-action" id="exportPathEdits">Export edit overlay</button>
 
             <button type="button" class="dev-action" id="resetMapView">Reset map view</button>
           </section>
@@ -163,11 +163,12 @@ import 'leaflet/dist/leaflet.css';
 
   <script>
     import('leaflet').then(async ({ default: L }) => {
-      const [campusResponse, perimeterResponse, pathResponse, pathEditResponse] = await Promise.all([
+      const [campusResponse, perimeterResponse, pathResponse, pathEditResponse, pathConfigResponse] = await Promise.all([
         fetch('/maps/export.geojson'),
         fetch('/maps/perimeter.geojson'),
         fetch('/maps/pedestrian_paths.geojson'),
-        fetch('/maps/pedestrian_paths_edits.geojson')
+        fetch('/maps/pedestrian_paths_edits.geojson'),
+        fetch('/maps/pedestrian_path_config.json')
       ]);
 
       if (!campusResponse.ok || !perimeterResponse.ok || !pathResponse.ok) {
@@ -180,15 +181,41 @@ import 'leaflet/dist/leaflet.css';
         pathResponse.json()
       ]);
 
+      const pedestrianConfig = pathConfigResponse.ok
+        ? await pathConfigResponse.json()
+        : {
+            version: 1,
+            routing: {
+              walking_speed_mps: 1.4,
+              snap_tolerance_m: 8
+            },
+            render: {
+              highlight: {
+                casing_weight: 7,
+                path_weight: 4
+              },
+              route: {
+                casing_weight: 9,
+                path_weight: 5
+              },
+              editor: {
+                preview_weight: 4,
+                preview_dash: '7 5'
+              }
+            }
+          };
+
       const committedPathEdits = pathEditResponse.ok
         ? await pathEditResponse.json()
         : { type: 'FeatureCollection', features: [] };
 
       const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 
+      const EDIT_STORAGE_KEY = 'campusmaas:pedestrian-path-edits:v2';
+
       const readSavedPathEdits = () => {
         try {
-          const raw = window.localStorage.getItem('campusmaas:pedestrian-path-edits:v1');
+          const raw = window.localStorage.getItem(EDIT_STORAGE_KEY);
           if (!raw) return null;
 
           const parsed = JSON.parse(raw);
@@ -201,33 +228,51 @@ import 'leaflet/dist/leaflet.css';
       const writeSavedPathEdits = (editState) => {
         try {
           window.localStorage.setItem(
-            'campusmaas:pedestrian-path-edits:v1',
+            EDIT_STORAGE_KEY,
             JSON.stringify(editState)
           );
         } catch {
-          // Local storage is optional; export remains available.
+          // Local persistence is optional; export remains available.
         }
       };
-
-      const pathEditState = readSavedPathEdits() || {
-        type: 'FeatureCollection',
-        properties: {
-          format: 'campusmaas-pedestrian-path-edits',
-          version: 1
-        },
-        features: Array.isArray(committedPathEdits.features)
-          ? cloneJson(committedPathEdits.features)
-          : []
-      };
-
-      const basePedestrianFeatures = cloneJson(
-        pedestrianPathData.features || []
-      );
 
       const pathEditTarget = (operation) =>
         operation?.properties?.targetId ||
         operation?.properties?.pathId ||
         operation?.id;
+
+      const mergePathEditOperations = (...states) => {
+        const byTarget = new Map();
+
+        for (const state of states) {
+          for (const operation of state?.features || []) {
+            const targetId = pathEditTarget(operation);
+            if (!targetId) continue;
+            byTarget.set(String(targetId), cloneJson(operation));
+          }
+        }
+
+        return Array.from(byTarget.values());
+      };
+
+      const savedPathEdits = readSavedPathEdits();
+
+      const pathEditState = {
+        type: 'FeatureCollection',
+        properties: {
+          format: 'campusmaas-pedestrian-path-edits',
+          version: 2,
+          base: 'pedestrian_paths.geojson'
+        },
+        features: mergePathEditOperations(
+          committedPathEdits,
+          savedPathEdits
+        )
+      };
+
+      const basePedestrianFeatures = cloneJson(
+        pedestrianPathData.features || []
+      );
 
       const applyPathEdits = () => {
         const effective = new Map();
@@ -249,6 +294,7 @@ import 'leaflet/dist/leaflet.css';
           if (type === 'add') {
             const feature = {
               ...cloneJson(operation),
+              type: 'Feature',
               id: targetId,
               properties: {
                 ...(cloneJson(operation.properties || {})),
@@ -259,6 +305,7 @@ import 'leaflet/dist/leaflet.css';
             delete feature.properties.operation;
             delete feature.properties.targetId;
             delete feature.properties.pathId;
+
             effective.set(key, feature);
           } else if (type === 'update' && effective.has(key)) {
             const original = effective.get(key);
@@ -429,11 +476,29 @@ import 'leaflet/dist/leaflet.css';
       let editableHitLayer = null;
       let pedestrianPathsActive = false;
 
+      const highlightCasingWeight =
+        Number(pedestrianConfig.render?.highlight?.casing_weight) || 7;
+      const highlightPathWeight =
+        Number(pedestrianConfig.render?.highlight?.path_weight) || 4;
+      const routeCasingWeight =
+        Number(pedestrianConfig.render?.route?.casing_weight) || 9;
+      const routePathWeight =
+        Number(pedestrianConfig.render?.route?.path_weight) || 5;
+      const editorPreviewWeight =
+        Number(pedestrianConfig.render?.editor?.preview_weight) || 4;
+      const editorPreviewDash =
+        pedestrianConfig.render?.editor?.preview_dash || '7 5';
+
+      const walkingSpeedMetersPerSecond =
+        Number(pedestrianConfig.routing?.walking_speed_mps) || 1.4;
+      const snapToleranceMeters =
+        Number(pedestrianConfig.routing?.snap_tolerance_m) || 8;
+
       const createPedestrianLayers = () => {
         pedestrianPathCasing = L.geoJSON(pedestrianPathData, {
           style: {
             color: '#ffffff',
-            weight: 7,
+            weight: highlightCasingWeight,
             opacity: 0.9,
             lineCap: 'round',
             lineJoin: 'round'
@@ -444,7 +509,7 @@ import 'leaflet/dist/leaflet.css';
         pedestrianPaths = L.geoJSON(pedestrianPathData, {
           style: {
             color: '#2563eb',
-            weight: 4,
+            weight: highlightPathWeight,
             opacity: 1,
             lineCap: 'round',
             lineJoin: 'round'
@@ -1051,9 +1116,6 @@ import 'leaflet/dist/leaflet.css';
       const routeTime = document.getElementById('routeTime');
       const routeClear = document.getElementById('routeClear');
 
-      const walkingSpeedMetersPerSecond = 1.4;
-      const snapTolerancePixels = 22;
-
       let routeModeActive = false;
       let routeStart = null;
       let routeEnd = null;
@@ -1146,11 +1208,7 @@ import 'leaflet/dist/leaflet.css';
         const snapped = snapToPedestrianPath(event.latlng);
         if (!snapped) return;
 
-        const projected = map.latLngToContainerPoint(snapped.latlng);
-        const clicked = map.latLngToContainerPoint(event.latlng);
-        const pixelDistance = projected.distanceTo(clicked);
-
-        if (pixelDistance > snapTolerancePixels) return;
+        if (snapped.distance > snapToleranceMeters) return;
 
         if (!routeStart) {
           routeStart = snapped;
@@ -1192,7 +1250,7 @@ import 'leaflet/dist/leaflet.css';
             route.coordinates.map(([lng, lat]) => [lat, lng]),
             {
               color: '#ffffff',
-              weight: 9,
+              weight: routeCasingWeight,
               opacity: 0.96,
               lineCap: 'round',
               lineJoin: 'round',
@@ -1204,7 +1262,7 @@ import 'leaflet/dist/leaflet.css';
             route.coordinates.map(([lng, lat]) => [lat, lng]),
             {
               color: '#0f4fd8',
-              weight: 5,
+              weight: routePathWeight,
               opacity: 1,
               lineCap: 'round',
               lineJoin: 'round',
@@ -1312,9 +1370,9 @@ import 'leaflet/dist/leaflet.css';
         drawingLine = drawingPoints.length >= 2
           ? L.polyline(drawingPoints, {
               color: '#0f4fd8',
-              weight: 4,
+              weight: editorPreviewWeight,
               opacity: 1,
-              dashArray: '7 5',
+              dashArray: editorPreviewDash,
               lineCap: 'round',
               lineJoin: 'round',
               interactive: false
@@ -1336,11 +1394,19 @@ import 'leaflet/dist/leaflet.css';
         persistPathEdits();
       };
 
-      const removeEditOperation = (targetId) => {
-        const key = String(targetId);
-
+      const recordDeleteOperation = (targetId) => {
         pathEditState.features = (pathEditState.features || [])
-          .filter((item) => String(pathEditTarget(item)) !== key);
+          .filter((item) => String(pathEditTarget(item)) !== String(targetId));
+
+        pathEditState.features.push({
+          type: 'Feature',
+          id: 'edit-' + Date.now(),
+          properties: {
+            operation: 'delete',
+            targetId: String(targetId)
+          },
+          geometry: null
+        });
 
         persistPathEdits();
       };
@@ -1410,9 +1476,19 @@ import 'leaflet/dist/leaflet.css';
 
         editToggle?.classList.add('is-active');
         editToggle?.setAttribute('aria-pressed', 'true');
-        editStatus.textContent = 'Click the map to add points';
+        editStatus.textContent = 'Click to draw · path ends snap to nearby network';
         showEditCard(true);
         setEditActionVisibility({ drawing: true });
+      };
+
+      const snapDrawingEndpoint = (point) => {
+        const snapped = snapToPedestrianPath(point);
+
+        if (!snapped || snapped.distance > snapToleranceMeters) {
+          return point;
+        }
+
+        return snapped.latlng;
       };
 
       const finishCustomPath = () => {
@@ -1423,9 +1499,17 @@ import 'leaflet/dist/leaflet.css';
 
         const customId = 'custom-' + Date.now();
 
+        const effectiveDrawingPoints = drawingPoints.map((point, index) => {
+          if (index === 0 || index === drawingPoints.length - 1) {
+            return snapDrawingEndpoint(point);
+          }
+
+          return point;
+        });
+
         const geometry = {
           type: 'LineString',
-          coordinates: drawingPoints.map((point) => [
+          coordinates: effectiveDrawingPoints.map((point) => [
             Number(point.lng.toFixed(7)),
             Number(point.lat.toFixed(7))
           ])
@@ -1524,7 +1608,7 @@ import 'leaflet/dist/leaflet.css';
       const deleteSelectedCustomPath = () => {
         if (!selectedPath?.isCustom) return;
 
-        removeEditOperation(selectedPath.id);
+        recordDeleteOperation(selectedPath.id);
         refreshAfterPathChange();
         closeEditTools();
         editStatus.textContent = 'Custom path deleted';
@@ -1622,6 +1706,8 @@ import 'leaflet/dist/leaflet.css';
 
       editFinish?.addEventListener('click', finishCustomPath);
       editCancel?.addEventListener('click', closeEditTools);
+
+      writeSavedPathEdits(pathEditState);
 
       editModeEnabled = Boolean(editModeToggle?.checked);
       showEditIcon(editModeEnabled);
