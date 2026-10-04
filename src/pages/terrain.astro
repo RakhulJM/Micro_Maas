@@ -29,8 +29,12 @@ import 'leaflet/dist/leaflet.css';
       <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
     </div>
 
-    <div class="map-note">Terrain · local COP30 · 1 km boundary</div>
+    <div class="map-note">Terrain · local COP30 GeoTIFF · 1 km boundary</div>
   </main>
+
+  <script is:inline src="https://unpkg.com/proj4"></script>
+  <script is:inline src="https://unpkg.com/georaster"></script>
+  <script is:inline src="https://unpkg.com/georaster-layer-for-leaflet"></script>
 
   <script>
     import('leaflet').then(async ({ default: L }) => {
@@ -75,16 +79,93 @@ import 'leaflet/dist/leaflet.css';
         maxBoundsViscosity: 1
       }).setView(center, perimeterZoom);
 
-      // Exact COP30 GeoTIFF bounds from the uploaded raster.
-      const terrainBounds = [
-        [11.264861122222221, 77.59791665555557],
-        [11.282916677777777, 77.6162499888889]
-      ];
+      // Read the local COP30 GeoTIFF directly as map data.
+      const tifResponse = await fetch('/maps/terrain/output_hh.tif');
 
-      L.imageOverlay('/maps/terrain/cop30-terrain.jpg', terrainBounds, {
+      if (!tifResponse.ok) {
+        throw new Error('Local COP30 GeoTIFF could not be loaded.');
+      }
+
+      const tifBuffer = await tifResponse.arrayBuffer();
+      const parseGeoraster =
+        window.parseGeoraster ||
+        window.parse_georaster;
+
+      const GeoRasterLayer = window.GeoRasterLayer;
+
+      if (typeof parseGeoraster !== 'function' || typeof GeoRasterLayer !== 'function') {
+        throw new Error('GeoRaster libraries could not be loaded.');
+      }
+
+      const georaster = await parseGeoraster(tifBuffer);
+
+      const minElevation = Number(georaster.mins?.[0] ?? 0);
+      const maxElevation = Number(georaster.maxs?.[0] ?? 1);
+      const elevationRange = Math.max(maxElevation - minElevation, 1);
+
+      const elevationColor = (value) => {
+        const t = Math.max(0, Math.min(1, (value - minElevation) / elevationRange));
+
+        if (t < 0.28) {
+          const q = t / 0.28;
+          return [
+            225 - q * 24,
+            232 - q * 8,
+            207 - q * 25
+          ];
+        }
+
+        if (t < 0.58) {
+          const q = (t - 0.28) / 0.30;
+          return [
+            201 + q * 14,
+            224 - q * 18,
+            182 - q * 31
+          ];
+        }
+
+        if (t < 0.82) {
+          const q = (t - 0.58) / 0.24;
+          return [
+            215 + q * 15,
+            206 - q * 15,
+            151 - q * 17
+          ];
+        }
+
+        const q = (t - 0.82) / 0.18;
+        return [
+          230 - q * 16,
+          191 - q * 18,
+          134 - q * 8
+        ];
+      };
+
+      const terrainLayer = new GeoRasterLayer({
+        georaster,
         opacity: 1,
-        interactive: false
-      }).addTo(map);
+        resolution: 128,
+        pixelValuesToColorFn: (values) => {
+          const value = Number(values?.[0]);
+
+          if (!Number.isFinite(value)) {
+            return null;
+          }
+
+          const [r, g, b] = elevationColor(value);
+          return \`rgb(\${Math.round(r)}, \${Math.round(g)}, \${Math.round(b)})\`;
+        }
+      });
+
+      terrainLayer.addTo(map);
+
+      if (terrainLayer.getBounds()?.isValid()) {
+        map.fitBounds(circleBounds, {
+          padding: [10, 10],
+          animate: false
+        });
+        map.setView(center, perimeterZoom, { animate: false });
+      }
 
       // Hide everything outside the exact existing 1 km perimeter.
       const outer = [
