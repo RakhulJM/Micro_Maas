@@ -1,9 +1,7 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
 import '../styles/global.css';
-import perimeterRaw from '../../maps/perimeter.geojson?raw';
-
-const perimeterData = JSON.parse(perimeterRaw);
+import 'leaflet/dist/leaflet.css';
 ---
 
 <MainLayout title="CampusMaaS · Map">
@@ -26,79 +24,201 @@ const perimeterData = JSON.parse(perimeterRaw);
       <button type="button" data-map-action="zoom-in" aria-label="Zoom in">+</button>
       <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
     </div>
+
+    <div class="map-note">© OpenStreetMap contributors · Campus data saved locally</div>
   </main>
 
-  <script define:vars={{ perimeterData }}>
-    import('leaflet').then(({ default: L }) => {
-      const feature = perimeterData.features[0];
-      const ring = feature.geometry.coordinates[0];
+  <script>
+    import('leaflet').then(async ({ default: L }) => {
+      const [campusResponse, perimeterResponse] = await Promise.all([
+        fetch('/maps/campus.geojson'),
+        fetch('/maps/perimeter.geojson')
+      ]);
 
+      if (!campusResponse.ok || !perimeterResponse.ok) {
+        throw new Error('Campus map data could not be loaded.');
+      }
+
+      const [campusData, perimeterData] = await Promise.all([
+        campusResponse.json(),
+        perimeterResponse.json()
+      ]);
+
+      const perimeterFeature = perimeterData.features[0];
+      const ring = perimeterFeature.geometry.coordinates[0];
       const center = L.latLng(
         ring.reduce((sum, point) => sum + point[1], 0) / ring.length,
         ring.reduce((sum, point) => sum + point[0], 0) / ring.length
       );
+      const radius = Number(perimeterFeature.properties.radius_m);
 
-      const radius = Number(feature.properties.radius_m);
+      const circleBounds = L.latLngBounds(
+        [
+          center.lat - radius / 111320,
+          center.lng - radius / (111320 * Math.cos(center.lat * Math.PI / 180))
+        ],
+        [
+          center.lat + radius / 111320,
+          center.lng + radius / (111320 * Math.cos(center.lat * Math.PI / 180))
+        ]
+      );
 
       const map = L.map('map', {
         zoomControl: false,
-        minZoom: 16,
+        minZoom: 14,
         maxZoom: 20,
+        maxBounds: circleBounds.pad(0.02),
         maxBoundsViscosity: 1
-      }).setView(center, 17);
+      }).setView(center, 15);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 20,
-        attribution: '&copy; OpenStreetMap contributors'
+      const roadWidths = {
+        motorway: 5,
+        trunk: 4.5,
+        primary: 4,
+        secondary: 3.5,
+        tertiary: 3,
+        residential: 2.5,
+        unclassified: 2.2,
+        service: 1.8,
+        footway: 1.4,
+        path: 1.2
+      };
+
+      const roadColors = {
+        motorway: '#c7a46a',
+        trunk: '#d2ad70',
+        primary: '#ddb97c',
+        secondary: '#e0c28d',
+        tertiary: '#e3cca1',
+        residential: '#f1eee8',
+        unclassified: '#eeebe4',
+        service: '#e7e3db',
+        footway: '#c8c3ba',
+        path: '#c8c3ba'
+      };
+
+      const campusLayer = L.geoJSON(campusData, {
+        style: (feature) => {
+          const p = feature?.properties || {};
+
+          if (p.highway) {
+            return {
+              color: roadColors[p.highway] || '#d7d2c8',
+              weight: roadWidths[p.highway] || 1.7,
+              opacity: 0.95,
+              lineCap: 'round',
+              lineJoin: 'round'
+            };
+          }
+
+          if (p.natural === 'water' || p.waterway) {
+            return {
+              color: '#8fc4d5',
+              weight: 1,
+              fillColor: '#b7dce6',
+              fillOpacity: 0.85
+            };
+          }
+
+          if (p.building) {
+            return {
+              color: '#aaa39a',
+              weight: 0.7,
+              fillColor: '#d9d3ca',
+              fillOpacity: 0.92
+            };
+          }
+
+          if (p.amenity === 'parking') {
+            return {
+              color: '#bcb7ae',
+              weight: 0.7,
+              fillColor: '#d7d5d0',
+              fillOpacity: 0.78
+            };
+          }
+
+          if (p.landuse || p.leisure) {
+            return {
+              color: '#b7c4ad',
+              weight: 0.7,
+              fillColor: '#dbe5d2',
+              fillOpacity: 0.72
+            };
+          }
+
+          return {
+            color: '#c3beb5',
+            weight: 0.8,
+            fillColor: '#e1ddd6',
+            fillOpacity: 0.55
+          };
+        },
+
+        pointToLayer: (feature, latlng) => {
+          const type =
+            feature?.properties?.amenity ||
+            feature?.properties?.shop ||
+            feature?.properties?.tourism;
+
+          return L.circleMarker(latlng, {
+            radius: type ? 4 : 3,
+            color: '#4b5563',
+            weight: 1,
+            fillColor: '#ffffff',
+            fillOpacity: 0.95
+          });
+        },
+
+        onEachFeature: (feature, layer) => {
+          const name = feature?.properties?.name;
+          if (name) {
+            layer.bindTooltip(name, {
+              direction: 'top',
+              sticky: true
+            });
+          }
+        }
       }).addTo(map);
 
-      const perimeter = L.polygon(
-        ring.map(([lon, lat]) => [lat, lon]),
-        {
+      const perimeterLayer = L.geoJSON(perimeterData, {
+        style: {
           color: '#2563eb',
           weight: 2,
-          opacity: 0.7,
-          fill: false,
-          interactive: false
-        }
-      ).addTo(map);
+          opacity: 0.8,
+          fillColor: '#2563eb',
+          fillOpacity: 0.02
+        },
+        interactive: false
+      }).addTo(map);
 
-      const bounds = perimeter.getBounds();
-      map.setMaxBounds(bounds.pad(0.015));
-      map.fitBounds(bounds.pad(0.04));
+      map.fitBounds(perimeterLayer.getBounds(), { padding: [18, 18] });
 
-      const circleCenter = center;
-
-      function clampToPerimeter() {
+      function constrainToCircle() {
         const current = map.getCenter();
-        const distance = circleCenter.distanceTo(current);
+        const distance = center.distanceTo(current);
 
         if (distance <= radius) return;
 
         const bearing = Math.atan2(
-          (current.lng - circleCenter.lng) *
-            Math.cos(circleCenter.lat * Math.PI / 180),
-          current.lat - circleCenter.lat
+          (current.lng - center.lng) * Math.cos(center.lat * Math.PI / 180),
+          current.lat - center.lat
         );
 
         const latOffset = Math.cos(bearing) * radius / 111320;
         const lonOffset =
-          Math.sin(bearing) *
-          radius /
-          (111320 * Math.cos(circleCenter.lat * Math.PI / 180));
+          Math.sin(bearing) * radius /
+          (111320 * Math.cos(center.lat * Math.PI / 180));
 
         map.setView(
-          [
-            circleCenter.lat + latOffset,
-            circleCenter.lng + lonOffset
-          ],
+          [center.lat + latOffset, center.lng + lonOffset],
           map.getZoom(),
           { animate: false }
         );
       }
 
-      map.on('moveend', clampToPerimeter);
-
+      map.on('drag', constrainToCircle);
+      map.on('moveend', constrainToCircle);
       setTimeout(() => map.invalidateSize(), 100);
 
       document.querySelectorAll('[data-map-action]').forEach((button) => {
@@ -115,11 +235,13 @@ const perimeterData = JSON.parse(perimeterRaw);
         navigator.geolocation.getCurrentPosition(
           ({ coords }) => {
             map.setView([coords.latitude, coords.longitude], 18);
-            setTimeout(clampToPerimeter, 0);
+            setTimeout(constrainToCircle, 0);
           },
           () => alert('Location permission was not granted.')
         );
       });
+
+      void campusLayer;
     });
   </script>
 </MainLayout>
