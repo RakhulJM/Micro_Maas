@@ -7,249 +7,142 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; }
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
 
 body {
-  min-height: 100vh;
   background: #06101d;
 }
 
-button, a { font: inherit; }
+button,
+a { font: inherit; }
+
 button { cursor: pointer; }
-button:disabled { cursor: default; opacity: .75; }
 a { color: inherit; text-decoration: none; }
 
-.shell {
-  width: min(1500px, calc(100% - 32px));
-  min-height: 100vh;
-  margin: 0 auto;
-  padding: 16px 0;
+.map-screen {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
 }
 
-.topbar {
-  height: 48px;
+.map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #d7dde4;
+}
+
+.floating-header {
+  position: absolute;
+  z-index: 1000;
+  top: 14px;
+  left: 14px;
+  right: 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
+  pointer-events: none;
+}
+
+.brand,
+.top-actions {
+  pointer-events: auto;
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 9px;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid rgba(20, 39, 62, .12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .92);
+  color: #0b1728;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, .12);
+  backdrop-filter: blur(10px);
 }
 
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   background: #2563eb;
   color: white;
   font-weight: 800;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .brand strong {
-  font: 600 16px 'Space Grotesk', sans-serif;
+  font: 600 14px 'Space Grotesk', sans-serif;
   letter-spacing: -.02em;
 }
 
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .ghost-btn,
-.profile,
-.map-controls button {
-  border: 1px solid rgba(148, 163, 184, .16);
-  background: #0b1a2d;
-  color: #ccd6e5;
+.profile {
+  border: 1px solid rgba(20, 39, 62, .12);
+  background: rgba(255, 255, 255, .92);
+  color: #24364d;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, .12);
+  backdrop-filter: blur(10px);
 }
 
 .ghost-btn {
   padding: 8px 11px;
   border-radius: 9px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .profile {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
-  gap: 12px;
-  min-height: calc(100vh - 92px);
-}
-
-.map-card,
-.journey-card {
-  border: 1px solid rgba(148, 163, 184, .11);
-  border-radius: 14px;
-  background: #091728;
-  overflow: hidden;
-}
-
-.map-card {
-  min-width: 0;
-}
-
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 13px 15px;
-}
-
-.section-kicker {
-  margin: 0;
-  color: #6ea4ff;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-}
-
-.card-head h1,
-.card-head h2 {
-  margin: 3px 0 0;
-  font: 600 18px 'Space Grotesk', sans-serif;
-  letter-spacing: -.02em;
-}
-
 .map-controls {
+  position: absolute;
+  z-index: 1000;
+  right: 14px;
+  bottom: 14px;
   display: flex;
+  flex-direction: column;
   gap: 5px;
 }
 
 .map-controls button {
-  width: 31px;
-  height: 31px;
-  border-radius: 8px;
-  font-size: 18px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(20, 39, 62, .12);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .94);
+  color: #24364d;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, .12);
+  font-size: 19px;
   line-height: 1;
+  backdrop-filter: blur(10px);
 }
 
-.map {
-  height: calc(100vh - 165px);
-  min-height: 520px;
-  background: #d7dde4;
-}
-
-.journey-card {
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 14px;
-}
-
-.status-pill {
-  padding: 5px 8px;
-  border-radius: 999px;
-  background: rgba(16, 185, 129, .1);
-  color: #55d5ac;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.journey-summary {
-  margin: 4px 15px 14px;
-  padding: 13px;
-  border-radius: 11px;
-  background: #0d2036;
-}
-
-.journey-summary strong {
-  display: block;
-  font: 600 20px 'Space Grotesk', sans-serif;
-}
-
-.journey-summary span {
-  display: block;
-  margin-top: 3px;
-  color: #7f8ea6;
-  font-size: 11px;
-}
-
-.timeline {
-  padding: 0 15px;
-  flex: 1;
-}
-
-.timeline-item {
-  display: grid;
-  grid-template-columns: 38px 12px 1fr;
-  gap: 8px;
-  min-height: 62px;
-  align-items: start;
-}
-
-.timeline-time {
-  padding-top: 2px;
-  color: #8796ad;
-  font: 600 11px 'Space Grotesk', sans-serif;
-}
-
-.timeline-line {
-  position: relative;
-  width: 2px;
-  height: 100%;
-  margin-left: 4px;
-  background: rgba(87, 111, 142, .28);
-}
-
-.timeline-line::before {
-  content: '';
-  position: absolute;
-  left: -4px;
-  top: 2px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #3b82f6;
-}
-
-.timeline-line.last {
-  background: transparent;
-}
-
-.timeline-item strong {
-  display: block;
-  font-size: 12px;
-}
-
-.timeline-item small {
-  display: block;
-  margin-top: 3px;
-  color: #728198;
-  font-size: 10px;
-}
-
-.primary-btn {
-  width: calc(100% - 30px);
-  margin: 4px 15px 0;
-  border: 0;
-  border-radius: 10px;
-  padding: 11px 14px;
-  background: #2563eb;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.primary-btn:hover {
-  background: #3476ec;
+.map-controls button:hover,
+.ghost-btn:hover {
+  background: #fff;
 }
 
 .campus-pin-wrap {
@@ -277,37 +170,19 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 5px 20px rgba(0, 0, 0, .2);
 }
 
-@media (max-width: 900px) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .map {
-    height: 58vh;
-    min-height: 420px;
-  }
-
-  .journey-card {
-    min-height: 400px;
-  }
-}
-
 @media (max-width: 560px) {
-  .shell {
-    width: min(100% - 20px, 1500px);
-    padding-top: 10px;
+  .floating-header {
+    top: 10px;
+    left: 10px;
+    right: 10px;
   }
 
   .ghost-btn {
     display: none;
   }
 
-  .workspace {
-    gap: 10px;
-  }
-
-  .map {
-    height: 52vh;
-    min-height: 360px;
+  .map-controls {
+    right: 10px;
+    bottom: 10px;
   }
 }
