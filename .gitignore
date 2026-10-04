@@ -4,5 +4,15 @@ dist/
 .env
 .env.*
 
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # Local campus map data
 *.geojson
