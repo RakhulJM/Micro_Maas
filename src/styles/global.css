@@ -176,10 +176,11 @@ a { color: inherit; text-decoration: none; }
 
 .building-label span {
   display: block;
-  width: max-content;
+  width: var(--building-label-width, max-content);
+  max-width: var(--building-label-width, max-content);
   transform: translate(-50%, -50%);
   color: #5d646d;
-  font: 500 9px/1 'DM Sans', sans-serif;
+  font: 500 var(--building-label-size, 9px)/1 'DM Sans', sans-serif;
   white-space: nowrap;
   text-align: center;
   text-shadow:
