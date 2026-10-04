@@ -1590,6 +1590,7 @@ import 'leaflet/dist/leaflet.css';
       let drawingMarkers = [];
       let drawingLine = null;
 
+      let defaultVertexMarkers = [];
       let editableVertexMarkers = [];
       let editablePathLines = new Map();
       let selectedPoint = null;
@@ -1625,6 +1626,38 @@ import 'leaflet/dist/leaflet.css';
         drawingMarkers = [];
         drawingPoints = [];
         drawingLine = null;
+      };
+
+      const clearDefaultVertices = () => {
+        defaultVertexMarkers.forEach((marker) => map.removeLayer(marker));
+        defaultVertexMarkers = [];
+      };
+
+      const buildDefaultVertexMarkers = () => {
+        clearDefaultVertices();
+
+        for (const feature of pedestrianPathData.features || []) {
+          if (feature?.geometry?.type !== 'LineString') continue;
+
+          feature.geometry.coordinates.forEach(([lng, lat]) => {
+            const marker = L.marker(
+              [Number(lat), Number(lng)],
+              {
+                icon: L.divIcon({
+                  className: 'path-default-vertex-marker',
+                  html: '<span></span>',
+                  iconSize: [10, 10],
+                  iconAnchor: [5, 5]
+                }),
+                interactive: false,
+                keyboard: false,
+                zIndexOffset: 400
+              }
+            ).addTo(map);
+
+            defaultVertexMarkers.push(marker);
+          });
+        }
       };
 
       const clearEditableVertices = () => {
@@ -1989,6 +2022,7 @@ import 'leaflet/dist/leaflet.css';
         pedestrianPathData.features = applyPathEdits();
         rebuildPedestrianRouting();
         refreshPedestrianLayers();
+        buildDefaultVertexMarkers();
 
         if (editModeEnabled) {
           buildEditableHitLayer();
@@ -2234,6 +2268,8 @@ import 'leaflet/dist/leaflet.css';
           buildEditableHitLayer();
         } else {
           closeEditTools();
+          clearEditableVertices();
+          buildDefaultVertexMarkers();
           buildEditableHitLayer();
         }
       });
@@ -2274,6 +2310,8 @@ import 'leaflet/dist/leaflet.css';
       });
 
       writeSavedPathEdits(pathEditState);
+
+      buildDefaultVertexMarkers();
 
       editModeEnabled = Boolean(editModeToggle?.checked);
       showEditIcon(editModeEnabled);
