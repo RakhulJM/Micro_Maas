@@ -57,6 +57,20 @@ import 'leaflet/dist/leaflet.css';
         <path d="M8 16c2.5-2 3-6 4.5-7.5C14 7 15.5 8 18 6" />
       </svg>
     </button>
+    <button
+      class="edit-toggle"
+      id="editToggle"
+      type="button"
+      aria-label="Draw custom pedestrian path"
+      aria-pressed="false"
+      title="Draw custom pedestrian path"
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 20l4.5-1 10.2-10.2a2.1 2.1 0 0 0-3-3L5.5 16 4 20z" />
+        <path d="M13.8 7.2l3 3" />
+      </svg>
+    </button>
 
     <section class="route-card" id="routeCard" aria-live="polite" aria-hidden="true">
       <div class="route-card-top">
@@ -71,6 +85,20 @@ import 'leaflet/dist/leaflet.css';
         <strong id="routeDistance">—</strong>
         <span>Time</span>
         <strong id="routeTime">—</strong>
+      </div>
+    </section>
+
+    <section class="edit-card" id="editCard" aria-live="polite" aria-hidden="true">
+      <div class="edit-card-top">
+        <div>
+          <span class="edit-card-kicker">PATH EDITOR</span>
+          <strong id="editStatus">Click the map to add points</strong>
+        </div>
+        <button type="button" class="route-card-close" id="editCancel" aria-label="Cancel path">×</button>
+      </div>
+      <div class="edit-actions">
+        <button type="button" class="edit-action" id="editUndo">Undo</button>
+        <button type="button" class="edit-action edit-action-primary" id="editFinish">Finish</button>
       </div>
     </section>
 
@@ -111,6 +139,14 @@ import 'leaflet/dist/leaflet.css';
               <span>Maximum zoom</span>
               <strong>25</strong>
             </div>
+
+            <label class="edit-mode-setting">
+              <span>
+                <strong>Edit mode</strong>
+                <small>Show custom path editor on the map</small>
+              </span>
+              <input type="checkbox" id="editModeToggle" />
+            </label>
 
             <button type="button" class="dev-action" id="resetMapView">Reset map view</button>
           </section>
@@ -323,9 +359,9 @@ import 'leaflet/dist/leaflet.css';
         pedestrianGraph.get(bKey).push({ node: aKey, distance });
       };
 
-      for (const feature of pedestrianPathData.features || []) {
+      const addPedestrianFeatureToGraph = (feature) => {
         const geometry = feature?.geometry;
-        if (!geometry) continue;
+        if (!geometry) return;
 
         const lines = geometry.type === 'LineString'
           ? [geometry.coordinates]
@@ -357,6 +393,10 @@ import 'leaflet/dist/leaflet.css';
             });
           }
         }
+      };
+
+      for (const feature of pedestrianPathData.features || []) {
+        addPedestrianFeatureToGraph(feature);
       }
 
       const projectToSegment = (point, a, b) => {
@@ -868,6 +908,220 @@ import 'leaflet/dist/leaflet.css';
 
         pathToggle.classList.toggle('is-active', pedestrianPathsActive);
         pathToggle.setAttribute('aria-pressed', String(pedestrianPathsActive));
+      });
+
+      const editModeToggle = document.getElementById('editModeToggle');
+      const editToggle = document.getElementById('editToggle');
+      const editCard = document.getElementById('editCard');
+      const editStatus = document.getElementById('editStatus');
+      const editUndo = document.getElementById('editUndo');
+      const editFinish = document.getElementById('editFinish');
+      const editCancel = document.getElementById('editCancel');
+
+      let editModeEnabled = false;
+      let drawingModeActive = false;
+      let drawingPoints = [];
+      let drawingMarkers = [];
+      let drawingLine = null;
+      let customPedestrianLayers = [];
+
+      const showEditIcon = (visible) => {
+        editToggle?.classList.toggle('is-visible', visible);
+        editToggle?.setAttribute('aria-hidden', String(!visible));
+      };
+
+      const showEditCard = (visible) => {
+        editCard?.classList.toggle('is-open', visible);
+        editCard?.setAttribute('aria-hidden', String(!visible));
+      };
+
+      const clearDrawing = () => {
+        for (const marker of drawingMarkers) {
+          map.removeLayer(marker);
+        }
+
+        if (drawingLine) map.removeLayer(drawingLine);
+
+        drawingMarkers = [];
+        drawingPoints = [];
+        drawingLine = null;
+      };
+
+      const exitDrawingMode = () => {
+        drawingModeActive = false;
+        clearDrawing();
+        showEditCard(false);
+        editToggle?.classList.remove('is-active');
+        editToggle?.setAttribute('aria-pressed', 'false');
+      };
+
+      const startDrawingMode = () => {
+        if (!editModeEnabled) return;
+
+        routeToggle?.classList.remove('is-active');
+        routeToggle?.setAttribute('aria-pressed', 'false');
+
+        if (typeof routeModeActive !== 'undefined' && routeModeActive) {
+          clearRouteTest(false);
+        }
+
+        drawingModeActive = true;
+        clearDrawing();
+        editStatus.textContent = 'Click the map to add points';
+        showEditCard(true);
+        editToggle?.classList.add('is-active');
+        editToggle?.setAttribute('aria-pressed', 'true');
+      };
+
+      const createEditPointMarker = (latlng, number) =>
+        L.marker(latlng, {
+          icon: L.divIcon({
+            className: 'edit-point-marker',
+            html: '<span>' + number + '</span>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          }),
+          interactive: false,
+          keyboard: false
+        }).addTo(map);
+
+      const renderDrawingLine = () => {
+        if (drawingLine) {
+          map.removeLayer(drawingLine);
+          drawingLine = null;
+        }
+
+        if (drawingPoints.length < 2) return;
+
+        drawingLine = L.polyline(drawingPoints, {
+          color: '#0f4fd8',
+          weight: 4,
+          opacity: 1,
+          dashArray: '7 5',
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false
+        }).addTo(map);
+      };
+
+      const finishCustomPath = () => {
+        if (drawingPoints.length < 2) {
+          editStatus.textContent = 'Add at least 2 points';
+          return;
+        }
+
+        const coordinates = drawingPoints.map((point) => [
+          Number(point.lng.toFixed(7)),
+          Number(point.lat.toFixed(7))
+        ]);
+
+        const feature = {
+          type: 'Feature',
+          properties: {
+            highway: 'custom',
+            name: 'Custom pedestrian path'
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates
+          }
+        };
+
+        pedestrianPathData.features.push(feature);
+        addPedestrianFeatureToGraph(feature);
+
+        const casing = L.geoJSON(feature, {
+          style: {
+            color: '#ffffff',
+            weight: 7,
+            opacity: 0.9,
+            lineCap: 'round',
+            lineJoin: 'round'
+          },
+          interactive: false
+        }).addTo(map);
+
+        const path = L.geoJSON(feature, {
+          style: {
+            color: '#2563eb',
+            weight: 4,
+            opacity: 1,
+            lineCap: 'round',
+            lineJoin: 'round'
+          },
+          interactive: false
+        }).addTo(map);
+
+        customPedestrianLayers.push(casing, path);
+
+        editStatus.textContent = 'Custom path added';
+        clearDrawing();
+        showEditCard(true);
+        editToggle?.classList.remove('is-active');
+        editToggle?.setAttribute('aria-pressed', 'false');
+
+        setTimeout(() => {
+          if (!drawingModeActive) showEditCard(false);
+        }, 900);
+        drawingModeActive = false;
+      };
+
+      editModeToggle?.addEventListener('change', () => {
+        editModeEnabled = Boolean(editModeToggle.checked);
+        showEditIcon(editModeEnabled);
+
+        if (!editModeEnabled) {
+          exitDrawingMode();
+        }
+      });
+
+      editToggle?.addEventListener('click', () => {
+        if (!editModeEnabled) return;
+
+        if (drawingModeActive) {
+          exitDrawingMode();
+          return;
+        }
+
+        startDrawingMode();
+      });
+
+      editUndo?.addEventListener('click', () => {
+        if (!drawingModeActive || !drawingPoints.length) return;
+
+        drawingPoints.pop();
+
+        const marker = drawingMarkers.pop();
+        if (marker) map.removeLayer(marker);
+
+        renderDrawingLine();
+        editStatus.textContent = drawingPoints.length
+          ? drawingPoints.length + ' point' + (drawingPoints.length === 1 ? '' : 's')
+          : 'Click the map to add points';
+      });
+
+      editFinish?.addEventListener('click', finishCustomPath);
+      editCancel?.addEventListener('click', exitDrawingMode);
+
+      editModeEnabled = Boolean(editModeToggle?.checked);
+      showEditIcon(editModeEnabled);
+
+      map.on('click', (event) => {
+        if (!drawingModeActive) return;
+
+        if (routeModeActive) return;
+
+        const point = L.latLng(event.latlng.lat, event.latlng.lng);
+        drawingPoints.push(point);
+        drawingMarkers.push(
+          createEditPointMarker(point, drawingPoints.length)
+        );
+
+        renderDrawingLine();
+
+        editStatus.textContent = drawingPoints.length +
+          ' point' + (drawingPoints.length === 1 ? '' : 's') +
+          ' · Finish when ready';
       });
 
       const routeToggle = document.getElementById('routeToggle');
