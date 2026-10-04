@@ -573,134 +573,127 @@ import 'leaflet/dist/leaflet.css';
 
       let terrainMap = null;
       let terrainMode = false;
-      let terrainLayers = [];
+      let terrainImageLayer = null;
+      let terrainMaskLayer = null;
 
-      const terrainStyle = (feature) => {
-        const p = feature?.properties || {};
-        const highway = p.highway;
+      const loadTerrainRaster = async () => {
+        const module = await import(
+          /* @vite-ignore */
+          'https://cdn.jsdelivr.net/npm/geotiff@2.1.3/+esm'
+        );
 
-        if (p.natural === 'water' || p.waterway) {
-          return {
-            color: '#8fbfce',
-            weight: 0.8,
-            fillColor: '#b9dbe4',
-            fillOpacity: 0.9
-          };
+        const GeoTIFF = module.default || module;
+        const response = await fetch('/maps/terrain/output_hh.tif');
+        if (!response.ok) {
+          throw new Error('Local terrain GeoTIFF could not be loaded.');
         }
 
-        if (
-          p.leisure ||
-          ['grass', 'forest', 'recreation_ground', 'meadow', 'farmland'].includes(p.landuse)
-        ) {
-          return {
-            color: '#aebda5',
-            weight: 0.6,
-            fillColor: p.leisure === 'park' ? '#cfe0c5' : '#dbe6d3',
-            fillOpacity: 0.88
-          };
-        }
+        const buffer = await response.arrayBuffer();
+        const tiff = await GeoTIFF.fromArrayBuffer(buffer);
+        const image = await tiff.getImage();
+        const raster = await image.readRasters({ interleave: true });
 
-        if (p.amenity === 'parking') {
-          return {
-            color: '#c6c4bf',
-            weight: 0.6,
-            fillColor: '#dededb',
-            fillOpacity: 0.9
-          };
-        }
+        const width = image.getWidth();
+        const height = image.getHeight();
+        const values = raster;
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const range = Math.max(max - min, 1);
 
-        if (p.building) {
-          return {
-            color: '#a9a195',
-            weight: 0.8,
-            fillColor: '#e2d9c9',
-            fillOpacity: 1
-          };
-        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
 
-        if (highway) {
-          const major = [
-            'motorway',
-            'trunk',
-            'primary',
-            'secondary',
-            'tertiary'
-          ].includes(highway);
+        const ctx = canvas.getContext('2d');
+        const pixels = ctx.createImageData(width, height);
 
-          if (['footway', 'path', 'pedestrian', 'steps'].includes(highway)) {
-            return {
-              color: '#c4baa9',
-              weight: 1.8,
-              opacity: 0.95
-            };
+        const elevationColor = (value) => {
+          const t = Math.max(0, Math.min(1, (value - min) / range));
+
+          if (t < 0.35) {
+            const q = t / 0.35;
+            return [
+              Math.round(221 - q * 28),
+              Math.round(232 - q * 10),
+              Math.round(207 - q * 30)
+            ];
           }
 
-          return {
-            color: major ? '#d7ab5c' : '#ffffff',
-            weight: major ? 4.6 : 3.2,
-            opacity: 0.98,
-            lineCap: 'round',
-            lineJoin: 'round'
-          };
+          if (t < 0.7) {
+            const q = (t - 0.35) / 0.35;
+            return [
+              Math.round(193 + q * 24),
+              Math.round(222 - q * 22),
+              Math.round(177 - q * 45)
+            ];
+          }
+
+          const q = (t - 0.7) / 0.3;
+          return [
+            Math.round(217 + q * 28),
+            Math.round(200 + q * 25),
+            Math.round(168 + q * 35)
+          ];
+        };
+
+        const getElevation = (x, y) => {
+          const clampedX = Math.max(0, Math.min(width - 1, x));
+          const clampedY = Math.max(0, Math.min(height - 1, y));
+          return values[clampedY * width + clampedX];
+        };
+
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            const here = getElevation(x, y);
+            const left = getElevation(x - 1, y);
+            const right = getElevation(x + 1, y);
+            const up = getElevation(x, y - 1);
+            const down = getElevation(x, y + 1);
+
+            const dx = (right - left) * 1.8;
+            const dy = (down - up) * 1.8;
+
+            const nx = -dx;
+            const ny = -dy;
+            const nz = 1;
+            const length = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+
+            const lightX = -0.55;
+            const lightY = -0.45;
+            const lightZ = 0.7;
+
+            const illumination = Math.max(
+              0.48,
+              Math.min(
+                1.2,
+                (nx / length) * lightX +
+                (ny / length) * lightY +
+                (nz / length) * lightZ
+              ) + 0.55
+            );
+
+            const [r, g, b] = elevationColor(here);
+            const i = (y * width + x) * 4;
+
+            pixels.data[i] = Math.min(255, Math.round(r * illumination));
+            pixels.data[i + 1] = Math.min(255, Math.round(g * illumination));
+            pixels.data[i + 2] = Math.min(255, Math.round(b * illumination));
+            pixels.data[i + 3] = 255;
+          }
         }
 
+        ctx.putImageData(pixels, 0, 0);
+
         return {
-          color: '#c7c2b8',
-          weight: 0.6,
-          fillColor: '#ebe8df',
-          fillOpacity: 0.82
+          url: canvas.toDataURL('image/png'),
+          bounds: [
+            [image.getBoundingBox()[1], image.getBoundingBox()[0]],
+            [image.getBoundingBox()[3], image.getBoundingBox()[2]]
+          ]
         };
       };
 
-      const createTerrainLayers = () => {
-        if (terrainLayers.length) return terrainLayers;
-
-        const outer = [
-          [center.lat - 1, center.lng - 1],
-          [center.lat - 1, center.lng + 1],
-          [center.lat + 1, center.lng + 1],
-          [center.lat + 1, center.lng - 1]
-        ];
-
-        const inner = ring
-          .map(([lon, lat]) => [lat, lon])
-          .reverse();
-
-        const mask = L.polygon([outer, inner], {
-          stroke: false,
-          fillColor: '#eef1f3',
-          fillOpacity: 0.9,
-          interactive: false
-        });
-
-        const vector = L.geoJSON(campusData, {
-          filter: (feature) => feature?.geometry?.type !== 'Point',
-          style: terrainStyle
-        });
-
-        const labels = L.geoJSON(campusData, {
-          filter: (feature) =>
-            Boolean(feature?.properties?.building && feature?.properties?.name),
-          style: {
-            stroke: false,
-            fill: false
-          },
-          onEachFeature: (feature, layer) => {
-            const name = String(feature.properties.name);
-            layer.bindTooltip(name, {
-              permanent: true,
-              direction: 'center',
-              className: 'terrain-label',
-              opacity: 0.9
-            });
-          }
-        });
-
-        terrainLayers = [vector, labels, mask];
-        return terrainLayers;
-      };
-
-      const showTerrainMap = () => {
+      const showTerrainMap = async () => {
         if (!terrainMap) {
           terrainMap = L.map('terrainMap', {
             zoomControl: false,
@@ -710,11 +703,45 @@ import 'leaflet/dist/leaflet.css';
             maxBounds: circleBounds,
             maxBoundsViscosity: 1,
             doubleClickZoom: true,
-            dragging: true
+            dragging: true,
+            attributionControl: false
           }).setView(center, perimeterZoom);
 
-          for (const layer of createTerrainLayers()) {
-            layer.addTo(terrainMap);
+          try {
+            const terrain = await loadTerrainRaster();
+
+            terrainImageLayer = L.imageOverlay(
+              terrain.url,
+              terrain.bounds,
+              {
+                opacity: 1,
+                interactive: false
+              }
+            ).addTo(terrainMap);
+
+            const outer = [
+              [center.lat - 1, center.lng - 1],
+              [center.lat - 1, center.lng + 1],
+              [center.lat + 1, center.lng + 1],
+              [center.lat + 1, center.lng - 1]
+            ];
+
+            const inner = ring
+              .map(([lon, lat]) => [lat, lon])
+              .reverse();
+
+            terrainMaskLayer = L.polygon([outer, inner], {
+              stroke: false,
+              fillColor: '#eef1f3',
+              fillOpacity: 0.94,
+              interactive: false
+            }).addTo(terrainMap);
+          } catch (error) {
+            console.error(error);
+            mapNote && (
+              mapNote.textContent = 'Terrain GeoTIFF could not be loaded'
+            );
+            return;
           }
 
           const terrainElement = terrainMap.getContainer();
@@ -789,7 +816,7 @@ import 'leaflet/dist/leaflet.css';
         );
 
         terrainMap.invalidateSize();
-        mapNote && (mapNote.textContent = 'Terrain vector map · 1 km boundary');
+        mapNote && (mapNote.textContent = 'Terrain · local GeoTIFF · 1 km boundary');
         mapModeToggle?.setAttribute('title', 'Switch to local map');
       };
 
@@ -819,7 +846,7 @@ import 'leaflet/dist/leaflet.css';
         if (terrainMode) {
           showLocalMap();
         } else {
-          showTerrainMap();
+          void showTerrainMap();
         }
       });
 
