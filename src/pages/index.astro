@@ -146,12 +146,25 @@ import 'leaflet/dist/leaflet.css';
             <label class="edit-mode-setting">
               <span>
                 <strong>Edit mode</strong>
-                <small>Show custom path editor on the map</small>
+                <small>Enable pedestrian path editing tools</small>
               </span>
               <input type="checkbox" id="editModeToggle" />
             </label>
 
-            <button type="button" class="dev-action" id="exportPathEdits">Export edit overlay</button>
+            <div class="zoom-setting">
+              <span>Pedestrian edit file</span>
+              <strong id="pathEditFileStatus">Loaded</strong>
+            </div>
+
+            <button type="button" class="dev-action" id="savePathEdits">Save pedestrian GeoJSON</button>
+
+            <label class="edit-mode-setting">
+              <span>
+                <strong>Show original network</strong>
+                <small>Developer comparison only</small>
+              </span>
+              <input type="checkbox" id="showBasePedestrianToggle" />
+            </label>
 
             <button type="button" class="dev-action" id="resetMapView">Reset map view</button>
           </section>
@@ -208,131 +221,50 @@ import 'leaflet/dist/leaflet.css';
 
       const committedPathEdits = pathEditResponse.ok
         ? await pathEditResponse.json()
-        : { type: 'FeatureCollection', features: [] };
+        : null;
 
       const cloneJson = (value) => JSON.parse(JSON.stringify(value));
-
-      const EDIT_STORAGE_KEY = 'campusmaas:pedestrian-path-edits:v2';
-
-      const readSavedPathEdits = () => {
-        try {
-          const raw = window.localStorage.getItem(EDIT_STORAGE_KEY);
-          if (!raw) return null;
-
-          const parsed = JSON.parse(raw);
-          return Array.isArray(parsed?.features) ? parsed : null;
-        } catch {
-          return null;
-        }
-      };
-
-      const writeSavedPathEdits = (editState) => {
-        try {
-          window.localStorage.setItem(
-            EDIT_STORAGE_KEY,
-            JSON.stringify(editState)
-          );
-        } catch {
-          // Local persistence is optional; export remains available.
-        }
-      };
-
-      const pathEditTarget = (operation) =>
-        operation?.properties?.targetId ||
-        operation?.properties?.pathId ||
-        operation?.id;
-
-      const mergePathEditOperations = (...states) => {
-        const byTarget = new Map();
-
-        for (const state of states) {
-          for (const operation of state?.features || []) {
-            const targetId = pathEditTarget(operation);
-            if (!targetId) continue;
-            byTarget.set(String(targetId), cloneJson(operation));
-          }
-        }
-
-        return Array.from(byTarget.values());
-      };
-
-      const savedPathEdits = readSavedPathEdits();
-
-      const pathEditState = {
-        type: 'FeatureCollection',
-        properties: {
-          format: 'campusmaas-pedestrian-path-edits',
-          version: 2,
-          base: 'pedestrian_paths.geojson'
-        },
-        features: mergePathEditOperations(
-          committedPathEdits,
-          savedPathEdits
-        )
-      };
 
       const basePedestrianFeatures = cloneJson(
         pedestrianPathData.features || []
       );
 
-      const applyPathEdits = () => {
-        const effective = new Map();
+      const normalizePedestrianFeatures = (features) =>
+        (Array.isArray(features) ? features : []).map((feature, index) => {
+          const normalized = cloneJson(feature);
+          normalized.type = 'Feature';
+          normalized.id = String(
+            normalized.id ??
+            normalized.properties?.['@id'] ??
+            'pedestrian-' + String(index + 1).padStart(3, '0')
+          );
+          return normalized;
+        });
 
-        for (let index = 0; index < basePedestrianFeatures.length; index += 1) {
-          const feature = cloneJson(basePedestrianFeatures[index]);
-          const id = feature.id ?? 'base-' + index;
-          feature.id = id;
-          effective.set(String(id), feature);
-        }
+      const hasCompletePedestrianEditFile =
+        committedPathEdits?.type === 'FeatureCollection' &&
+        committedPathEdits?.properties?.format === 'campusmaas-pedestrian-network' &&
+        Number(committedPathEdits?.properties?.version) >= 3 &&
+        Array.isArray(committedPathEdits?.features);
 
-        for (const operation of pathEditState.features || []) {
-          const type = operation?.properties?.operation;
-          const targetId = pathEditTarget(operation);
-          if (!type || !targetId) continue;
-
-          const key = String(targetId);
-
-          if (type === 'add') {
-            const feature = {
-              ...cloneJson(operation),
-              type: 'Feature',
-              id: targetId,
-              properties: {
-                ...(cloneJson(operation.properties || {})),
-                source: 'custom'
-              }
-            };
-
-            delete feature.properties.operation;
-            delete feature.properties.targetId;
-            delete feature.properties.pathId;
-
-            effective.set(key, feature);
-          } else if (type === 'update' && effective.has(key)) {
-            const original = effective.get(key);
-            const properties = {
-              ...(cloneJson(original.properties || {})),
-              ...(cloneJson(operation.properties || {}))
-            };
-
-            delete properties.operation;
-            delete properties.targetId;
-            delete properties.pathId;
-
-            effective.set(key, {
-              ...cloneJson(original),
-              geometry: cloneJson(operation.geometry),
-              properties
-            });
-          } else if (type === 'delete') {
-            effective.delete(key);
-          }
-        }
-
-        return Array.from(effective.values());
+      const pathEditState = {
+        type: 'FeatureCollection',
+        properties: {
+          format: 'campusmaas-pedestrian-network',
+          version: 3,
+          base: 'pedestrian_paths.geojson',
+          description: 'Complete editable pedestrian network snapshot'
+        },
+        features: normalizePedestrianFeatures(
+          hasCompletePedestrianEditFile
+            ? committedPathEdits.features
+            : basePedestrianFeatures
+        )
       };
 
-      pedestrianPathData.features = applyPathEdits();
+      pedestrianPathData.features = pathEditState.features;
+
+      let pathEditDirty = false;
 
       const perimeterFeature = perimeterData.features[0];
       const ring = perimeterFeature.geometry.coordinates[0];
@@ -537,6 +469,31 @@ import 'leaflet/dist/leaflet.css';
       };
 
       createPedestrianLayers();
+
+      let basePedestrianDebugLayer = null;
+
+      const createBasePedestrianDebugLayer = () => {
+        if (basePedestrianDebugLayer) {
+          map.removeLayer(basePedestrianDebugLayer);
+        }
+
+        basePedestrianDebugLayer = L.geoJSON({
+          type: 'FeatureCollection',
+          features: cloneJson(basePedestrianFeatures)
+        }, {
+          style: {
+            color: '#64748b',
+            weight: 2,
+            opacity: 0.7,
+            dashArray: '5 6',
+            lineCap: 'round',
+            lineJoin: 'round'
+          },
+          interactive: false
+        });
+      };
+
+      createBasePedestrianDebugLayer();
 
       /*
        * Lightweight pedestrian-network routing for the first prototype.
@@ -1394,6 +1351,15 @@ import 'leaflet/dist/leaflet.css';
         pathToggle.setAttribute('aria-pressed', String(pedestrianPathsActive));
       });
 
+      showBasePedestrianToggle?.addEventListener('change', () => {
+        if (!basePedestrianDebugLayer) return;
+
+        if (showBasePedestrianToggle.checked) {
+          basePedestrianDebugLayer.addTo(map);
+        } else if (map.hasLayer(basePedestrianDebugLayer)) {
+          map.removeLayer(basePedestrianDebugLayer);
+        }
+      });
 
       const routeToggle = document.getElementById('routeToggle');
       const routeCard = document.getElementById('routeCard');
@@ -1581,7 +1547,9 @@ import 'leaflet/dist/leaflet.css';
       const editDeletePoint = document.getElementById('editDeletePoint');
       const editDelete = document.getElementById('editDelete');
       const editCancel = document.getElementById('editCancel');
-      const exportPathEdits = document.getElementById('exportPathEdits');
+      const savePathEdits = document.getElementById('savePathEdits');
+      const pathEditFileStatus = document.getElementById('pathEditFileStatus');
+      const showBasePedestrianToggle = document.getElementById('showBasePedestrianToggle');
 
       let editModeEnabled = false;
       let pointEditorActive = false;
@@ -1716,35 +1684,50 @@ import 'leaflet/dist/leaflet.css';
           : null;
       };
 
-      const persistPathEdits = () => {
-        writeSavedPathEdits(pathEditState);
+      const markPathEditsDirty = () => {
+        pathEditDirty = true;
+        if (pathEditFileStatus) pathEditFileStatus.textContent = 'Unsaved';
       };
 
-      const replaceEditOperation = (targetId, operation) => {
-        const key = String(targetId);
+      const buildPathEditPayload = () => ({
+        type: 'FeatureCollection',
+        properties: {
+          format: 'campusmaas-pedestrian-network',
+          version: 3,
+          base: 'pedestrian_paths.geojson',
+          description: 'Complete editable pedestrian network snapshot'
+        },
+        features: cloneJson(pedestrianPathData.features || [])
+      });
 
-        pathEditState.features = (pathEditState.features || [])
-          .filter((item) => String(pathEditTarget(item)) !== key);
+      const saveCurrentPathEdits = async () => {
+        if (!savePathEdits) return;
 
-        pathEditState.features.push(operation);
-        persistPathEdits();
-      };
+        savePathEdits.disabled = true;
+        if (pathEditFileStatus) pathEditFileStatus.textContent = 'Saving…';
 
-      const recordDeleteOperation = (targetId) => {
-        pathEditState.features = (pathEditState.features || [])
-          .filter((item) => String(pathEditTarget(item)) !== String(targetId));
+        try {
+          const response = await fetch('/__campusmaas/save-pedestrian-network', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(buildPathEditPayload())
+          });
 
-        pathEditState.features.push({
-          type: 'Feature',
-          id: 'edit-' + Date.now(),
-          properties: {
-            operation: 'delete',
-            targetId: String(targetId)
-          },
-          geometry: null
-        });
+          if (!response.ok) {
+            throw new Error('Save endpoint unavailable');
+          }
 
-        persistPathEdits();
+          pathEditDirty = false;
+          if (pathEditFileStatus) pathEditFileStatus.textContent = 'Saved';
+        } catch (error) {
+          console.error(error);
+          if (pathEditFileStatus) pathEditFileStatus.textContent = 'Save failed';
+          alert('Pedestrian GeoJSON could not be saved. Run the project with npm run dev to enable direct file saving.');
+        } finally {
+          savePathEdits.disabled = false;
+        }
       };
 
       const findEffectiveFeature = (featureId) =>
@@ -1776,23 +1759,8 @@ import 'leaflet/dist/leaflet.css';
 
         const isCustom = feature.properties?.source === 'custom';
 
-        replaceEditOperation(featureId, {
-          type: 'Feature',
-          id: 'edit-' + Date.now(),
-          properties: isCustom
-            ? {
-                operation: 'add',
-                targetId: featureId,
-                highway: 'custom',
-                name: feature.properties?.name || 'Custom pedestrian path',
-                source: 'custom'
-              }
-            : {
-                operation: 'update',
-                targetId: featureId
-              },
-          geometry
-        });
+        feature.geometry = geometry;
+        markPathEditsDirty();
 
         return true;
       };
@@ -2019,7 +1987,6 @@ import 'leaflet/dist/leaflet.css';
       };
 
       const refreshAfterPathChange = () => {
-        pedestrianPathData.features = applyPathEdits();
         rebuildPedestrianRouting();
         refreshPedestrianLayers();
         buildDefaultVertexMarkers();
@@ -2110,20 +2077,18 @@ import 'leaflet/dist/leaflet.css';
           ])
         };
 
-        replaceEditOperation(customId, {
+        pedestrianPathData.features.push({
           type: 'Feature',
-          id: 'edit-' + Date.now(),
+          id: customId,
           properties: {
-            operation: 'add',
-            targetId: customId,
             highway: 'custom',
             name: 'Custom pedestrian path',
             source: 'custom'
           },
           geometry
         });
+        markPathEditsDirty();
 
-        pedestrianPathData.features = applyPathEdits();
         rebuildPedestrianRouting();
         refreshPedestrianLayers();
 
@@ -2145,7 +2110,9 @@ import 'leaflet/dist/leaflet.css';
         selectedPath = null;
 
         if (coordinates.length <= 2) {
-          recordDeleteOperation(feature.id);
+          pedestrianPathData.features = (pedestrianPathData.features || [])
+            .filter((item) => String(item.id) !== String(feature.id));
+          markPathEditsDirty();
           editStatus.textContent = 'Path deleted';
           refreshAfterPathChange();
           setEditActionVisibility({
@@ -2200,7 +2167,9 @@ import 'leaflet/dist/leaflet.css';
         selectedPath = null;
         selectedPoint = null;
 
-        recordDeleteOperation(targetId);
+        pedestrianPathData.features = (pedestrianPathData.features || [])
+          .filter((item) => String(item.id) !== String(targetId));
+        markPathEditsDirty();
         editStatus.textContent = 'Custom path deleted';
         refreshAfterPathChange();
         setEditActionVisibility({
@@ -2236,23 +2205,7 @@ import 'leaflet/dist/leaflet.css';
         }).addTo(map);
       };
 
-      const exportCurrentPathEdits = () => {
-        const blob = new Blob(
-          [JSON.stringify(pathEditState, null, 2) + '\n'],
-          { type: 'application/geo+json' }
-        );
-
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = 'pedestrian_paths_edits.geojson';
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        URL.revokeObjectURL(url);
-      };
-
-      exportPathEdits?.addEventListener('click', exportCurrentPathEdits);
+      savePathEdits?.addEventListener('click', saveCurrentPathEdits);
       editNewPath?.addEventListener('click', startDrawingMode);
       editDeletePoint?.addEventListener('click', deleteSelectedPoint);
       editDelete?.addEventListener('click', deleteSelectedCustomPath);
@@ -2309,7 +2262,11 @@ import 'leaflet/dist/leaflet.css';
         closeEditTools();
       });
 
-      writeSavedPathEdits(pathEditState);
+      if (pathEditFileStatus) {
+        pathEditFileStatus.textContent = hasCompletePedestrianEditFile
+          ? 'Loaded'
+          : 'Base fallback';
+      }
 
       buildDefaultVertexMarkers();
 
