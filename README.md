@@ -44,3 +44,11 @@ Preview:
 ```bash
 npm run preview
 ```
+
+## Terrain map
+
+Download the fixed 1 km terrain tiles:
+
+```bash
+npm run terrain:download
+```
