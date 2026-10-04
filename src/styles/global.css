@@ -414,24 +414,34 @@ a { color: inherit; text-decoration: none; }
 }
 
 .edit-vertex-marker {
-  width: 18px !important;
-  height: 18px !important;
+  width: 14px !important;
+  height: 14px !important;
   border: 0 !important;
   background: transparent !important;
+  cursor: move;
 }
 
 .edit-vertex-marker span {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
+  display: block;
+  width: 12px;
+  height: 12px;
   border: 2px solid #fff;
   border-radius: 50%;
-  background: #0f4fd8;
-  color: #fff;
-  font-size: 7px;
-  font-weight: 800;
+  background: #2563eb;
   box-shadow: 0 2px 7px rgba(0, 0, 0, .22);
+  transition: transform .12s ease, background .12s ease;
+}
+
+.edit-vertex-marker:hover span {
+  transform: scale(1.2);
+}
+
+.edit-vertex-marker.is-selected span {
+  width: 16px;
+  height: 16px;
+  margin: -2px;
+  background: #0f4fd8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .18), 0 2px 8px rgba(0, 0, 0, .24);
 }
 
 .edit-save-action {
