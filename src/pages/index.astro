@@ -1,6 +1,9 @@
 ---
 import MainLayout from '../layouts/MainLayout.astro';
 import '../styles/global.css';
+import perimeterRaw from '../../maps/perimeter.geojson?raw';
+
+const perimeterData = JSON.parse(perimeterRaw);
 ---
 
 <MainLayout title="CampusMaaS · Map">
@@ -25,53 +28,78 @@ import '../styles/global.css';
     </div>
   </main>
 
-  <script>
+  <script define:vars={{ perimeterData }}>
     import('leaflet').then(({ default: L }) => {
-      const map = L.map('map', { zoomControl: false }).setView([11.2741, 77.6075], 16);
+      const feature = perimeterData.features[0];
+      const ring = feature.geometry.coordinates[0];
+
+      const center = L.latLng(
+        ring.reduce((sum, point) => sum + point[1], 0) / ring.length,
+        ring.reduce((sum, point) => sum + point[0], 0) / ring.length
+      );
+
+      const radius = Number(feature.properties.radius_m);
+
+      const map = L.map('map', {
+        zoomControl: false,
+        minZoom: 16,
+        maxZoom: 20,
+        maxBoundsViscosity: 1
+      }).setView(center, 17);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 20,
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
 
-      const locations = [
-        { name: 'Campus Gate', coords: [11.2741, 77.6075], type: 'mobility' },
-        { name: 'Hostel', coords: [11.2730, 77.6080], type: 'destination' },
-        { name: 'Print Center', coords: [11.2750, 77.6060], type: 'service' },
-        { name: 'Canteen', coords: [11.2800, 77.6100], type: 'service' },
-        { name: 'Academic Block A', coords: [11.2768, 77.6110], type: 'destination' }
-      ];
+      const perimeter = L.polygon(
+        ring.map(([lon, lat]) => [lat, lon]),
+        {
+          color: '#2563eb',
+          weight: 2,
+          opacity: 0.7,
+          fill: false,
+          interactive: false
+        }
+      ).addTo(map);
 
-      const iconFor = (type) => L.divIcon({
-        className: 'campus-pin-wrap',
-        html: '<div class="campus-pin ' + type + '"></div>',
-        iconSize: [18, 18],
-        iconAnchor: [9, 9]
-      });
+      const bounds = perimeter.getBounds();
+      map.setMaxBounds(bounds.pad(0.015));
+      map.fitBounds(bounds.pad(0.04));
 
-      locations.forEach((place) => {
-        L.marker(place.coords, { icon: iconFor(place.type) })
-          .addTo(map)
-          .bindTooltip(place.name, { direction: 'top', offset: [0, -8] });
-      });
+      const circleCenter = center;
 
-      const route = [
-        locations[1].coords,
-        locations[2].coords,
-        locations[3].coords,
-        locations[4].coords
-      ];
+      function clampToPerimeter() {
+        const current = map.getCenter();
+        const distance = circleCenter.distanceTo(current);
 
-      const line = L.polyline(route, {
-        color: '#3b82f6',
-        weight: 4,
-        opacity: 0.9,
-        lineCap: 'round',
-        lineJoin: 'round'
-      }).addTo(map);
+        if (distance <= radius) return;
 
-      map.fitBounds(line.getBounds().pad(0.18));
-      setTimeout(() => map.invalidateSize(), 150);
+        const bearing = Math.atan2(
+          (current.lng - circleCenter.lng) *
+            Math.cos(circleCenter.lat * Math.PI / 180),
+          current.lat - circleCenter.lat
+        );
+
+        const latOffset = Math.cos(bearing) * radius / 111320;
+        const lonOffset =
+          Math.sin(bearing) *
+          radius /
+          (111320 * Math.cos(circleCenter.lat * Math.PI / 180));
+
+        map.setView(
+          [
+            circleCenter.lat + latOffset,
+            circleCenter.lng + lonOffset
+          ],
+          map.getZoom(),
+          { animate: false }
+        );
+      }
+
+      map.on('moveend', clampToPerimeter);
+
+      setTimeout(() => map.invalidateSize(), 100);
 
       document.querySelectorAll('[data-map-action]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -85,7 +113,10 @@ import '../styles/global.css';
         if (!navigator.geolocation) return;
 
         navigator.geolocation.getCurrentPosition(
-          ({ coords }) => map.setView([coords.latitude, coords.longitude], 18),
+          ({ coords }) => {
+            map.setView([coords.latitude, coords.longitude], 18);
+            setTimeout(clampToPerimeter, 0);
+          },
           () => alert('Location permission was not granted.')
         );
       });
