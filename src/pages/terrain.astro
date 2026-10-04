@@ -1,0 +1,185 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import '../styles/global.css';
+import 'leaflet/dist/leaflet.css';
+---
+
+<MainLayout title="CampusMaaS · Terrain">
+  <main class="map-screen">
+    <header class="floating-header">
+      <a class="brand" href="/" aria-label="CampusMaaS home">
+        <span class="brand-mark">M</span>
+        <strong>CampusMaaS</strong>
+      </a>
+
+      <div class="top-actions">
+        <a class="ghost-btn" href="/" aria-label="Return to local map">◎ Local map</a>
+        <a class="map-switch map-switch-terrain" href="/" aria-label="Switch to local map">
+          <span class="map-switch-label">Map</span>
+          <span class="map-switch-track" aria-hidden="true"><span class="map-switch-thumb"></span></span>
+          <span class="map-switch-label">Terrain</span>
+        </a>
+        <button class="profile" type="button" aria-label="Profile">AR</button>
+      </div>
+    </header>
+
+    <div id="terrainMap" class="map" aria-label="Campus terrain map"></div>
+
+    <div class="map-controls" aria-label="Map controls">
+      <button type="button" data-map-action="zoom-in" aria-label="Zoom in">+</button>
+      <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
+    </div>
+
+    <div class="map-note">Terrain · local COP30 · 1 km boundary</div>
+  </main>
+
+  <script>
+    import('leaflet').then(async ({ default: L }) => {
+      const response = await fetch('/maps/perimeter.geojson');
+
+      if (!response.ok) {
+        throw new Error('Campus perimeter could not be loaded.');
+      }
+
+      const perimeterData = await response.json();
+      const feature = perimeterData.features?.[0];
+
+      if (!feature) {
+        throw new Error('Campus perimeter is empty.');
+      }
+
+      const ring = feature.geometry.coordinates[0];
+      const center = L.latLng(
+        Number(feature.properties.center[1]),
+        Number(feature.properties.center[0])
+      );
+      const radius = Number(feature.properties.radius_m);
+
+      const latRadius = radius / 111320;
+      const lonRadius =
+        radius / (111320 * Math.cos(center.lat * Math.PI / 180));
+
+      const circleBounds = L.latLngBounds(
+        [center.lat - latRadius, center.lng - lonRadius],
+        [center.lat + latRadius, center.lng + lonRadius]
+      );
+
+      const perimeterZoom = 18;
+      const maxZoom = 23;
+
+      const map = L.map('terrainMap', {
+        zoomControl: false,
+        minZoom: 1,
+        maxZoom,
+        scrollWheelZoom: false,
+        maxBounds: circleBounds,
+        maxBoundsViscosity: 1
+      }).setView(center, perimeterZoom);
+
+      // Exact COP30 GeoTIFF bounds from the uploaded raster.
+      const terrainBounds = [
+        [11.264861122222221, 77.59791665555557],
+        [11.282916677777777, 77.6162499888889]
+      ];
+
+      L.imageOverlay('/maps/terrain/terrain.png', terrainBounds, {
+        opacity: 1,
+        interactive: false
+      }).addTo(map);
+
+      // Hide everything outside the exact existing 1 km perimeter.
+      const outer = [
+        [center.lat - 1, center.lng - 1],
+        [center.lat - 1, center.lng + 1],
+        [center.lat + 1, center.lng + 1],
+        [center.lat + 1, center.lng - 1]
+      ];
+
+      const inner = ring
+        .map(([lon, lat]) => [lat, lon])
+        .reverse();
+
+      L.polygon([outer, inner], {
+        stroke: false,
+        fillColor: '#eef1f3',
+        fillOpacity: 0.94,
+        interactive: false
+      }).addTo(map);
+
+      const clampToPerimeter = () => {
+        const current = map.getCenter();
+        const distance = center.distanceTo(current);
+
+        if (distance <= radius) return;
+
+        const bearing = Math.atan2(
+          (current.lng - center.lng) * Math.cos(center.lat * Math.PI / 180),
+          current.lat - center.lat
+        );
+
+        const latOffset = Math.cos(bearing) * radius / 111320;
+        const lonOffset =
+          Math.sin(bearing) * radius /
+          (111320 * Math.cos(center.lat * Math.PI / 180));
+
+        map.setView(
+          [center.lat + latOffset, center.lng + lonOffset],
+          Math.max(map.getZoom(), perimeterZoom),
+          { animate: false }
+        );
+      };
+
+      map.on('drag', clampToPerimeter);
+      map.on('moveend', clampToPerimeter);
+      map.on('zoomend', () => {
+        if (map.getZoom() >= perimeterZoom) {
+          clampToPerimeter();
+        }
+      });
+
+      const mapElement = map.getContainer();
+
+      mapElement.addEventListener('wheel', (event) => {
+        event.preventDefault();
+
+        const direction = event.deltaY > 0 ? -1 : 1;
+        const allowBeyondLimit = event.shiftKey;
+        const currentZoom = map.getZoom();
+
+        if (
+          direction < 0 &&
+          currentZoom <= perimeterZoom &&
+          !allowBeyondLimit
+        ) {
+          return;
+        }
+
+        const nextZoom = allowBeyondLimit
+          ? currentZoom + direction
+          : Math.max(perimeterZoom, currentZoom + direction);
+
+        map.setZoom(
+          Math.max(1, Math.min(maxZoom, nextZoom)),
+          { animate: false }
+        );
+      }, { passive: false });
+
+      document.querySelectorAll('[data-map-action]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const action = button.getAttribute('data-map-action');
+
+          if (action === 'zoom-in') {
+            map.setZoom(Math.min(maxZoom, map.getZoom() + 1), { animate: true });
+            return;
+          }
+
+          if (action === 'zoom-out') {
+            map.setZoom(Math.max(1, map.getZoom() - 1), { animate: true });
+          }
+        });
+      });
+
+      setTimeout(() => map.invalidateSize(), 100);
+    });
+  </script>
+</MainLayout>
