@@ -674,8 +674,8 @@ import 'leaflet/dist/leaflet.css';
         });
 
         const vector = L.geoJSON(campusData, {
-          style: terrainStyle,
-          pointToLayer: () => L.circleMarker([0, 0], { radius: 0 })
+          filter: (feature) => feature?.geometry?.type !== 'Point',
+          style: terrainStyle
         });
 
         const labels = L.geoJSON(campusData, {
