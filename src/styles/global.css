@@ -200,6 +200,236 @@ a { color: inherit; text-decoration: none; }
   box-shadow: 0 5px 20px rgba(0, 0, 0, .16);
 }
 
+
+.dev-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 3000;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 74px 18px 18px;
+  background: rgba(5, 13, 23, .16);
+  backdrop-filter: blur(3px);
+}
+
+.dev-panel.is-open {
+  display: flex;
+}
+
+.dev-panel-shell {
+  width: min(760px, 100%);
+  border: 1px solid rgba(148, 163, 184, .2);
+  border-radius: 16px;
+  background: rgba(8, 20, 35, .96);
+  color: #e8eef8;
+  box-shadow: 0 22px 80px rgba(0, 0, 0, .3);
+  overflow: hidden;
+}
+
+.dev-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 15px;
+  border-bottom: 1px solid rgba(148, 163, 184, .1);
+}
+
+.dev-panel-header strong {
+  display: block;
+  margin-top: 2px;
+  font: 600 15px/1.1 'Space Grotesk', sans-serif;
+}
+
+.dev-panel-kicker {
+  color: #6ea4ff;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+
+.dev-panel-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 8px;
+  background: #0e2339;
+  color: #aebbd0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.dev-panel-grid {
+  display: grid;
+  grid-template-columns: 1.15fr .85fr;
+  gap: 10px;
+  padding: 10px;
+}
+
+.dev-card {
+  border: 1px solid rgba(148, 163, 184, .1);
+  border-radius: 12px;
+  background: rgba(12, 29, 48, .76);
+  padding: 12px;
+}
+
+.dev-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.dev-card-title strong {
+  font: 600 13px 'Space Grotesk', sans-serif;
+}
+
+.dev-card-title > span {
+  min-width: 22px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, .12);
+  color: #79aaff;
+  font-size: 9px;
+  text-align: center;
+}
+
+.map-file-list {
+  display: grid;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.map-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, .08);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .025);
+  cursor: pointer;
+}
+
+.map-file-row:hover {
+  background: rgba(255, 255, 255, .05);
+}
+
+.map-file-row > span {
+  min-width: 0;
+}
+
+.map-file-row strong,
+.map-file-row small {
+  display: block;
+}
+
+.map-file-row strong {
+  overflow: hidden;
+  color: #e1e8f3;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-file-row small {
+  margin-top: 2px;
+  color: #687891;
+  font-size: 9px;
+}
+
+.map-file-row input {
+  flex: 0 0 auto;
+  appearance: none;
+  width: 30px;
+  height: 18px;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 999px;
+  background: #15283e;
+  position: relative;
+  cursor: pointer;
+}
+
+.map-file-row input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #7b8799;
+  transition: transform .15s ease;
+}
+
+.map-file-row input:checked {
+  border-color: rgba(59, 130, 246, .5);
+  background: #2563eb;
+}
+
+.map-file-row input:checked::after {
+  background: white;
+  transform: translateX(12px);
+}
+
+.zoom-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, .08);
+}
+
+.zoom-setting span {
+  color: #7e8da4;
+  font-size: 10px;
+}
+
+.zoom-setting strong {
+  color: #dfe8f6;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.dev-action {
+  width: 100%;
+  margin-top: 10px;
+  border: 1px solid rgba(59, 130, 246, .25);
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: rgba(37, 99, 235, .12);
+  color: #82b0ff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dev-action:hover {
+  background: rgba(37, 99, 235, .2);
+}
+
+.dev-panel-hint {
+  padding: 0 13px 11px;
+  color: #53637a;
+  font-size: 9px;
+}
+
+@media (max-width: 700px) {
+  .dev-panel {
+    padding: 58px 10px 10px;
+  }
+
+  .dev-panel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 560px) {
   .floating-header {
     top: 10px;
