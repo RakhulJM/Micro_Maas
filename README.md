@@ -3,7 +3,7 @@
 ## Clone
 
 ```bash
-git clone https://github.com/<-->/maas-prototype-v1.git
+git clone https://github.com/RakhulJM/maas-prototype-v1.git
 cd maas-prototype-v1
 ```
 
