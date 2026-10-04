@@ -2,6 +2,23 @@
 import MainLayout from '../layouts/MainLayout.astro';
 import '../styles/global.css';
 import 'leaflet/dist/leaflet.css';
+
+const mapModules = import.meta.glob('../../maps/*.{geojson,json}', {
+  eager: true,
+  query: '?raw',
+  import: 'default'
+});
+
+const mapFiles = Object.entries(mapModules)
+  .map(([path, raw]) => ({
+    name: path.split('/').pop() ?? path,
+    raw: String(raw)
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+const mapData = Object.fromEntries(
+  mapFiles.map((file) => [file.name, file.raw])
+);
 ---
 
 <MainLayout title="CampusMaaS · Map">
@@ -26,23 +43,78 @@ import 'leaflet/dist/leaflet.css';
     </div>
 
     <div class="map-note">Campus map · 1 km boundary</div>
+
+    <section class="dev-panel" id="devPanel" aria-hidden="true">
+      <div class="dev-panel-shell">
+        <header class="dev-panel-header">
+          <div>
+            <span class="dev-panel-kicker">DEVELOPER</span>
+            <strong>Map settings</strong>
+          </div>
+          <button type="button" class="dev-panel-close" id="devPanelClose" aria-label="Close settings">×</button>
+        </header>
+
+        <div class="dev-panel-grid">
+          <section class="dev-card">
+            <div class="dev-card-title">
+              <strong>Maps</strong>
+              <span>{mapFiles.length}</span>
+            </div>
+
+            <div class="map-file-list">
+              {mapFiles.map((file) => (
+                <label class="map-file-row">
+                  <span>
+                    <strong>{file.name}</strong>
+                    <small>maps/{file.name}</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    data-map-file={file.name}
+                    checked={file.name === 'campus.geojson' || file.name === 'perimeter.geojson'}
+                  />
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section class="dev-card">
+            <div class="dev-card-title">
+              <strong>Zoom settings</strong>
+            </div>
+
+            <div class="zoom-setting">
+              <span>Normal zoom-out limit</span>
+              <strong>18</strong>
+            </div>
+
+            <div class="zoom-setting">
+              <span>Maximum zoom</span>
+              <strong>23</strong>
+            </div>
+
+            <div class="zoom-setting">
+              <span>Override</span>
+              <strong>Shift + wheel</strong>
+            </div>
+
+            <button type="button" class="dev-action" id="resetMapView">Reset map view</button>
+          </section>
+        </div>
+
+        <div class="dev-panel-hint">Ctrl + Shift + J</div>
+      </div>
+    </section>
   </main>
 
-  <script>
+  <script define:vars={{ mapData }}>
     import('leaflet').then(async ({ default: L }) => {
-      const [campusResponse, perimeterResponse] = await Promise.all([
-        fetch('/maps/campus.geojson'),
-        fetch('/maps/perimeter.geojson')
-      ]);
-
-      if (!campusResponse.ok || !perimeterResponse.ok) {
-        throw new Error('Campus map data could not be loaded.');
+      if (!mapData['campus.geojson'] || !mapData['perimeter.geojson']) {
+        throw new Error('campus.geojson and perimeter.geojson are required.');
       }
 
-      const [campusData, perimeterData] = await Promise.all([
-        campusResponse.json(),
-        perimeterResponse.json()
-      ]);
+      const campusData = JSON.parse(mapData['campus.geojson']);
+      const perimeterData = JSON.parse(mapData['perimeter.geojson']);
 
       const perimeterFeature = perimeterData.features[0];
       const ring = perimeterFeature.geometry.coordinates[0];
@@ -116,7 +188,7 @@ import 'leaflet/dist/leaflet.css';
         };
       };
 
-      L.geoJSON(campusData, {
+      const baseLayer = L.geoJSON(campusData, {
         filter: (feature) => !isRoad(feature),
         style: (feature) => {
           const p = feature?.properties || {};
@@ -164,19 +236,23 @@ import 'leaflet/dist/leaflet.css';
             fillOpacity: 0.85
           };
         }
-      }).addTo(map);
+      });
 
-      L.geoJSON(campusData, {
+      const roadCasing = L.geoJSON(campusData, {
         filter: isRoad,
         style: (feature) => roadStyle(feature, true),
         interactive: false
-      }).addTo(map);
+      });
 
-      L.geoJSON(campusData, {
+      const roads = L.geoJSON(campusData, {
         filter: isRoad,
         style: (feature) => roadStyle(feature),
         interactive: false
-      }).addTo(map);
+      });
+
+      baseLayer.addTo(map);
+      roadCasing.addTo(map);
+      roads.addTo(map);
 
       /*
        * Building labels scale with the actual on-screen building bounds.
@@ -293,7 +369,7 @@ import 'leaflet/dist/leaflet.css';
         .map(([lon, lat]) => [lat, lon])
         .reverse();
 
-      L.polygon([outer, inner], {
+      const perimeterMask = L.polygon([outer, inner], {
         stroke: false,
         fillColor: '#eef1f3',
         fillOpacity: 0.9,
@@ -374,6 +450,131 @@ import 'leaflet/dist/leaflet.css';
         map.invalidateSize();
         updateBuildingLabels();
       }, 100);
+
+      const campusLayers = [
+        baseLayer,
+        roadCasing,
+        roads,
+        ...buildingLabels.map((item) => item.marker)
+      ];
+
+      const layerRegistry = new Map([
+        ['campus.geojson', campusLayers],
+        ['perimeter.geojson', [perimeterMask]]
+      ]);
+
+      const genericStyle = (feature) => {
+        const p = feature?.properties || {};
+
+        if (p.highway || p.route) {
+          return roadStyle(feature);
+        }
+
+        if (p.natural === 'water' || p.waterway) {
+          return {
+            color: '#9ac6d3',
+            weight: 1,
+            fillColor: colors.water,
+            fillOpacity: 0.95
+          };
+        }
+
+        if (p.leisure || p.landuse) {
+          return {
+            color: '#b7c7b0',
+            weight: 0.7,
+            fillColor: p.leisure === 'park' ? colors.park : colors.green,
+            fillOpacity: 0.9
+          };
+        }
+
+        if (p.building) {
+          return {
+            color: colors.buildingEdge,
+            weight: 0.7,
+            fillColor: colors.building,
+            fillOpacity: 1
+          };
+        }
+
+        return {
+          color: '#d1cec8',
+          weight: 0.7,
+          fillColor: colors.land,
+          fillOpacity: 0.85
+        };
+      };
+
+      const setLayerVisibility = (name, enabled) => {
+        if (!layerRegistry.has(name)) {
+          const raw = mapData[name];
+          if (!raw) return;
+
+          try {
+            const data = JSON.parse(raw);
+            layerRegistry.set(name, [
+              L.geoJSON(data, {
+                style: genericStyle,
+                interactive: false
+              })
+            ]);
+          } catch {
+            return;
+          }
+        }
+
+        for (const layer of layerRegistry.get(name)) {
+          if (enabled) {
+            if (!map.hasLayer(layer)) layer.addTo(map);
+          } else if (map.hasLayer(layer)) {
+            map.removeLayer(layer);
+          }
+        }
+
+        if (enabled && map.hasLayer(perimeterMask)) {
+          perimeterMask.bringToFront();
+        }
+      };
+
+      document.querySelectorAll('[data-map-file]').forEach((input) => {
+        input.addEventListener('change', (event) => {
+          const checkbox = event.currentTarget;
+          setLayerVisibility(
+            checkbox.getAttribute('data-map-file'),
+            checkbox.checked
+          );
+        });
+      });
+
+      const devPanel = document.getElementById('devPanel');
+      const closeDevPanel = () => {
+        devPanel?.classList.remove('is-open');
+        devPanel?.setAttribute('aria-hidden', 'true');
+      };
+
+      const toggleDevPanel = () => {
+        const open = !devPanel?.classList.contains('is-open');
+        devPanel?.classList.toggle('is-open', open);
+        devPanel?.setAttribute('aria-hidden', String(!open));
+      };
+
+      window.addEventListener('keydown', (event) => {
+        if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'j') {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleDevPanel();
+        }
+
+        if (event.key === 'Escape') {
+          closeDevPanel();
+        }
+      }, true);
+
+      document.getElementById('devPanelClose')?.addEventListener('click', closeDevPanel);
+
+      document.getElementById('resetMapView')?.addEventListener('click', () => {
+        map.setView(center, perimeterZoom, { animate: true });
+      });
 
       document.querySelectorAll('[data-map-action]').forEach((button) => {
         button.addEventListener('click', () => {
