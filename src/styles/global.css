@@ -205,6 +205,44 @@ a { color: inherit; text-decoration: none; }
   background: #fff;
 }
 
+.path-toggle {
+  position: absolute;
+  z-index: 1000;
+  right: 14px;
+  bottom: 121px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(20, 39, 62, .12);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .94);
+  color: #24364d;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, .12);
+  backdrop-filter: blur(10px);
+}
+
+.path-toggle:hover {
+  background: #fff;
+}
+
+.path-toggle.is-active {
+  border-color: rgba(37, 99, 235, .28);
+  background: rgba(37, 99, 235, .96);
+  color: #fff;
+}
+
+.path-toggle svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .map-note {
   position: absolute;
   z-index: 1000;
@@ -502,6 +540,11 @@ a { color: inherit; text-decoration: none; }
   .map-controls {
     right: 10px;
     bottom: 38px;
+  }
+
+  .path-toggle {
+    right: 10px;
+    bottom: 117px;
   }
 
   .map-note {
