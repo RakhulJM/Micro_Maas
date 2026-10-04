@@ -64,7 +64,7 @@ import 'leaflet/dist/leaflet.css';
       const map = L.map('map', {
         zoomControl: false,
         minZoom: 13,
-        maxZoom: 20,
+        maxZoom: 23,
         maxBounds: circleBounds,
         maxBoundsViscosity: 1
       }).setView(center, 16);
@@ -80,8 +80,7 @@ import 'leaflet/dist/leaflet.css';
         roadCasing: '#c7c5c0',
         road: '#ffffff',
         majorRoad: '#e9c67b',
-        footway: '#d1cec7',
-        boundary: '#3b82f6'
+        footway: '#d1cec7'
       };
 
       const roadWidth = {
@@ -116,7 +115,7 @@ import 'leaflet/dist/leaflet.css';
         };
       };
 
-      const baseLayer = L.geoJSON(campusData, {
+      L.geoJSON(campusData, {
         filter: (feature) => !isRoad(feature),
         style: (feature) => {
           const p = feature?.properties || {};
@@ -166,57 +165,53 @@ import 'leaflet/dist/leaflet.css';
         }
       }).addTo(map);
 
-      const roadCasing = L.geoJSON(campusData, {
+      L.geoJSON(campusData, {
         filter: isRoad,
         style: (feature) => roadStyle(feature, true),
         interactive: false
       }).addTo(map);
 
-      const roads = L.geoJSON(campusData, {
+      L.geoJSON(campusData, {
         filter: isRoad,
         style: (feature) => roadStyle(feature),
-        interactive: false,
-        onEachFeature: (feature, layer) => {
-          const name = feature?.properties?.name;
-          if (name) {
-            layer.bindTooltip(name, {
-              direction: 'top',
-              sticky: true
-            });
-          }
-        }
-      }).addTo(map);
-
-      const labels = L.geoJSON(campusData, {
-        filter: (feature) =>
-          Boolean(feature?.properties?.name && feature?.properties?.building),
-        style: {
-          opacity: 0,
-          fillOpacity: 0
-        },
-        onEachFeature: (feature, layer) => {
-          layer.bindTooltip(feature.properties.name, {
-            permanent: true,
-            direction: 'center',
-            className: 'map-label'
-          });
-        }
-      }).addTo(map);
-
-      const perimeterLayer = L.geoJSON(perimeterData, {
-        style: {
-          color: colors.boundary,
-          weight: 2,
-          opacity: 0.7,
-          fill: false
-        },
         interactive: false
       }).addTo(map);
 
       /*
-       * Mask everything outside the 2.5 km perimeter.
-       * The source GeoJSON may contain long roads crossing the boundary;
-       * they remain in the source file but are not visible outside the circle.
+       * Building labels are small, borderless map text positioned at
+       * the center of each named building. No popup/tooltip boxes.
+       */
+      const buildingLabels = [];
+
+      for (const feature of campusData.features || []) {
+        const name = feature?.properties?.name;
+        const building = feature?.properties?.building;
+        const geometry = feature?.geometry;
+
+        if (!name || !building || !geometry?.coordinates) continue;
+
+        const tempLayer = L.geoJSON(feature);
+        const bounds = tempLayer.getBounds();
+
+        if (!bounds.isValid()) continue;
+
+        const label = L.marker(bounds.getCenter(), {
+          icon: L.divIcon({
+            className: 'building-label',
+            html: '<span>' + String(name).replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>',
+            iconSize: [0, 0],
+            iconAnchor: [0, 0]
+          }),
+          interactive: false,
+          keyboard: false
+        }).addTo(map);
+
+        buildingLabels.push(label);
+      }
+
+      /*
+       * Keep the source geometry as-is, but hide anything outside the
+       * 1 km circular viewing area.
        */
       const outer = [
         [center.lat - 1, center.lng - 1],
@@ -236,13 +231,13 @@ import 'leaflet/dist/leaflet.css';
         interactive: false
       }).addTo(map);
 
-      map.fitBounds(perimeterLayer.getBounds(), {
-        padding: [0, 0]
-      });
+      const perimeterZoom = Math.max(
+        map.getBoundsZoom(circleBounds, false),
+        13
+      );
 
-      const perimeterZoom = map.getZoom();
       map.setMinZoom(perimeterZoom);
-      map.setMaxBounds(circleBounds);
+      map.setView(center, perimeterZoom, { animate: false });
 
       function constrainToPerimeter() {
         const current = map.getCenter();
@@ -271,22 +266,7 @@ import 'leaflet/dist/leaflet.css';
       map.on('moveend', constrainToPerimeter);
       map.on('zoomend', constrainToPerimeter);
 
-      const toggleLabels = () => {
-        const visible = map.getZoom() >= 16;
-        labels.eachLayer((layer) => {
-          if (visible) {
-            layer.openTooltip();
-          } else {
-            layer.closeTooltip();
-          }
-        });
-      };
-
-      map.on('zoomend', toggleLabels);
-      setTimeout(() => {
-        map.invalidateSize();
-        toggleLabels();
-      }, 100);
+      setTimeout(() => map.invalidateSize(), 100);
 
       document.querySelectorAll('[data-map-action]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -310,10 +290,7 @@ import 'leaflet/dist/leaflet.css';
         );
       });
 
-      void baseLayer;
-      void roadCasing;
-      void roads;
-      void labels;
+      void buildingLabels;
     });
   </script>
 </MainLayout>
