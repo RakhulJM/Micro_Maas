@@ -6,7 +6,9 @@ const mapsDir = path.join(root, 'maps');
 const publicMapsDir = path.join(root, 'public', 'maps');
 
 const supported = /\.(geojson|json|tif|tiff)$/i;
+const manifestSupported = /\.(geojson|json)$/i;
 
+fs.rmSync(publicMapsDir, { recursive: true, force: true });
 fs.mkdirSync(publicMapsDir, { recursive: true });
 
 const files = [];
@@ -41,7 +43,7 @@ for (const relativePath of files) {
 }
 
 const manifest = {
-  files,
+  files: files.filter((file) => manifestSupported.test(file)),
   generatedAt: new Date().toISOString()
 };
 
