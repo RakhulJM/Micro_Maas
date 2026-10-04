@@ -826,11 +826,35 @@ import 'leaflet/dist/leaflet.css';
       const showTerrainMap = async () => {
         if (!terrainMap) {
           try {
-            const { default: maplibregl } = await loadMapLibre();
+            const maplibregl = await loadMapLibre();
+
+            let terrainIsLocal = false;
+            try {
+              const localTerrainManifest = await fetch(
+                '/maps/terrain/manifest.json',
+                { cache: 'no-store' }
+              );
+              terrainIsLocal = localTerrainManifest.ok;
+            } catch {
+              terrainIsLocal = false;
+            }
+
+            const terrainStyle = {
+              ...mapLibreStyle,
+              sources: {
+                ...mapLibreStyle.sources,
+                terrain: {
+                  ...mapLibreStyle.sources.terrain,
+                  tiles: terrainIsLocal
+                    ? ['/maps/terrain/{z}/{x}/{y}.png']
+                    : mapLibreStyle.sources.terrain.tiles
+                }
+              }
+            };
 
             terrainMap = new maplibregl.Map({
               container: terrainMapElement,
-              style: mapLibreStyle,
+              style: terrainStyle,
               center: [center.lng, center.lat],
               zoom: perimeterZoom,
               minZoom: 1,
@@ -907,7 +931,8 @@ import 'leaflet/dist/leaflet.css';
         terrainMap.resize();
         mapNote && (
           mapNote.textContent =
-            'Terrain map · 1 km boundary · Mapzen Terrain Tiles'
+            'Terrain map · 1 km boundary · ' +
+            (terrainIsLocal ? 'Local terrain' : 'Mapzen Terrain Tiles')
         );
         mapModeToggle?.setAttribute('title', 'Switch to local map');
       };
