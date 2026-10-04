@@ -564,15 +564,32 @@ import 'leaflet/dist/leaflet.css';
         }
       }
 
-            document.querySelectorAll('[data-map-file]').forEach((input) => {
-        input.addEventListener('change', (event) => {
-          const checkbox = event.currentTarget;
-          setLayerVisibility(
-            checkbox.getAttribute('data-map-file'),
-            checkbox.checked
-          );
-        });
-      });
+      const devPanel = document.getElementById('devPanel');
+
+      const closeDevPanel = () => {
+        devPanel?.classList.remove('is-open');
+        devPanel?.setAttribute('aria-hidden', 'true');
+      };
+
+      const toggleDevPanel = () => {
+        const open = !devPanel?.classList.contains('is-open');
+        devPanel?.classList.toggle('is-open', open);
+        devPanel?.setAttribute('aria-hidden', String(!open));
+      };
+
+      window.addEventListener('keydown', (event) => {
+        if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'u') {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleDevPanel();
+        }
+
+        if (event.key === 'Escape') {
+          closeDevPanel();
+        }
+      }, true);
+
+      document.getElementById('devPanelClose')?.addEventListener('click', closeDevPanel);
 
       document.getElementById('resetMapView')?.addEventListener('click', () => {
         map.setView(center, perimeterZoom, { animate: true });
