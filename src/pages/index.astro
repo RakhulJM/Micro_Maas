@@ -1,0 +1,216 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import '../styles/global.css';
+---
+<MainLayout title="CampusMaaS · Dashboard">
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">M</span>
+        <span>
+          <strong>CampusMaaS</strong>
+          <small>Mobility as a Service</small>
+        </span>
+      </a>
+
+      <div class="top-actions">
+        <button class="ghost-btn" type="button" id="locateBtn">◎ Use my location</button>
+        <button class="profile" type="button" aria-label="Profile">AR</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Campus mobility dashboard</p>
+        <h1>Move through campus,<br /><span>without the friction.</span></h1>
+        <p class="hero-copy">Plan classes, printing, food pickups and events as one connected journey.</p>
+      </div>
+      <div class="date-card">
+        <span>Today</span>
+        <strong id="todayLabel">Loading date…</strong>
+        <small id="dayLabel">Campus day</small>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <div class="map-card">
+        <div class="card-head">
+          <div>
+            <p class="section-kicker">LIVE CAMPUS</p>
+            <h2>Campus map</h2>
+          </div>
+          <div class="map-controls">
+            <button type="button" data-map-action="zoom-in" aria-label="Zoom in">+</button>
+            <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
+          </div>
+        </div>
+
+        <div id="map" class="map" aria-label="Interactive campus map"></div>
+
+        <div class="map-legend">
+          <span><i class="dot destination"></i>Destination</span>
+          <span><i class="dot service"></i>Service</span>
+          <span><i class="dot mobility"></i>Mobility</span>
+        </div>
+      </div>
+
+      <aside class="journey-card">
+        <div class="card-head">
+          <div>
+            <p class="section-kicker">NEXT JOURNEY</p>
+            <h2>Hostel → Class</h2>
+          </div>
+          <span class="status-pill">On time</span>
+        </div>
+
+        <div class="journey-summary">
+          <strong>Leave by 8:15 AM</strong>
+          <span>Arrive by 8:42 AM</span>
+        </div>
+
+        <div class="timeline">
+          <div class="timeline-item">
+            <span class="timeline-time">8:15</span>
+            <span class="timeline-line"></span>
+            <div>
+              <strong>Hostel</strong>
+              <small>Start walking</small>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <span class="timeline-time">8:20</span>
+            <span class="timeline-line"></span>
+            <div>
+              <strong>Print Center</strong>
+              <small>Pickup • 5 min</small>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <span class="timeline-time">8:28</span>
+            <span class="timeline-line"></span>
+            <div>
+              <strong>Canteen</strong>
+              <small>Food pickup • 5 min</small>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <span class="timeline-time">8:42</span>
+            <span class="timeline-line last"></span>
+            <div>
+              <strong>Academic Block A</strong>
+              <small>Classroom B203</small>
+            </div>
+          </div>
+        </div>
+
+        <button class="primary-btn" type="button" id="startTrip">Start journey</button>
+      </aside>
+    </section>
+
+    <section class="bottom-grid">
+      <article class="mini-card">
+        <div class="mini-icon">⌖</div>
+        <div>
+          <span class="section-kicker">TRIP PLANNER</span>
+          <h3>Build a complete trip</h3>
+          <p>Add destinations, services and time constraints.</p>
+        </div>
+        <button class="arrow-btn" type="button">→</button>
+      </article>
+
+      <article class="mini-card">
+        <div class="mini-icon">◫</div>
+        <div>
+          <span class="section-kicker">SERVICES</span>
+          <h3>Print &amp; food</h3>
+          <p>Pre-order a task and attach it to your route.</p>
+        </div>
+        <button class="arrow-btn" type="button">→</button>
+      </article>
+
+      <article class="mini-card">
+        <div class="mini-icon">◷</div>
+        <div>
+          <span class="section-kicker">TODAY</span>
+          <h3>Event-aware routing</h3>
+          <p>Routes adapt when the campus schedule changes.</p>
+        </div>
+        <button class="arrow-btn" type="button">→</button>
+      </article>
+    </section>
+
+    <footer class="footer">
+      <span>CampusMaaS prototype</span>
+      <span>Map layer ready for your college map data</span>
+    </footer>
+  </main>
+
+  <script>
+    import('leaflet').then(({ default: L }) => {
+      const map = L.map('map', { zoomControl: false }).setView([11.2741, 77.6075], 15);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 20,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      const locations = [
+        { name: 'Campus Gate', coords: [11.2741, 77.6075], type: 'mobility' },
+        { name: 'Hostel', coords: [11.2730, 77.6080], type: 'destination' },
+        { name: 'Print Center', coords: [11.2750, 77.6060], type: 'service' },
+        { name: 'Canteen', coords: [11.2800, 77.6100], type: 'service' },
+        { name: 'Academic Block A', coords: [11.2768, 77.6110], type: 'destination' }
+      ];
+
+      const iconFor = (type) => L.divIcon({
+        className: 'campus-pin-wrap',
+        html: '<div class="campus-pin ' + type + '"></div>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+
+      locations.forEach((place) => {
+        L.marker(place.coords, { icon: iconFor(place.type) })
+          .addTo(map)
+          .bindTooltip(place.name, { direction: 'top', offset: [0, -8] });
+      });
+
+      const route = [
+        locations[1].coords,
+        locations[2].coords,
+        locations[3].coords,
+        locations[4].coords
+      ];
+
+      const line = L.polyline(route, {
+        color: '#3b82f6',
+        weight: 5,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(map);
+
+      map.fitBounds(line.getBounds().pad(0.25));
+
+      document.querySelectorAll('[data-map-action]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const action = button.getAttribute('data-map-action');
+          if (action === 'zoom-in') map.zoomIn();
+          if (action === 'zoom-out') map.zoomOut();
+        });
+      });
+
+      document.getElementById('locateBtn')?.addEventListener('click', () => {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(
+          ({ coords }) => map.setView([coords.latitude, coords.longitude], 18),
+          () => alert('Location permission was not granted.')
+        );
+      });
+
+      document.getElementById('startTrip')?.addEventListener('click', () => {
+        document.getElementById('startTrip').textContent = 'Journey active';
+      });
+    });
+  </script>
+</MainLayout>
