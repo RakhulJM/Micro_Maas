@@ -1,0 +1,157 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1140772230",
+        "highway": "path"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6066298,
+            11.2725067
+          ],
+          [
+            77.6065448,
+            11.2723423
+          ],
+          [
+            77.6059443,
+            11.2720695
+          ]
+        ]
+      },
+      "id": "way/1140772230"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1323870007",
+        "highway": "footway"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6053502,
+            11.2716652
+          ],
+          [
+            77.6053043,
+            11.2712873
+          ]
+        ]
+      },
+      "id": "way/1323870007"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1323870008",
+        "highway": "footway"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6053959,
+            11.2716645
+          ],
+          [
+            77.6053545,
+            11.2712788
+          ]
+        ]
+      },
+      "id": "way/1323870008"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1530751436",
+        "highway": "footway",
+        "name": "MBA Block",
+        "surface": "paving_stones"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6076738,
+            11.2753374
+          ],
+          [
+            77.607823,
+            11.2754765
+          ],
+          [
+            77.608027,
+            11.275656
+          ]
+        ]
+      },
+      "id": "way/1530751436"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1547752799",
+        "highway": "footway",
+        "surface": "paved"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6051474,
+            11.2723688
+          ],
+          [
+            77.6051367,
+            11.272251
+          ],
+          [
+            77.605165,
+            11.2721445
+          ],
+          [
+            77.6051375,
+            11.2720318
+          ],
+          [
+            77.60514,
+            11.2719657
+          ],
+          [
+            77.6051275,
+            11.27188
+          ],
+          [
+            77.6051375,
+            11.2717893
+          ],
+          [
+            77.6052024,
+            11.2717379
+          ],
+          [
+            77.6052549,
+            11.2717453
+          ],
+          [
+            77.6053073,
+            11.2717404
+          ],
+          [
+            77.6053502,
+            11.2716652
+          ]
+        ]
+      },
+      "id": "way/1547752799"
+    }
+  ]
+}
