@@ -1,389 +1,355 @@
-# Predictive & Risk-Aware Mobility-as-a-Service
+# MaaS Prototype v1
 
-> A unified Mobility-as-a-Service platform for reliable, intelligent, and multi-modal journey planning.
+> Python engineering prototype for multi-modal mobility routing and trip calculation.
 
 ## Overview
 
-**Mobility-as-a-Service (MaaS)** integrates multiple transportation modes into a single digital platform, enabling users to plan and manage an entire journey through one application.
+This repository contains a lightweight **Mobility-as-a-Service (MaaS) routing prototype** built around local mobility data.
 
-This project aims to develop a MaaS platform that integrates transport modes such as **bus, metro/train, cab/auto, cycling, and walking** while going beyond conventional route planning.
+The current implementation focuses on:
 
-The proposed system focuses on **journey reliability and risk-aware decision making** by considering factors such as travel time, cost, transfers, delays, uncertainty, and arrival deadlines.
+- Graph-based route optimization
+- Travel-time optimization
+- Cost optimization
+- Geographic distance calculation
+- Multi-leg journey calculation
+- Fare calculation
+- CO₂ estimation
+- Local scooter availability data
 
-Instead of simply asking:
-
-> *"What is the fastest route?"*
-
-the system aims to answer:
-
-> **"Which journey is most likely to get me to my destination on time?"**
-
----
-
-## Problem Statement
-
-Current transportation services are often distributed across multiple platforms. Users may need separate applications for route planning, transport information, ticket booking, and payments.
-
-Existing journey planners primarily focus on parameters such as **shortest distance, estimated travel time, or cost**, while uncertainty caused by delays, congestion, and transfer failures can significantly affect the actual journey.
-
-This project aims to develop a unified MaaS platform that integrates multiple transport modes and provides **reliability-aware journey recommendations** based on predicted travel conditions and user requirements.
+The prototype currently uses **static local datasets** and simplified transport parameters.
 
 ---
 
-## Proposed Approach
-
-The system will:
-
-* Integrate multiple transportation modes into a common mobility model.
-* Provide end-to-end multi-modal journey planning.
-* Model travel time, cost, transfers, and transportation uncertainty.
-* Estimate journey and transfer risks.
-* Recommend routes based on user preferences and arrival requirements.
-* Adapt recommendations when disruptions occur.
-* Provide unified booking and payment capabilities.
-* Evaluate journey reliability against conventional route-planning approaches.
-
----
-
-## Research Direction
-
-The primary research direction is **predictive and risk-aware multi-modal journey planning**.
-
-A journey is represented as a sequence of transportation segments:
+## Repository Structure
 
 ```text
-Source
-  |
-  v
-Bus
-  |
-  v
-Metro
-  |
-  v
-Walking
-  |
-  v
-Destination
+maas-prototype-v1/
+│
+├── ad_router.py       # Graph-based route optimization
+├── router.py          # Geospatial multi-leg trip calculation
+├── bus_stops.csv      # Transit stop coordinates
+├── scooters.json      # Scooter availability data
+└── README.md
 ```
 
-Each segment can have different:
+---
 
-* Travel time
-* Cost
-* Delay probability
-* Transfer time
-* Reliability
-* Environmental impact
+## Engineering Implementation
 
-The system uses these factors to evaluate possible journey outcomes and recommend an appropriate route.
+### 1. Graph Routing — `ad_router.py`
+
+`ad_router.py` builds a directed graph using **NetworkX**.
+
+The graph contains these locations:
+
+```text
+KEC Hostel
+     ↓
+Campus Gate
+     ↓
+Perundurai BS
+     ↓
+Erode BS
+     ↓
+Railway Station
+```
+
+Each connection contains transport information such as:
+
+```text
+Mode
+Travel Time
+Cost
+CO₂
+```
+
+The program uses NetworkX shortest-path routing with different edge weights.
+
+### Optimization Modes
+
+```text
+cost → cheapest route
+time → fastest route
+```
+
+The program runs both optimization cases and prints the selected route together with total time and cost.
+
+> The current graph uses `nx.DiGraph`, so when multiple edges are added between the same two locations, the later edge replaces the earlier edge. The current implementation therefore represents one active edge per direction rather than a true multi-edge transport graph.
 
 ---
 
-## System Architecture
+## 2. Geospatial Routing — `router.py`
+
+`router.py` performs a fixed multi-stage journey calculation from the KEC Hostel area to Erode Railway Station.
+
+The program loads transit coordinates from:
 
 ```text
-                  USER
-                   |
-                   v
-          +-------------------+
-          |   MaaS Frontend   |
+bus_stops.csv
+```
+
+It uses:
+
+- **Pandas** for reading the CSV
+- **Geopy** for geographic distance calculation
+
+### Journey Flow
+
+```text
+KEC Hostel
+    |
+    | Walk
+    v
+Campus Gate
+    |
+    | Auto / Shared Transport
+    v
+Perundurai Bus Stand
+    |
+    | City Bus
+    v
+Erode Bus Stand
+    |
+    | Bus
+    v
+Erode Railway Station
+```
+
+For each leg, the program calculates:
+
+```text
+Distance
+Travel Time
+Fare
+CO₂
+```
+
+The final output contains:
+
+```text
+Total Travel Time
+Unified MaaS Fare
+Total CO₂
+CO₂ saved compared with car travel
+```
+
+---
+
+## 3. Transit Dataset — `bus_stops.csv`
+
+The current dataset contains four transit locations:
+
+| ID | Stop |
+|---|---|
+| T1 | Kongu Campus Gate |
+| T2 | Perundurai Bus Stand |
+| T3 | Erode Bus Stand |
+| T4 | Erode Railway Station |
+
+CSV structure:
+
+```text
+stop_id,stop_name,lat,lon
+```
+
+Example:
+
+```text
+T1,Kongu Campus Gate,11.2741,77.6075
+```
+
+---
+
+## 4. Scooter Dataset — `scooters.json`
+
+`scooters.json` stores prototype scooter availability information.
+
+Each scooter contains:
+
+```text
+id
+lat
+lon
+battery
+```
+
+Example:
+
+```json
+{
+  "id": "S-101",
+  "lat": 11.2730,
+  "lon": 77.6080,
+  "battery": 85
+}
+```
+
+The scooter dataset is currently stored as local mobility data and is not yet integrated into the routing calculations.
+
+---
+
+## Calculation Model
+
+### Transport Speeds
+
+`router.py` uses fixed prototype speeds:
+
+| Mode | Speed |
+|---|---:|
+| Walking | 0.08 km/min |
+| Auto | 0.40 km/min |
+| Bus | 0.50 km/min |
+
+Travel time is calculated as:
+
+```text
+time = distance / speed
+```
+
+### CO₂ Factors
+
+The prototype uses fixed values:
+
+| Mode | CO₂ |
+|---|---:|
+| Walking | 0 g/km |
+| Auto | 80 g/km |
+| Bus | 50 g/km |
+| Car comparison | 192 g/km |
+
+These are prototype values used for engineering comparison.
+
+---
+
+## Technologies
+
+```text
+Python
+Pandas
+NetworkX
+Geopy
+CSV
+JSON
+```
+
+### Libraries
+
+```text
+pandas
+networkx
+geopy
+```
+
+---
+
+## Program Flow
+
+```text
+                LOCAL DATA
+                    |
           +---------+---------+
-                    |
-                    v
-          +-------------------+
-          |     API Layer     |
-          +---------+---------+
-                    |
-        +-----------+-----------+
-        |           |           |
-        v           v           v
-     Journey      Risk       Booking
-     Planner      Engine      Service
-        |           |           |
-        +-----------+-----------+
-                    |
-                    v
-          +-------------------+
-          |   Mobility Data   |
-          +---------+---------+
-                    |
-        +-----------+-----------+
-        |           |           |
-        v           v           v
-      Bus         Metro        Cab
+          |                   |
+          v                   v
+    bus_stops.csv        scooters.json
+          |
+          v
+   Mobility Coordinates
+          |
+          v
+   Routing / Calculation
+          |
+      +---+---+
+      |       |
+      v       v
+   Time     Cost
+      |       |
+      +---+---+
+          |
+          v
+      Trip Result
 ```
 
 ---
 
-## Planned Modules
+## Running the Prototype
 
-### 1. Mobility Data Management
+Install the required libraries:
 
-Management and normalization of transportation routes, stops, schedules, fares, and availability.
+```bash
+pip install pandas networkx geopy
+```
 
-### 2. Multi-Modal Journey Planner
+Run the graph router:
 
-Generates possible journeys using multiple transportation modes.
+```bash
+python3 ad_router.py
+```
 
-### 3. Route Optimization Engine
+Run the geospatial routing demo:
 
-Evaluates routes based on travel time, cost, transfers, and other constraints.
-
-### 4. Journey Risk Engine
-
-Estimates the probability of delays, missed transfers, and arrival-time uncertainty.
-
-### 5. Recommendation Engine
-
-Ranks available journeys according to user preferences and reliability.
-
-### 6. Dynamic Re-Routing
-
-Generates alternative routes when disruptions or unexpected delays occur.
-
-### 7. Booking and Unified Payment
-
-Provides a single journey booking and payment experience across supported transport modes.
-
-### 8. Evaluation Module
-
-Measures route accuracy, reliability, response time, cost-effectiveness, and scalability.
+```bash
+python3 router.py
+```
 
 ---
 
-## Technology Stack
+## Current Engineering Scope
 
-### Frontend
-
-* React
-* Tailwind CSS
-
-### Backend
-
-* Node.js
-* Express.js
-
-### Data and Database
-
-* PostgreSQL
-* Python
-* Pandas
-
-### Algorithms
-
-* Dijkstra / A*
-* Multi-Criteria Route Optimization
-* Travel-Time Prediction
-* Risk Estimation
-
-### APIs and Data Sources
-
-* GTFS / public transportation datasets
-* Maps and geolocation APIs
-* Weather data
-* Simulated real-time transportation data
-
-### Development
-
-* Git
-* GitHub
-* REST APIs
-* Docker
-
----
-
-## Data Model
-
-The initial mobility dataset will contain information such as:
+Implemented:
 
 ```text
-Transport Mode
-     |
-     +-- Stops
-     +-- Routes
-     +-- Schedules
-     +-- Fares
-     +-- Travel Times
-     +-- Delay Information
+✓ Directed mobility graph
+✓ Shortest-path routing
+✓ Time-based optimization
+✓ Cost-based optimization
+✓ CSV transit data
+✓ Geographic distance calculation
+✓ Multi-leg journey calculation
+✓ Fare calculation
+✓ CO₂ estimation
+✓ Scooter data storage
 ```
 
-The data will be normalized into a common representation so that different transportation modes can be processed by the same journey-planning engine.
-
----
-
-## Research and Innovation
-
-The project is being developed with a focus on identifying a **research gap in existing MaaS and multi-modal transportation systems**.
-
-The investigation will study:
-
-* Existing MaaS platforms
-* Multi-modal route optimization
-* Travel-time prediction
-* Transportation uncertainty
-* Transfer-risk modelling
-* Arrival-deadline planning
-* Dynamic re-routing
-* Existing patents and prior art
-
-The final technical contribution will be refined based on findings from the literature and prior-art study.
-
-> The project does not claim patent novelty until a formal prior-art and patentability analysis has been completed.
-
----
-
-## Current Progress
-
-### Phase 1 — Research and Problem Definition
-
-* [x] Define MaaS problem
-* [x] Identify project scope
-* [x] Define initial research direction
-* [ ] Literature survey
-* [ ] Existing-system comparison
-* [ ] Patent/prior-art investigation
-* [ ] Finalize research gap
-
-### Phase 2 — 30% Prototype
-
-* [ ] Mobility dataset
-* [ ] PostgreSQL database
-* [ ] Backend APIs
-* [ ] Mobility graph
-* [ ] Basic route engine
-* [ ] Initial MaaS interface
-* [ ] Route comparison
-
-### Phase 3 — Intelligent MaaS
-
-* [ ] Travel-time prediction
-* [ ] Journey-risk estimation
-* [ ] Multi-criteria optimization
-* [ ] Dynamic re-routing
-
-### Phase 4 — MaaS Services
-
-* [ ] Journey booking
-* [ ] Unified payment
-* [ ] Digital journey pass
-* [ ] Real-time notifications
-
-### Phase 5 — Evaluation
-
-* [ ] Accuracy testing
-* [ ] Reliability testing
-* [ ] Cost-effectiveness analysis
-* [ ] Scalability testing
-* [ ] Environmental impact analysis
-* [ ] Social and industrial impact analysis
-
----
-
-## Evaluation Metrics
-
-| Metric                   | Purpose                                          |
-| ------------------------ | ------------------------------------------------ |
-| Route Accuracy           | Correctness of recommended routes                |
-| Arrival Prediction Error | Difference between predicted and actual arrival  |
-| Deadline Success Rate    | Probability of reaching before the required time |
-| Transfer Failure Rate    | Frequency of missed transfers                    |
-| Response Time            | System performance                               |
-| Cost                     | Economic efficiency                              |
-| CO₂ Impact               | Environmental efficiency                         |
-| Scalability              | Performance under increasing users and data      |
-
----
-
-## Sustainable Development Goals
-
-### SDG 9 — Industry, Innovation and Infrastructure
-
-Promotes digital infrastructure and intelligent transportation systems.
-
-### SDG 11 — Sustainable Cities and Communities
-
-Supports efficient, connected, and accessible urban mobility.
-
-### SDG 13 — Climate Action
-
-Encourages efficient use of public and shared transportation and enables comparison of environmental impact.
-
----
-
-## Project Roadmap
+Not implemented in the current repository:
 
 ```text
-Problem Definition
-       |
-       v
-Literature Survey
-       |
-       v
-Existing System Analysis
-       |
-       v
-Patent / Prior-Art Study
-       |
-       v
-Research Gap
-       |
-       v
-Technical Design
-       |
-       v
-Mobility Dataset
-       |
-       v
-Route Engine
-       |
-       v
-MaaS Interface
-       |
-       v
-Risk and Prediction Engine
-       |
-       v
-Dynamic Re-Routing
-       |
-       v
-Booking and Payment
-       |
-       v
-Testing and Evaluation
-       |
-       v
-Deployment
+✗ Live transit APIs
+✗ Real-time vehicle tracking
+✗ Traffic integration
+✗ Dynamic re-routing
+✗ Database backend
+✗ Booking
+✗ Payment
+✗ Authentication
+✗ Machine-learning prediction
+✗ Web/mobile interface
 ```
 
 ---
 
-## Project Team
+## Prototype Extension
 
-**Multidisciplinary Project — III Year, V Semester**
+The existing routing layer can later be extended with additional mobility data and dynamic transport information.
 
-**Department of Computer Science and Engineering**
-**Kongu Engineering College**
-
-### Team Members
-
-* Rakhul M
-* Kaviamudhan K S
-
-### Supervisor
-
-Ms. Geetha M
+```text
+Static Mobility Data
+        ↓
+Routing Graph
+        ↓
+Route Optimization
+        ↓
+Real-Time Mobility Data
+        ↓
+Dynamic Routing
+        ↓
+MaaS Application
+```
 
 ---
 
 ## Project Status
 
-**Currently under development**
+**Engineering Prototype — In Development**
 
-This repository will be progressively updated as the research, architecture, implementation, testing, and evaluation phases are completed.
-
----
-
-## License
-
-To be decided based on the project's research and intellectual-property requirements.
+The current repository is focused on the **mobility-data and routing layer** of the MaaS concept.
