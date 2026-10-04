@@ -3,9 +3,9 @@ import MainLayout from '../layouts/MainLayout.astro';
 import '../styles/global.css';
 ---
 
-<MainLayout title="CampusMaaS · Dashboard">
-  <main class="shell">
-    <header class="topbar">
+<MainLayout title="CampusMaaS · Map">
+  <main class="map-screen">
+    <header class="floating-header">
       <a class="brand" href="/" aria-label="CampusMaaS home">
         <span class="brand-mark">M</span>
         <strong>CampusMaaS</strong>
@@ -17,74 +17,12 @@ import '../styles/global.css';
       </div>
     </header>
 
-    <section class="workspace">
-      <div class="map-card">
-        <div class="card-head">
-          <div>
-            <p class="section-kicker">CAMPUS</p>
-            <h1>Map</h1>
-          </div>
-          <div class="map-controls" aria-label="Map controls">
-            <button type="button" data-map-action="zoom-in" aria-label="Zoom in">+</button>
-            <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
-          </div>
-        </div>
+    <div id="map" class="map" aria-label="Interactive campus map"></div>
 
-        <div id="map" class="map" aria-label="Interactive campus map"></div>
-      </div>
-
-      <aside class="journey-card">
-        <div class="card-head">
-          <div>
-            <p class="section-kicker">NEXT</p>
-            <h2>Hostel → Class</h2>
-          </div>
-          <span class="status-pill">On time</span>
-        </div>
-
-        <div class="journey-summary">
-          <strong>Leave 8:15 AM</strong>
-          <span>Arrive 8:42 AM</span>
-        </div>
-
-        <div class="timeline">
-          <div class="timeline-item">
-            <span class="timeline-time">8:15</span>
-            <span class="timeline-line"></span>
-            <div>
-              <strong>Hostel</strong>
-              <small>Walk</small>
-            </div>
-          </div>
-          <div class="timeline-item">
-            <span class="timeline-time">8:20</span>
-            <span class="timeline-line"></span>
-            <div>
-              <strong>Print Center</strong>
-              <small>Pickup · 5 min</small>
-            </div>
-          </div>
-          <div class="timeline-item">
-            <span class="timeline-time">8:28</span>
-            <span class="timeline-line"></span>
-            <div>
-              <strong>Canteen</strong>
-              <small>Food pickup · 5 min</small>
-            </div>
-          </div>
-          <div class="timeline-item">
-            <span class="timeline-time">8:42</span>
-            <span class="timeline-line last"></span>
-            <div>
-              <strong>Academic Block A</strong>
-              <small>B203</small>
-            </div>
-          </div>
-        </div>
-
-        <button class="primary-btn" type="button" id="startTrip">Start journey</button>
-      </aside>
-    </section>
+    <div class="map-controls" aria-label="Map controls">
+      <button type="button" data-map-action="zoom-in" aria-label="Zoom in">+</button>
+      <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
+    </div>
   </main>
 
   <script>
@@ -147,17 +85,9 @@ import '../styles/global.css';
         if (!navigator.geolocation) return;
 
         navigator.geolocation.getCurrentPosition(
-          ({ coords }) => {
-            map.setView([coords.latitude, coords.longitude], 18);
-          },
+          ({ coords }) => map.setView([coords.latitude, coords.longitude], 18),
           () => alert('Location permission was not granted.')
         );
-      });
-
-      document.getElementById('startTrip')?.addEventListener('click', (event) => {
-        const button = event.currentTarget;
-        button.textContent = 'Journey active';
-        button.disabled = true;
       });
     });
   </script>
