@@ -1,0 +1,8 @@
+{
+  "type": "FeatureCollection",
+  "properties": {
+    "format": "campusmaas-pedestrian-path-edits",
+    "version": 1
+  },
+  "features": []
+}
