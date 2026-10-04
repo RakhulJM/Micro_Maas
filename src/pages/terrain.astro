@@ -41,7 +41,7 @@ import 'leaflet/dist/leaflet.css';
       try {
         const [perimeterResponse, terrainResponse] = await Promise.all([
           fetch('/maps/perimeter.geojson'),
-          fetch('/maps/terrain/output_hh.tif')
+          fetch('/maps/terrain/KEC_GLO30_DEM.tif')
         ]);
 
         if (!perimeterResponse.ok) {
