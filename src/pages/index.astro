@@ -97,9 +97,10 @@ import 'leaflet/dist/leaflet.css';
         <button type="button" class="route-card-close" id="editCancel" aria-label="Cancel path">×</button>
       </div>
       <div class="edit-actions">
-        <button type="button" class="edit-action" id="editUndo">Undo</button>
-        <button type="button" class="edit-action edit-action-primary" id="editFinish">Finish</button>
-        <button type="button" class="edit-action edit-action-primary edit-save-action" id="editSave" hidden>Save changes</button>
+        <button type="button" class="edit-action edit-action-primary" id="editNewPath">New path</button>
+        <button type="button" class="edit-action edit-action-primary" id="editFinish" hidden>Finish</button>
+        <button type="button" class="edit-action" id="editUndo" hidden>Undo</button>
+        <button type="button" class="edit-action edit-delete-action" id="editDeletePoint" hidden>Delete point</button>
         <button type="button" class="edit-action edit-delete-action" id="editDelete" hidden>Delete custom</button>
       </div>
     </section>
@@ -601,16 +602,226 @@ import 'leaflet/dist/leaflet.css';
         }
       };
 
+      const toRoutingXY = (coordinate) => {
+        const scaleX = 111320 * Math.cos(center.lat * Math.PI / 180);
+        const scaleY = 111320;
+
+        return {
+          x: Number(coordinate[0]) * scaleX,
+          y: Number(coordinate[1]) * scaleY
+        };
+      };
+
+      const interpolateCoordinate = (a, b, fraction) => [
+        Number(a[0]) + (Number(b[0]) - Number(a[0])) * fraction,
+        Number(a[1]) + (Number(b[1]) - Number(a[1])) * fraction
+      ];
+
+      const cross2D = (a, b) => a.x * b.y - a.y * b.x;
+
+      const pointOnSegmentFraction = (point, a, b, toleranceMeters = 0.05) => {
+        const p = toRoutingXY(point);
+        const ax = toRoutingXY(a);
+        const bx = toRoutingXY(b);
+
+        const dx = bx.x - ax.x;
+        const dy = bx.y - ax.y;
+        const lengthSquared = dx * dx + dy * dy;
+
+        if (lengthSquared === 0) return null;
+
+        const fraction = Math.max(
+          0,
+          Math.min(
+            1,
+            ((p.x - ax.x) * dx + (p.y - ax.y) * dy) / lengthSquared
+          )
+        );
+
+        const nearest = {
+          x: ax.x + dx * fraction,
+          y: ax.y + dy * fraction
+        };
+
+        if (Math.hypot(p.x - nearest.x, p.y - nearest.y) > toleranceMeters) {
+          return null;
+        }
+
+        return fraction;
+      };
+
+      const segmentIntersectionFractions = (first, second) => {
+        const p = toRoutingXY(first.a);
+        const p2 = toRoutingXY(first.b);
+        const q = toRoutingXY(second.a);
+        const q2 = toRoutingXY(second.b);
+
+        const r = {
+          x: p2.x - p.x,
+          y: p2.y - p.y
+        };
+        const qMinusP = {
+          x: q.x - p.x,
+          y: q.y - p.y
+        };
+        const ss = {
+          x: q2.x - q.x,
+          y: q2.y - q.y
+        };
+
+        const denominator = cross2D(r, ss);
+        const fractions = [];
+
+        if (Math.abs(denominator) > 1e-9) {
+          const t = cross2D(qMinusP, ss) / denominator;
+          const u = cross2D(qMinusP, r) / denominator;
+
+          if (t >= -1e-9 && t <= 1 + 1e-9 && u >= -1e-9 && u <= 1 + 1e-9) {
+            fractions.push({
+              first: Math.max(0, Math.min(1, t)),
+              second: Math.max(0, Math.min(1, u))
+            });
+          }
+
+          return fractions;
+        }
+
+        /*
+         * Parallel/collinear case: connect only exact endpoints that lie on
+         * the other segment. This avoids creating connections between merely
+         * nearby parallel paths.
+         */
+        const firstStartOnSecond = pointOnSegmentFraction(first.a, second.a, second.b);
+        if (firstStartOnSecond !== null) {
+          fractions.push({ first: 0, second: firstStartOnSecond });
+        }
+
+        const firstEndOnSecond = pointOnSegmentFraction(first.b, second.a, second.b);
+        if (firstEndOnSecond !== null) {
+          fractions.push({ first: 1, second: firstEndOnSecond });
+        }
+
+        const secondStartOnFirst = pointOnSegmentFraction(second.a, first.a, first.b);
+        if (secondStartOnFirst !== null) {
+          fractions.push({ first: secondStartOnFirst, second: 0 });
+        }
+
+        const secondEndOnFirst = pointOnSegmentFraction(second.b, first.a, first.b);
+        if (secondEndOnFirst !== null) {
+          fractions.push({ first: secondEndOnFirst, second: 1 });
+        }
+
+        return fractions;
+      };
+
       const rebuildPedestrianRouting = () => {
         pedestrianSegments = [];
         pedestrianGraph = new Map();
         coordinateByKey = new Map();
 
+        const rawSegments = [];
+
         for (const feature of pedestrianPathData.features || []) {
-          addPedestrianFeatureToGraph(feature);
+          const geometry = feature?.geometry;
+          if (!geometry) continue;
+
+          const lines = geometry.type === 'LineString'
+            ? [geometry.coordinates]
+            : geometry.type === 'MultiLineString'
+              ? geometry.coordinates
+              : [];
+
+          for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+            const line = lines[lineIndex];
+            if (!Array.isArray(line) || line.length < 2) continue;
+
+            for (let index = 0; index < line.length - 1; index += 1) {
+              const a = line[index];
+              const b = line[index + 1];
+              const distance = distanceBetween(a, b);
+
+              if (distance <= 0) continue;
+
+              rawSegments.push({
+                featureId: String(feature.id ?? ''),
+                lineIndex,
+                segmentIndex: index,
+                a,
+                b,
+                distance
+              });
+            }
+          }
+        }
+
+        const splitFractions = rawSegments.map(() => [0, 1]);
+
+        for (let firstIndex = 0; firstIndex < rawSegments.length; firstIndex += 1) {
+          for (let secondIndex = firstIndex + 1; secondIndex < rawSegments.length; secondIndex += 1) {
+            const first = rawSegments[firstIndex];
+            const second = rawSegments[secondIndex];
+
+            /*
+             * Adjacent segments from the same line already share an explicit
+             * coordinate node, so they do not need another topology split.
+             */
+            if (
+              first.featureId === second.featureId &&
+              first.lineIndex === second.lineIndex &&
+              Math.abs(first.segmentIndex - second.segmentIndex) <= 1
+            ) {
+              continue;
+            }
+
+            const intersections = segmentIntersectionFractions(first, second);
+
+            for (const intersection of intersections) {
+              splitFractions[firstIndex].push(intersection.first);
+              splitFractions[secondIndex].push(intersection.second);
+            }
+          }
+        }
+
+        for (let segmentIndex = 0; segmentIndex < rawSegments.length; segmentIndex += 1) {
+          const segment = rawSegments[segmentIndex];
+          const fractions = Array.from(
+            new Set(
+              splitFractions[segmentIndex]
+                .map((value) => Number(Math.max(0, Math.min(1, value)).toFixed(10)))
+            )
+          ).sort((a, b) => a - b);
+
+          const splitCoordinates = fractions.map((fraction) =>
+            interpolateCoordinate(segment.a, segment.b, fraction)
+          );
+
+          for (let i = 0; i < splitCoordinates.length - 1; i += 1) {
+            const a = splitCoordinates[i];
+            const b = splitCoordinates[i + 1];
+            const distance = distanceBetween(a, b);
+
+            if (distance <= 0) continue;
+
+            const aKey = graphKey(a);
+            const bKey = graphKey(b);
+
+            addGraphEdge(aKey, bKey, distance);
+            coordinateByKey.set(aKey, a);
+            coordinateByKey.set(bKey, b);
+          }
+
+          pedestrianSegments.push({
+            a: segment.a,
+            b: segment.b,
+            aKey: graphKey(segment.a),
+            bKey: graphKey(segment.b),
+            distance: segment.distance,
+            featureId: segment.featureId,
+            lineIndex: segment.lineIndex,
+            segmentIndex: segment.segmentIndex
+          });
         }
       };
-
       rebuildPedestrianRouting();
 
       const projectToSegment = (point, a, b) => {
@@ -1364,21 +1575,25 @@ import 'leaflet/dist/leaflet.css';
       const editToggle = document.getElementById('editToggle');
       const editCard = document.getElementById('editCard');
       const editStatus = document.getElementById('editStatus');
+      const editNewPath = document.getElementById('editNewPath');
       const editUndo = document.getElementById('editUndo');
       const editFinish = document.getElementById('editFinish');
-      const editSave = document.getElementById('editSave');
+      const editDeletePoint = document.getElementById('editDeletePoint');
       const editDelete = document.getElementById('editDelete');
       const editCancel = document.getElementById('editCancel');
       const exportPathEdits = document.getElementById('exportPathEdits');
 
       let editModeEnabled = false;
+      let pointEditorActive = false;
       let drawingModeActive = false;
       let drawingPoints = [];
       let drawingMarkers = [];
       let drawingLine = null;
+
+      let editableVertexMarkers = [];
+      let editablePathLines = new Map();
+      let selectedPoint = null;
       let selectedPath = null;
-      let selectedPathVertices = [];
-      let selectedPathLine = null;
 
       const showEditIcon = (visible) => {
         editToggle?.classList.toggle('is-visible', visible);
@@ -1391,14 +1606,17 @@ import 'leaflet/dist/leaflet.css';
       };
 
       const setEditActionVisibility = ({
+        pointEditor = false,
         drawing = false,
-        editing = false,
-        deletable = false
+        pointSelected = false,
+        pathEditing = false,
+        pathDeletable = false
       } = {}) => {
+        if (editNewPath) editNewPath.hidden = !pointEditor || drawing;
         if (editUndo) editUndo.hidden = !drawing;
         if (editFinish) editFinish.hidden = !drawing;
-        if (editSave) editSave.hidden = !editing;
-        if (editDelete) editDelete.hidden = !(editing && deletable);
+        if (editDeletePoint) editDeletePoint.hidden = !pointSelected;
+        if (editDelete) editDelete.hidden = !(pathEditing && pathDeletable);
       };
 
       const clearDrawing = () => {
@@ -1409,17 +1627,27 @@ import 'leaflet/dist/leaflet.css';
         drawingLine = null;
       };
 
+      const clearEditableVertices = () => {
+        editableVertexMarkers.forEach((marker) => map.removeLayer(marker));
+        editableVertexMarkers = [];
+
+        for (const line of editablePathLines.values()) {
+          map.removeLayer(line);
+        }
+
+        editablePathLines.clear();
+        selectedPoint = null;
+      };
+
       const clearSelectedPath = () => {
-        selectedPathVertices.forEach((marker) => map.removeLayer(marker));
-        if (selectedPathLine) map.removeLayer(selectedPathLine);
-        selectedPathVertices = [];
-        selectedPathLine = null;
         selectedPath = null;
       };
 
       const closeEditTools = () => {
         clearDrawing();
+        clearEditableVertices();
         clearSelectedPath();
+        pointEditorActive = false;
         drawingModeActive = false;
         editToggle?.classList.remove('is-active');
         editToggle?.setAttribute('aria-pressed', 'false');
@@ -1486,6 +1714,273 @@ import 'leaflet/dist/leaflet.css';
         persistPathEdits();
       };
 
+      const findEffectiveFeature = (featureId) =>
+        (pedestrianPathData.features || []).find(
+          (feature) => String(feature?.id) === String(featureId)
+        ) || null;
+
+      const featureGeometryForEdit = (feature) => {
+        if (!feature?.geometry || feature.geometry.type !== 'LineString') {
+          return null;
+        }
+
+        return feature.geometry.coordinates.map(([lng, lat]) =>
+          L.latLng(Number(lat), Number(lng))
+        );
+      };
+
+      const saveEditedFeatureGeometry = (featureId, coordinates) => {
+        const feature = findEffectiveFeature(featureId);
+        if (!feature || coordinates.length < 2) return false;
+
+        const geometry = {
+          type: 'LineString',
+          coordinates: coordinates.map((point) => [
+            Number(point.lng.toFixed(7)),
+            Number(point.lat.toFixed(7))
+          ])
+        };
+
+        const isCustom = feature.properties?.source === 'custom';
+
+        replaceEditOperation(featureId, {
+          type: 'Feature',
+          id: 'edit-' + Date.now(),
+          properties: isCustom
+            ? {
+                operation: 'add',
+                targetId: featureId,
+                highway: 'custom',
+                name: feature.properties?.name || 'Custom pedestrian path',
+                source: 'custom'
+              }
+            : {
+                operation: 'update',
+                targetId: featureId
+              },
+          geometry
+        });
+
+        return true;
+      };
+
+      const nearestEditableSnap = (featureId, vertexIndex, latlng) => {
+        let best = null;
+
+        const consider = (candidate) => {
+          if (!best || candidate.distance < best.distance) {
+            best = candidate;
+          }
+        };
+
+        for (const feature of pedestrianPathData.features || []) {
+          const coordinates = feature?.geometry?.type === 'LineString'
+            ? feature.geometry.coordinates
+            : [];
+
+          const currentId = String(feature?.id);
+          if (!coordinates.length) continue;
+
+          for (let index = 0; index < coordinates.length; index += 1) {
+            if (
+              currentId === String(featureId) &&
+              index === vertexIndex
+            ) {
+              continue;
+            }
+
+            const candidateLatLng = L.latLng(
+              Number(coordinates[index][1]),
+              Number(coordinates[index][0])
+            );
+
+            consider({
+              type: 'point',
+              distance: latlng.distanceTo(candidateLatLng),
+              latlng: candidateLatLng
+            });
+          }
+
+          for (let index = 0; index < coordinates.length - 1; index += 1) {
+            if (
+              currentId === String(featureId) &&
+              (index === vertexIndex || index + 1 === vertexIndex)
+            ) {
+              continue;
+            }
+
+            const a = coordinates[index];
+            const b = coordinates[index + 1];
+            const projection = projectToSegment(latlng, a, b);
+
+            consider({
+              type: 'line',
+              distance: projection.distance,
+              latlng: projection.latlng,
+              featureId: currentId,
+              segmentIndex: index
+            });
+          }
+        }
+
+        if (!best || best.distance > snapToleranceMeters) {
+          return null;
+        }
+
+        return best;
+      };
+
+      const updateEditablePathLine = (featureId, coordinates) => {
+        const line = editablePathLines.get(String(featureId));
+        if (line) line.setLatLngs(coordinates);
+      };
+
+      const createEditableVertexIcon = (selected = false) =>
+        L.divIcon({
+          className: 'edit-vertex-marker' + (selected ? ' is-selected' : ''),
+          html: '<span></span>',
+          iconSize: [14, 14],
+          iconAnchor: [7, 7]
+        });
+
+      const refreshEditableVertexSelection = () => {
+        for (const item of editableVertexMarkers) {
+          const isSelected =
+            selectedPoint &&
+            String(item.featureId) === String(selectedPoint.featureId) &&
+            item.vertexIndex === selectedPoint.vertexIndex;
+
+          item.marker.setIcon(createEditableVertexIcon(isSelected));
+        }
+      };
+
+      const selectEditablePoint = (featureId, vertexIndex) => {
+        selectedPoint = {
+          featureId: String(featureId),
+          vertexIndex
+        };
+
+        const feature = findEffectiveFeature(featureId);
+        const name = feature?.properties?.name || 'Pedestrian path';
+
+        editStatus.textContent =
+          'Point ' + (vertexIndex + 1) + ' selected · drag or Delete';
+        showEditCard(true);
+        setEditActionVisibility({
+          pointEditor: true,
+          pointSelected: true,
+          pathEditing: Boolean(selectedPath),
+          pathDeletable: Boolean(selectedPath?.isCustom)
+        });
+
+        refreshEditableVertexSelection();
+
+        void name;
+      };
+
+      const handleEditablePointDrop = (featureId, vertexIndex, marker) => {
+        const feature = findEffectiveFeature(featureId);
+        const coordinates = featureGeometryForEdit(feature);
+
+        if (!feature || !coordinates || !coordinates[vertexIndex]) return;
+
+        const drop = marker.getLatLng();
+        const snap = nearestEditableSnap(featureId, vertexIndex, drop);
+        const finalPoint = snap?.latlng || drop;
+
+        marker.setLatLng(finalPoint);
+        coordinates[vertexIndex] = finalPoint;
+        updateEditablePathLine(featureId, coordinates);
+
+        const saved = saveEditedFeatureGeometry(featureId, coordinates);
+        if (!saved) return;
+
+        selectedPoint = {
+          featureId: String(featureId),
+          vertexIndex
+        };
+
+        editStatus.textContent = snap
+          ? snap.type === 'point'
+            ? 'Point connected to existing point'
+            : 'Point connected to pedestrian line'
+          : 'Point moved';
+
+        refreshAfterPathChange();
+      };
+
+      const buildEditableVertexEditor = () => {
+        const previousSelection = selectedPoint
+          ? { ...selectedPoint }
+          : null;
+
+        clearEditableVertices();
+
+        if (!pointEditorActive) return;
+
+        for (const feature of pedestrianPathData.features || []) {
+          if (feature?.geometry?.type !== 'LineString') continue;
+
+          const featureId = String(feature.id);
+          const coordinates = feature.geometry.coordinates.map(([lng, lat]) =>
+            L.latLng(Number(lat), Number(lng))
+          );
+
+          const previewLine = L.polyline(coordinates, {
+            color: '#0f4fd8',
+            weight: 3,
+            opacity: 0.72,
+            dashArray: '3 5',
+            lineCap: 'round',
+            lineJoin: 'round',
+            interactive: false
+          }).addTo(map);
+
+          editablePathLines.set(featureId, previewLine);
+
+          coordinates.forEach((latlng, vertexIndex) => {
+            const marker = L.marker(latlng, {
+              draggable: true,
+              zIndexOffset: 1200,
+              icon: createEditableVertexIcon(
+                previousSelection &&
+                String(previousSelection.featureId) === featureId &&
+                previousSelection.vertexIndex === vertexIndex
+              )
+            }).addTo(map);
+
+            marker.on('click', (event) => {
+              event.originalEvent?.stopPropagation();
+              selectEditablePoint(featureId, vertexIndex);
+            });
+
+            marker.on('drag', () => {
+              const line = editablePathLines.get(featureId);
+              if (!line) return;
+
+              const liveCoordinates = line.getLatLngs();
+              liveCoordinates[vertexIndex] = marker.getLatLng();
+              line.setLatLngs(liveCoordinates);
+            });
+
+            marker.on('dragend', () => {
+              handleEditablePointDrop(featureId, vertexIndex, marker);
+            });
+
+            editableVertexMarkers.push({
+              featureId,
+              vertexIndex,
+              marker
+            });
+          });
+        }
+
+        if (previousSelection) {
+          selectedPoint = previousSelection;
+          refreshEditableVertexSelection();
+        }
+      };
+
       const refreshAfterPathChange = () => {
         pedestrianPathData.features = applyPathEdits();
         rebuildPedestrianRouting();
@@ -1493,56 +1988,50 @@ import 'leaflet/dist/leaflet.css';
 
         if (editModeEnabled) {
           buildEditableHitLayer();
+
+          if (pointEditorActive) {
+            buildEditableVertexEditor();
+          }
         }
       };
 
-      const renderSelectedPath = () => {
-        if (!selectedPath) return;
+      const startPointEditorMode = () => {
+        if (!editModeEnabled) return;
 
-        if (selectedPathLine) map.removeLayer(selectedPathLine);
+        if (routeModeActive) {
+          clearRouteTest(false);
+        }
 
-        selectedPathLine = L.polyline(selectedPath.coordinates, {
-          color: '#0f4fd8',
-          weight: 4,
-          opacity: 1,
-          dashArray: '7 5',
-          lineCap: 'round',
-          lineJoin: 'round',
-          interactive: false
-        }).addTo(map);
+        clearDrawing();
+        clearSelectedPath();
+        pointEditorActive = true;
+        drawingModeActive = false;
 
-        selectedPathVertices.forEach((marker) => map.removeLayer(marker));
+        pedestrianPathsActive = true;
+        pedestrianPathCasing?.addTo(map);
+        pedestrianPaths?.addTo(map);
 
-        selectedPathVertices = selectedPath.coordinates.map((latlng, index) => {
-          const marker = L.marker(latlng, {
-            draggable: true,
-            icon: L.divIcon({
-              className: 'edit-vertex-marker',
-              html: '<span>' + (index + 1) + '</span>',
-              iconSize: [18, 18],
-              iconAnchor: [9, 9]
-            })
-          }).addTo(map);
+        editToggle?.classList.add('is-active');
+        editToggle?.setAttribute('aria-pressed', 'true');
+        editStatus.textContent = 'All points active · drag a point or select one';
+        showEditCard(true);
 
-          marker.on('drag', () => {
-            selectedPath.coordinates[index] = marker.getLatLng();
+        buildEditableHitLayer();
+        buildEditableVertexEditor();
 
-            if (selectedPathLine) {
-              selectedPathLine.setLatLngs(selectedPath.coordinates);
-            }
-          });
-
-          return marker;
+        setEditActionVisibility({
+          pointEditor: true
         });
       };
 
       const startDrawingMode = () => {
         if (!editModeEnabled) return;
 
-        if (routeModeActive) clearRouteTest(false);
-
+        clearEditableVertices();
         clearSelectedPath();
         clearDrawing();
+
+        pointEditorActive = false;
         drawingModeActive = true;
 
         pedestrianPathsActive = true;
@@ -1551,12 +2040,12 @@ import 'leaflet/dist/leaflet.css';
 
         editToggle?.classList.add('is-active');
         editToggle?.setAttribute('aria-pressed', 'true');
-        editStatus.textContent = 'Click to draw · path ends snap to nearby network';
+        editStatus.textContent = 'Click to draw · points snap to nearby network';
         showEditCard(true);
         setEditActionVisibility({ drawing: true });
       };
 
-      const snapDrawingEndpoint = (point) => {
+      const snapDrawingPoint = (point) => {
         const snapped = snapToPedestrianPath(point);
 
         if (!snapped || snapped.distance > snapToleranceMeters) {
@@ -1572,15 +2061,8 @@ import 'leaflet/dist/leaflet.css';
           return;
         }
 
+        const effectiveDrawingPoints = drawingPoints.map((point) => snapDrawingPoint(point));
         const customId = 'custom-' + Date.now();
-
-        const effectiveDrawingPoints = drawingPoints.map((point, index) => {
-          if (index === 0 || index === drawingPoints.length - 1) {
-            return snapDrawingEndpoint(point);
-          }
-
-          return point;
-        });
 
         const geometry = {
           type: 'LineString',
@@ -1603,81 +2085,66 @@ import 'leaflet/dist/leaflet.css';
           geometry
         });
 
+        pedestrianPathData.features = applyPathEdits();
+        rebuildPedestrianRouting();
+        refreshPedestrianLayers();
+
+        drawingModeActive = false;
+        startPointEditorMode();
+        editStatus.textContent = 'Custom path saved · all points active';
+      };
+
+      const deleteSelectedPoint = () => {
+        if (!selectedPoint) return;
+
+        const feature = findEffectiveFeature(selectedPoint.featureId);
+        const coordinates = featureGeometryForEdit(feature);
+
+        if (!feature || !coordinates || !coordinates[selectedPoint.vertexIndex]) return;
+
+        if (coordinates.length <= 2) {
+          recordDeleteOperation(feature.id);
+          refreshAfterPathChange();
+          selectedPoint = null;
+          editStatus.textContent = 'Path deleted';
+          return;
+        }
+
+        coordinates.splice(selectedPoint.vertexIndex, 1);
+        saveEditedFeatureGeometry(feature.id, coordinates);
+
+        selectedPoint = null;
+        editStatus.textContent = 'Point deleted';
         refreshAfterPathChange();
-        closeEditTools();
-        editStatus.textContent = 'Custom path saved';
-        showEditCard(true);
-        setTimeout(() => showEditCard(false), 900);
       };
 
       const selectPathForEdit = (feature) => {
         if (!editModeEnabled || !feature?.geometry) return;
 
         if (feature.geometry.type !== 'LineString') {
-          editStatus.textContent = 'Only line paths can be edited';
+          editStatus.textContent = 'Only line paths can be selected';
           showEditCard(true);
           return;
         }
 
-        clearDrawing();
-        clearSelectedPath();
-
         selectedPath = {
           id: feature.id,
           isCustom: feature.properties?.source === 'custom',
-          name: feature.properties?.name || 'Pedestrian path',
-          coordinates: feature.geometry.coordinates.map(([lng, lat]) =>
-            L.latLng(Number(lat), Number(lng))
-          )
+          name: feature.properties?.name || 'Pedestrian path'
         };
 
-        renderSelectedPath();
-        editToggle?.classList.add('is-active');
-        editToggle?.setAttribute('aria-pressed', 'true');
-        editStatus.textContent = selectedPath.isCustom
-          ? 'Editing custom path'
-          : 'Editing pedestrian path';
+        const suffix = selectedPath.isCustom
+          ? ' · Delete custom to remove'
+          : '';
 
+        editStatus.textContent = 'Path selected' + suffix;
         showEditCard(true);
         setEditActionVisibility({
-          editing: true,
-          deletable: selectedPath.isCustom
+          pointEditor: pointEditorActive,
+          pathEditing: true,
+          pathDeletable: selectedPath.isCustom,
+          pointSelected: Boolean(selectedPoint)
         });
-      };
-
-      const saveSelectedPath = () => {
-        if (!selectedPath) return;
-
-        const geometry = {
-          type: 'LineString',
-          coordinates: selectedPath.coordinates.map((point) => [
-            Number(point.lng.toFixed(7)),
-            Number(point.lat.toFixed(7))
-          ])
-        };
-
-        replaceEditOperation(selectedPath.id, {
-          type: 'Feature',
-          id: 'edit-' + Date.now(),
-          properties: {
-            operation: selectedPath.isCustom ? 'add' : 'update',
-            targetId: selectedPath.id,
-            ...(selectedPath.isCustom
-              ? {
-                  highway: 'custom',
-                  name: selectedPath.name,
-                  source: 'custom'
-                }
-              : {})
-          },
-          geometry
-        });
-
-        refreshAfterPathChange();
-        closeEditTools();
-        editStatus.textContent = 'Path changes saved';
-        showEditCard(true);
-        setTimeout(() => showEditCard(false), 900);
       };
 
       const deleteSelectedCustomPath = () => {
@@ -1685,10 +2152,9 @@ import 'leaflet/dist/leaflet.css';
 
         recordDeleteOperation(selectedPath.id);
         refreshAfterPathChange();
-        closeEditTools();
+        selectedPath = null;
+        selectedPoint = null;
         editStatus.textContent = 'Custom path deleted';
-        showEditCard(true);
-        setTimeout(() => showEditCard(false), 900);
       };
 
       const buildEditableHitLayer = () => {
@@ -1736,7 +2202,8 @@ import 'leaflet/dist/leaflet.css';
       };
 
       exportPathEdits?.addEventListener('click', exportCurrentPathEdits);
-      editSave?.addEventListener('click', saveSelectedPath);
+      editNewPath?.addEventListener('click', startDrawingMode);
+      editDeletePoint?.addEventListener('click', deleteSelectedPoint);
       editDelete?.addEventListener('click', deleteSelectedCustomPath);
 
       editModeToggle?.addEventListener('change', () => {
@@ -1757,12 +2224,12 @@ import 'leaflet/dist/leaflet.css';
       editToggle?.addEventListener('click', () => {
         if (!editModeEnabled) return;
 
-        if (drawingModeActive || selectedPath) {
+        if (pointEditorActive || drawingModeActive) {
           closeEditTools();
           return;
         }
 
-        startDrawingMode();
+        startPointEditorMode();
       });
 
       editUndo?.addEventListener('click', () => {
@@ -1780,7 +2247,14 @@ import 'leaflet/dist/leaflet.css';
       });
 
       editFinish?.addEventListener('click', finishCustomPath);
-      editCancel?.addEventListener('click', closeEditTools);
+      editCancel?.addEventListener('click', () => {
+        if (drawingModeActive) {
+          startPointEditorMode();
+          return;
+        }
+
+        closeEditTools();
+      });
 
       writeSavedPathEdits(pathEditState);
 
@@ -1791,7 +2265,8 @@ import 'leaflet/dist/leaflet.css';
       map.on('click', (event) => {
         if (!editModeEnabled || !drawingModeActive || routeModeActive) return;
 
-        const point = L.latLng(event.latlng.lat, event.latlng.lng);
+        const point = snapDrawingPoint(L.latLng(event.latlng.lat, event.latlng.lng));
+
         drawingPoints.push(point);
         drawingMarkers.push(createEditPointMarker(point, drawingPoints.length));
         renderDrawingLine();
@@ -1801,6 +2276,19 @@ import 'leaflet/dist/leaflet.css';
           ' · Finish when ready';
       });
 
+      window.addEventListener('keydown', (event) => {
+        if (
+          editModeEnabled &&
+          pointEditorActive &&
+          !drawingModeActive &&
+          selectedPoint &&
+          (event.key === 'Delete' || event.key === 'Backspace') &&
+          !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)
+        ) {
+          event.preventDefault();
+          deleteSelectedPoint();
+        }
+      });
       const devPanel = document.getElementById('devPanel');
 
       const closeDevPanel = () => {
