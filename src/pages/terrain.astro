@@ -15,7 +15,9 @@ import 'leaflet/dist/leaflet.css';
       <div class="top-actions">
         <a class="map-switch map-switch-terrain" href="/" aria-label="Switch to local map">
           <span class="map-switch-label">Map</span>
-          <span class="map-switch-track" aria-hidden="true"><span class="map-switch-thumb"></span></span>
+          <span class="map-switch-track" aria-hidden="true">
+            <span class="map-switch-thumb"></span>
+          </span>
           <span class="map-switch-label">Terrain</span>
         </a>
         <button class="profile" type="button" aria-label="Profile">AR</button>
@@ -29,381 +31,428 @@ import 'leaflet/dist/leaflet.css';
       <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
     </div>
 
-    <div class="map-note">Terrain · COP30 elevation map · 1 km boundary</div>
+    <div class="map-note" id="terrainNote">Terrain · COP30 GeoTIFF · 1 km boundary</div>
   </main>
 
   <script>
     import('leaflet').then(async ({ default: L }) => {
-      const perimeterResponse = await fetch('/maps/perimeter.geojson');
+      const note = document.getElementById('terrainNote');
 
-      if (!perimeterResponse.ok) {
-        throw new Error('Campus perimeter could not be loaded.');
-      }
+      try {
+        const perimeterResponse = await fetch('/maps/perimeter.geojson');
 
-      const perimeterData = await perimeterResponse.json();
-      const perimeterFeature = perimeterData.features?.[0];
-
-      if (!perimeterFeature) {
-        throw new Error('Campus perimeter is empty.');
-      }
-
-      const ring = perimeterFeature.geometry.coordinates[0];
-
-      const center = L.latLng(
-        Number(perimeterFeature.properties.center[1]),
-        Number(perimeterFeature.properties.center[0])
-      );
-
-      const radius = Number(perimeterFeature.properties.radius_m);
-      const perimeterZoom = 18;
-      const maxZoom = 23;
-
-      const latRadius = radius / 111320;
-      const lonRadius =
-        radius / (111320 * Math.cos(center.lat * Math.PI / 180));
-
-      const circleBounds = L.latLngBounds(
-        [center.lat - latRadius, center.lng - lonRadius],
-        [center.lat + latRadius, center.lng + lonRadius]
-      );
-
-      const map = L.map('terrainMap', {
-        zoomControl: false,
-        minZoom: 1,
-        maxZoom,
-        scrollWheelZoom: false,
-        maxBounds: circleBounds,
-        maxBoundsViscosity: 1,
-        preferCanvas: true
-      }).setView(center, perimeterZoom);
-
-      const terrainResponse = await fetch('/maps/terrain/terrain-data.json');
-
-      if (!terrainResponse.ok) {
-        throw new Error('Local terrain map data could not be loaded.');
-      }
-
-      const terrain = await terrainResponse.json();
-      const values = Uint16Array.from(
-        atob(terrain.values),
-        (char) => char.charCodeAt(0)
-      );
-
-      const elevation = new Uint16Array(values.buffer);
-
-      const sampleElevation = (x, y) => {
-        const clampedX = Math.max(0, Math.min(terrain.width - 1, x));
-        const clampedY = Math.max(0, Math.min(terrain.height - 1, y));
-        return elevation[clampedY * terrain.width + clampedX] * terrain.scale;
-      };
-
-      const colorForElevation = (value, shade) => {
-        const t = Math.max(
-          0,
-          Math.min(
-            1,
-            (value - terrain.min_m) /
-              Math.max(terrain.max_m - terrain.min_m, 1)
-          )
-        );
-
-        let r;
-        let g;
-        let b;
-
-        if (t < 0.25) {
-          const q = t / 0.25;
-          r = 223 - 28 * q;
-          g = 233 - 7 * q;
-          b = 211 - 22 * q;
-        } else if (t < 0.55) {
-          const q = (t - 0.25) / 0.3;
-          r = 195 + 15 * q;
-          g = 226 - 15 * q;
-          b = 188 - 25 * q;
-        } else if (t < 0.8) {
-          const q = (t - 0.55) / 0.25;
-          r = 210 + 18 * q;
-          g = 211 - 20 * q;
-          b = 163 - 18 * q;
-        } else {
-          const q = (t - 0.8) / 0.2;
-          r = 228 - 11 * q;
-          g = 191 - 15 * q;
-          b = 145 - 9 * q;
+        if (!perimeterResponse.ok) {
+          throw new Error('Campus perimeter could not be loaded.');
         }
 
-        const factor = Math.max(0.72, Math.min(1.16, shade));
+        const perimeterData = await perimeterResponse.json();
+        const perimeterFeature = perimeterData.features?.[0];
 
-        return `rgb(${Math.round(r * factor)}, ${Math.round(g * factor)}, ${Math.round(b * factor)})`;
-      };
-
-      const lonToTileX = (lon, zoom) =>
-        ((lon + 180) / 360) * (2 ** zoom);
-
-      const latToTileY = (lat, zoom) => {
-        const sin = Math.sin(lat * Math.PI / 180);
-        return (
-          (1 -
-            Math.log((1 + sin) / (1 - sin)) / (2 * Math.PI)) /
-          2
-        ) * (2 ** zoom);
-      };
-
-      const TerrainGridLayer = L.GridLayer.extend({
-        createTile(coords, done) {
-          const canvas = document.createElement('canvas');
-          canvas.width = 256;
-          canvas.height = 256;
-          canvas.className = 'terrain-map-tile';
-
-          const context = canvas.getContext('2d', {
-            alpha: false
-          });
-
-          if (!context) {
-            done(new Error('Terrain canvas could not be created.'), canvas);
-            return canvas;
-          }
-
-          const image = context.createImageData(256, 256);
-          const data = image.data;
-
-          const worldTiles = 2 ** coords.z;
-          const tileOriginX = coords.x * 256;
-          const tileOriginY = coords.y * 256;
-
-          const west =
-            (tileOriginX / (256 * worldTiles)) * 360 - 180;
-          const east =
-            ((tileOriginX + 256) / (256 * worldTiles)) * 360 - 180;
-
-          const north = (
-            180 / Math.PI *
-            Math.atan(
-              Math.sinh(
-                Math.PI *
-                (1 - (tileOriginY / (256 * worldTiles)) * 2)
-              )
-            )
-          );
-
-          const south = (
-            180 / Math.PI *
-            Math.atan(
-              Math.sinh(
-                Math.PI *
-                (1 - ((tileOriginY + 256) / (256 * worldTiles)) * 2)
-              )
-            )
-          );
-
-          const xRange = Math.max(east - west, 1e-12);
-          const yRange = Math.max(north - south, 1e-12);
-
-          for (let py = 0; py < 256; py += 1) {
-            const lat =
-              north - (py / 255) * yRange;
-
-            for (let px = 0; px < 256; px += 1) {
-              const lon =
-                west + (px / 255) * xRange;
-
-              const rx =
-                ((lon - terrain.bounds[0]) /
-                  (terrain.bounds[2] - terrain.bounds[0])) *
-                (terrain.width - 1);
-
-              const ry =
-                ((terrain.bounds[3] - lat) /
-                  (terrain.bounds[3] - terrain.bounds[1])) *
-                (terrain.height - 1);
-
-              const x0 = Math.floor(rx);
-              const y0 = Math.floor(ry);
-              const x1 = Math.min(terrain.width - 1, x0 + 1);
-              const y1 = Math.min(terrain.height - 1, y0 + 1);
-
-              if (
-                x0 < 0 ||
-                y0 < 0 ||
-                x0 >= terrain.width ||
-                y0 >= terrain.height
-              ) {
-                const i = (py * 256 + px) * 4;
-                data[i] = 238;
-                data[i + 1] = 241;
-                data[i + 2] = 243;
-                data[i + 3] = 255;
-                continue;
-              }
-
-              const fx = rx - x0;
-              const fy = ry - y0;
-
-              const e00 = sampleElevation(x0, y0);
-              const e10 = sampleElevation(x1, y0);
-              const e01 = sampleElevation(x0, y1);
-              const e11 = sampleElevation(x1, y1);
-
-              const value =
-                e00 * (1 - fx) * (1 - fy) +
-                e10 * fx * (1 - fy) +
-                e01 * (1 - fx) * fy +
-                e11 * fx * fy;
-
-              const gradientX =
-                sampleElevation(x1, Math.round(ry)) -
-                sampleElevation(x0, Math.round(ry));
-
-              const gradientY =
-                sampleElevation(Math.round(rx), y1) -
-                sampleElevation(Math.round(rx), y0);
-
-              const slope = Math.sqrt(
-                gradientX * gradientX +
-                gradientY * gradientY
-              );
-
-              const shade =
-                1.02 -
-                Math.min(0.23, gradientX * 0.018) -
-                Math.min(0.16, Math.max(0, gradientY) * 0.012) -
-                Math.min(0.1, slope * 0.004);
-
-              const color = colorForElevation(value, shade);
-              const rgb = color
-                .slice(4, -1)
-                .split(',')
-                .map((part) => Number(part.trim()));
-
-              const i = (py * 256 + px) * 4;
-
-              data[i] = rgb[0];
-              data[i + 1] = rgb[1];
-              data[i + 2] = rgb[2];
-              data[i + 3] = 255;
-            }
-          }
-
-          context.putImageData(image, 0, 0);
-          done(null, canvas);
-
-          return canvas;
+        if (!perimeterFeature) {
+          throw new Error('Campus perimeter is empty.');
         }
-      });
 
-      const terrain = new TerrainGridLayer({
-        tileSize: 256,
-        updateWhenZooming: false,
-        keepBuffer: 2,
-        opacity: 1,
-        noWrap: true
-      });
+        const ring = perimeterFeature.geometry.coordinates[0];
 
-      terrain.addTo(map);
-
-      // Keep the visible area tied to the same exact 1 km perimeter.
-      const outer = [
-        [center.lat - 1, center.lng - 1],
-        [center.lat - 1, center.lng + 1],
-        [center.lat + 1, center.lng + 1],
-        [center.lat + 1, center.lng - 1],
-        [center.lat - 1, center.lng - 1]
-      ];
-
-      const inner = ring
-        .map(([lon, lat]) => [lat, lon])
-        .reverse();
-
-      L.polygon([outer, inner], {
-        stroke: false,
-        fillColor: '#eef1f3',
-        fillOpacity: 0.94,
-        interactive: false
-      }).addTo(map);
-
-      const clampToPerimeter = () => {
-        const current = map.getCenter();
-        const distance = center.distanceTo(current);
-
-        if (distance <= radius) return;
-
-        const bearing = Math.atan2(
-          (current.lng - center.lng) *
-            Math.cos(center.lat * Math.PI / 180),
-          current.lat - center.lat
+        const center = L.latLng(
+          Number(perimeterFeature.properties.center[1]),
+          Number(perimeterFeature.properties.center[0])
         );
 
-        const latOffset = Math.cos(bearing) * radius / 111320;
-        const lonOffset =
-          Math.sin(bearing) * radius /
-          (111320 * Math.cos(center.lat * Math.PI / 180));
+        const radius = Number(perimeterFeature.properties.radius_m);
+        const perimeterZoom = 18;
+        const maxZoom = 23;
 
-        map.setView(
-          [center.lat + latOffset, center.lng + lonOffset],
-          Math.max(map.getZoom(), perimeterZoom),
-          { animate: false }
+        const latRadius = radius / 111320;
+        const lonRadius =
+          radius / (111320 * Math.cos(center.lat * Math.PI / 180));
+
+        const circleBounds = L.latLngBounds(
+          [center.lat - latRadius, center.lng - lonRadius],
+          [center.lat + latRadius, center.lng + lonRadius]
         );
-      };
 
-      map.on('drag', clampToPerimeter);
-      map.on('moveend', clampToPerimeter);
-      map.on('zoomend', () => {
-        if (map.getZoom() >= perimeterZoom) {
-          clampToPerimeter();
+        const map = L.map('terrainMap', {
+          zoomControl: false,
+          minZoom: 1,
+          maxZoom,
+          scrollWheelZoom: false,
+          maxBounds: circleBounds,
+          maxBoundsViscosity: 1,
+          preferCanvas: true
+        }).setView(center, perimeterZoom);
+
+        // Read the real local COP30 GeoTIFF. Nothing from export.geojson is used here.
+        const GeoTIFFModule = await import(
+          /* @vite-ignore */
+          'https://cdn.jsdelivr.net/npm/geotiff@2.1.3/+esm'
+        );
+
+        const GeoTIFF = GeoTIFFModule.default || GeoTIFFModule;
+        const tifResponse = await fetch('/maps/terrain/output_hh.tif');
+
+        if (!tifResponse.ok) {
+          throw new Error('Local COP30 GeoTIFF could not be loaded.');
         }
-      });
 
-      const mapElement = map.getContainer();
+        const tif = await GeoTIFF.fromArrayBuffer(
+          await tifResponse.arrayBuffer()
+        );
 
-      mapElement.addEventListener('wheel', (event) => {
-        event.preventDefault();
+        const image = await tif.getImage();
+        const raster = await image.readRasters({ interleave: true });
+        const width = image.getWidth();
+        const height = image.getHeight();
+        const bbox = image.getBoundingBox();
 
-        const direction = event.deltaY > 0 ? -1 : 1;
-        const allowBeyondLimit = event.shiftKey;
-        const currentZoom = map.getZoom();
+        const terrainBounds = {
+          west: Number(bbox[0]),
+          south: Number(bbox[1]),
+          east: Number(bbox[2]),
+          north: Number(bbox[3])
+        };
+
+        let minElevation = Infinity;
+        let maxElevation = -Infinity;
+
+        for (let index = 0; index < raster.length; index += 1) {
+          const value = Number(raster[index]);
+
+          if (!Number.isFinite(value)) continue;
+
+          minElevation = Math.min(minElevation, value);
+          maxElevation = Math.max(maxElevation, value);
+        }
 
         if (
-          direction < 0 &&
-          currentZoom <= perimeterZoom &&
-          !allowBeyondLimit
+          !Number.isFinite(minElevation) ||
+          !Number.isFinite(maxElevation)
         ) {
-          return;
+          throw new Error('COP30 GeoTIFF contains no valid elevation values.');
         }
 
-        const nextZoom = allowBeyondLimit
-          ? currentZoom + direction
-          : Math.max(perimeterZoom, currentZoom + direction);
+        const elevationRange =
+          Math.max(maxElevation - minElevation, 1);
 
-        map.setZoom(
-          Math.max(1, Math.min(maxZoom, nextZoom)),
-          { animate: false }
-        );
-      }, { passive: false });
+        const sampleElevation = (x, y) => {
+          const clampedX = Math.max(0, Math.min(width - 1, x));
+          const clampedY = Math.max(0, Math.min(height - 1, y));
 
-      document.querySelectorAll('[data-map-action]').forEach((button) => {
-        button.addEventListener('click', () => {
-          const action = button.getAttribute('data-map-action');
+          return Number(raster[clampedY * width + clampedX]);
+        };
 
-          if (action === 'zoom-in') {
-            map.setZoom(
-              Math.min(maxZoom, map.getZoom() + 1),
-              { animate: true }
-            );
+        const getTerrainColor = (elevation, shade) => {
+          const normalized = Math.max(
+            0,
+            Math.min(1, (elevation - minElevation) / elevationRange)
+          );
+
+          let r;
+          let g;
+          let b;
+
+          if (normalized < 0.25) {
+            const q = normalized / 0.25;
+            r = 224 - q * 28;
+            g = 233 - q * 7;
+            b = 211 - q * 22;
+          } else if (normalized < 0.55) {
+            const q = (normalized - 0.25) / 0.30;
+            r = 196 + q * 17;
+            g = 226 - q * 16;
+            b = 189 - q * 29;
+          } else if (normalized < 0.80) {
+            const q = (normalized - 0.55) / 0.25;
+            r = 213 + q * 17;
+            g = 210 - q * 19;
+            b = 161 - q * 18;
+          } else {
+            const q = (normalized - 0.80) / 0.20;
+            r = 230 - q * 14;
+            g = 191 - q * 18;
+            b = 143 - q * 8;
+          }
+
+          const light = Math.max(
+            0.70,
+            Math.min(1.18, shade)
+          );
+
+          return [
+            Math.round(r * light),
+            Math.round(g * light),
+            Math.round(b * light)
+          ];
+        };
+
+        const TerrainGridLayer = L.GridLayer.extend({
+          createTile(coords, done) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+
+            const context = canvas.getContext('2d', {
+              alpha: false
+            });
+
+            if (!context) {
+              done(new Error('Terrain canvas could not be created.'), canvas);
+              return canvas;
+            }
+
+            const pixels = context.createImageData(256, 256);
+            const output = pixels.data;
+
+            const tileScale = 2 ** coords.z;
+            const tileWest =
+              coords.x / tileScale * 360 - 180;
+            const tileEast =
+              (coords.x + 1) / tileScale * 360 - 180;
+
+            const tileNorth =
+              180 / Math.PI *
+              Math.atan(
+                Math.sinh(
+                  Math.PI *
+                  (1 - 2 * coords.y / tileScale)
+                )
+              );
+
+            const tileSouth =
+              180 / Math.PI *
+              Math.atan(
+                Math.sinh(
+                  Math.PI *
+                  (1 - 2 * (coords.y + 1) / tileScale)
+                )
+              );
+
+            const tileLonSpan = tileEast - tileWest;
+            const tileLatSpan = tileNorth - tileSouth;
+
+            for (let py = 0; py < 256; py += 1) {
+              const lat =
+                tileNorth - (py / 255) * tileLatSpan;
+
+              for (let px = 0; px < 256; px += 1) {
+                const lon =
+                  tileWest + (px / 255) * tileLonSpan;
+
+                const rasterX =
+                  (lon - terrainBounds.west) /
+                  (terrainBounds.east - terrainBounds.west) *
+                  (width - 1);
+
+                const rasterY =
+                  (terrainBounds.north - lat) /
+                  (terrainBounds.north - terrainBounds.south) *
+                  (height - 1);
+
+                const outIndex = (py * 256 + px) * 4;
+
+                if (
+                  rasterX < 0 ||
+                  rasterY < 0 ||
+                  rasterX > width - 1 ||
+                  rasterY > height - 1
+                ) {
+                  output[outIndex] = 238;
+                  output[outIndex + 1] = 241;
+                  output[outIndex + 2] = 243;
+                  output[outIndex + 3] = 255;
+                  continue;
+                }
+
+                const x0 = Math.floor(rasterX);
+                const y0 = Math.floor(rasterY);
+                const x1 = Math.min(width - 1, x0 + 1);
+                const y1 = Math.min(height - 1, y0 + 1);
+
+                const fx = rasterX - x0;
+                const fy = rasterY - y0;
+
+                const e00 = sampleElevation(x0, y0);
+                const e10 = sampleElevation(x1, y0);
+                const e01 = sampleElevation(x0, y1);
+                const e11 = sampleElevation(x1, y1);
+
+                const elevation =
+                  e00 * (1 - fx) * (1 - fy) +
+                  e10 * fx * (1 - fy) +
+                  e01 * (1 - fx) * fy +
+                  e11 * fx * fy;
+
+                const left =
+                  sampleElevation(Math.max(0, x0 - 1), Math.round(rasterY));
+                const right =
+                  sampleElevation(Math.min(width - 1, x1 + 1), Math.round(rasterY));
+                const up =
+                  sampleElevation(Math.round(rasterX), Math.max(0, y0 - 1));
+                const down =
+                  sampleElevation(Math.round(rasterX), Math.min(height - 1, y1 + 1));
+
+                const dx = right - left;
+                const dy = down - up;
+
+                // Simple northwest hillshade for a terrain-style appearance.
+                const slope =
+                  Math.sqrt(dx * dx + dy * dy);
+
+                const shade =
+                  1.0 -
+                  dx * 0.015 -
+                  dy * 0.010 -
+                  Math.min(0.16, slope * 0.0025);
+
+                const [red, green, blue] =
+                  getTerrainColor(elevation, shade);
+
+                output[outIndex] = red;
+                output[outIndex + 1] = green;
+                output[outIndex + 2] = blue;
+                output[outIndex + 3] = 255;
+              }
+            }
+
+            context.putImageData(pixels, 0, 0);
+            done(null, canvas);
+
+            return canvas;
+          }
+        });
+
+        const terrainMapLayer = new TerrainGridLayer({
+          tileSize: 256,
+          updateWhenZooming: false,
+          keepBuffer: 2,
+          noWrap: true,
+          opacity: 1
+        });
+
+        terrainMapLayer.addTo(map);
+
+        // Mask only outside the existing exact perimeter.
+        const outer = [
+          [center.lat - 1, center.lng - 1],
+          [center.lat - 1, center.lng + 1],
+          [center.lat + 1, center.lng + 1],
+          [center.lat + 1, center.lng - 1],
+          [center.lat - 1, center.lng - 1]
+        ];
+
+        const inner = ring
+          .map(([lon, lat]) => [lat, lon])
+          .reverse();
+
+        L.polygon([outer, inner], {
+          stroke: false,
+          fillColor: '#eef1f3',
+          fillOpacity: 0.94,
+          interactive: false
+        }).addTo(map);
+
+        const clampToPerimeter = () => {
+          const current = map.getCenter();
+          const distance = center.distanceTo(current);
+
+          if (distance <= radius) return;
+
+          const bearing = Math.atan2(
+            (current.lng - center.lng) *
+              Math.cos(center.lat * Math.PI / 180),
+            current.lat - center.lat
+          );
+
+          const latOffset =
+            Math.cos(bearing) * radius / 111320;
+
+          const lonOffset =
+            Math.sin(bearing) * radius /
+            (111320 * Math.cos(center.lat * Math.PI / 180));
+
+          map.setView(
+            [
+              center.lat + latOffset,
+              center.lng + lonOffset
+            ],
+            Math.max(map.getZoom(), perimeterZoom),
+            { animate: false }
+          );
+        };
+
+        map.on('drag', clampToPerimeter);
+        map.on('moveend', clampToPerimeter);
+
+        map.on('zoomend', () => {
+          if (map.getZoom() >= perimeterZoom) {
+            clampToPerimeter();
+          }
+        });
+
+        const mapElement = map.getContainer();
+
+        mapElement.addEventListener('wheel', (event) => {
+          event.preventDefault();
+
+          const direction = event.deltaY > 0 ? -1 : 1;
+          const overrideLimit = event.shiftKey;
+          const currentZoom = map.getZoom();
+
+          if (
+            direction < 0 &&
+            currentZoom <= perimeterZoom &&
+            !overrideLimit
+          ) {
             return;
           }
 
-          if (action === 'zoom-out') {
-            map.setZoom(
-              Math.max(1, map.getZoom() - 1),
-              { animate: true }
-            );
-          }
-        });
-      });
+          const nextZoom = overrideLimit
+            ? currentZoom + direction
+            : Math.max(perimeterZoom, currentZoom + direction);
 
-      setTimeout(() => map.invalidateSize(), 100);
+          map.setZoom(
+            Math.max(1, Math.min(maxZoom, nextZoom)),
+            { animate: false }
+          );
+        }, { passive: false });
+
+        document
+          .querySelectorAll('[data-map-action]')
+          .forEach((button) => {
+            button.addEventListener('click', () => {
+              const action =
+                button.getAttribute('data-map-action');
+
+              if (action === 'zoom-in') {
+                map.setZoom(
+                  Math.min(maxZoom, map.getZoom() + 1),
+                  { animate: true }
+                );
+              }
+
+              if (action === 'zoom-out') {
+                map.setZoom(
+                  Math.max(1, map.getZoom() - 1),
+                  { animate: true }
+                );
+              }
+            });
+          });
+
+        note?.setAttribute(
+          'data-ready',
+          'true'
+        );
+
+        setTimeout(() => map.invalidateSize(), 100);
+      } catch (error) {
+        console.error(error);
+
+        if (note) {
+          note.textContent =
+            'Terrain failed to load · check local COP30 GeoTIFF';
+        }
+      }
     });
   </script>
 </MainLayout>
