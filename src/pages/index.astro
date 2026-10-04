@@ -1954,6 +1954,10 @@ import 'leaflet/dist/leaflet.css';
               selectEditablePoint(featureId, vertexIndex);
             });
 
+            marker.on('dragstart', () => {
+              selectEditablePoint(featureId, vertexIndex);
+            });
+
             marker.on('drag', () => {
               const line = editablePathLines.get(featureId);
               if (!line) return;
@@ -2097,25 +2101,33 @@ import 'leaflet/dist/leaflet.css';
       const deleteSelectedPoint = () => {
         if (!selectedPoint) return;
 
-        const feature = findEffectiveFeature(selectedPoint.featureId);
+        const target = { ...selectedPoint };
+        const feature = findEffectiveFeature(target.featureId);
         const coordinates = featureGeometryForEdit(feature);
 
-        if (!feature || !coordinates || !coordinates[selectedPoint.vertexIndex]) return;
+        if (!feature || !coordinates || !coordinates[target.vertexIndex]) return;
+
+        selectedPoint = null;
+        selectedPath = null;
 
         if (coordinates.length <= 2) {
           recordDeleteOperation(feature.id);
-          refreshAfterPathChange();
-          selectedPoint = null;
           editStatus.textContent = 'Path deleted';
+          refreshAfterPathChange();
+          setEditActionVisibility({
+            pointEditor: pointEditorActive
+          });
           return;
         }
 
-        coordinates.splice(selectedPoint.vertexIndex, 1);
+        coordinates.splice(target.vertexIndex, 1);
         saveEditedFeatureGeometry(feature.id, coordinates);
 
-        selectedPoint = null;
         editStatus.textContent = 'Point deleted';
         refreshAfterPathChange();
+        setEditActionVisibility({
+          pointEditor: pointEditorActive
+        });
       };
 
       const selectPathForEdit = (feature) => {
@@ -2150,11 +2162,16 @@ import 'leaflet/dist/leaflet.css';
       const deleteSelectedCustomPath = () => {
         if (!selectedPath?.isCustom) return;
 
-        recordDeleteOperation(selectedPath.id);
-        refreshAfterPathChange();
+        const targetId = selectedPath.id;
         selectedPath = null;
         selectedPoint = null;
+
+        recordDeleteOperation(targetId);
         editStatus.textContent = 'Custom path deleted';
+        refreshAfterPathChange();
+        setEditActionVisibility({
+          pointEditor: pointEditorActive
+        });
       };
 
       const buildEditableHitLayer = () => {
