@@ -1043,6 +1043,600 @@ import 'leaflet/dist/leaflet.css';
         pathToggle.setAttribute('aria-pressed', String(pedestrianPathsActive));
       });
 
+
+      const routeToggle = document.getElementById('routeToggle');
+      const routeCard = document.getElementById('routeCard');
+      const routeStatus = document.getElementById('routeStatus');
+      const routeDistance = document.getElementById('routeDistance');
+      const routeTime = document.getElementById('routeTime');
+      const routeClear = document.getElementById('routeClear');
+
+      const walkingSpeedMetersPerSecond = 1.4;
+      const snapTolerancePixels = 22;
+
+      let routeModeActive = false;
+      let routeStart = null;
+      let routeEnd = null;
+      let routeStartMarker = null;
+      let routeEndMarker = null;
+      let routeLine = null;
+      let routeLineCasing = null;
+
+      const showRouteCard = (visible = true) => {
+        routeCard?.classList.toggle('is-open', visible);
+        routeCard?.setAttribute('aria-hidden', String(!visible));
+      };
+
+      const clearRouteTest = (keepMode = false) => {
+        routeStart = null;
+        routeEnd = null;
+
+        if (routeStartMarker) map.removeLayer(routeStartMarker);
+        if (routeEndMarker) map.removeLayer(routeEndMarker);
+        if (routeLine) map.removeLayer(routeLine);
+        if (routeLineCasing) map.removeLayer(routeLineCasing);
+
+        routeStartMarker = null;
+        routeEndMarker = null;
+        routeLine = null;
+        routeLineCasing = null;
+
+        routeDistance.textContent = '—';
+        routeTime.textContent = '—';
+        routeStatus.textContent = 'Select a start point';
+
+        if (!keepMode) {
+          routeModeActive = false;
+          routeToggle?.classList.remove('is-active');
+          routeToggle?.setAttribute('aria-pressed', 'false');
+          showRouteCard(false);
+        } else {
+          showRouteCard(true);
+        }
+      };
+
+      const createRouteMarker = (latlng, label, className) =>
+        L.marker(latlng, {
+          icon: L.divIcon({
+            className: 'route-point-marker ' + className,
+            html: '<span><b>' + label + '</b></span>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          }),
+          interactive: false,
+          keyboard: false
+        }).addTo(map);
+
+      routeToggle?.addEventListener('click', () => {
+        routeModeActive = !routeModeActive;
+
+        routeToggle.classList.toggle('is-active', routeModeActive);
+        routeToggle.setAttribute('aria-pressed', String(routeModeActive));
+
+        if (routeModeActive) {
+          clearRouteTest(true);
+
+          if (editModeEnabled) {
+            editModeEnabled = false;
+            if (editModeToggle) editModeToggle.checked = false;
+            showEditIcon(false);
+            closeEditTools();
+            buildEditableHitLayer();
+          }
+
+          pedestrianPathsActive = true;
+          pedestrianPathCasing?.addTo(map);
+          pedestrianPaths?.addTo(map);
+          pathToggle?.classList.add('is-active');
+          pathToggle?.setAttribute('aria-pressed', 'true');
+          routeStatus.textContent = 'Select a start point';
+          showRouteCard(true);
+        } else {
+          clearRouteTest(false);
+        }
+      });
+
+      routeClear?.addEventListener('click', () => {
+        clearRouteTest(true);
+      });
+
+      map.on('click', (event) => {
+        if (!routeModeActive) return;
+
+        const snapped = snapToPedestrianPath(event.latlng);
+        if (!snapped) return;
+
+        const projected = map.latLngToContainerPoint(snapped.latlng);
+        const clicked = map.latLngToContainerPoint(event.latlng);
+        const pixelDistance = projected.distanceTo(clicked);
+
+        if (pixelDistance > snapTolerancePixels) return;
+
+        if (!routeStart) {
+          routeStart = snapped;
+          routeStartMarker = createRouteMarker(
+            snapped.latlng,
+            'A',
+            'route-point-start'
+          );
+          routeStatus.textContent = 'Select an end point';
+          routeCard?.classList.add('is-open');
+          return;
+        }
+
+        if (!routeEnd) {
+          routeEnd = snapped;
+
+          if (routeStart.latlng.distanceTo(routeEnd.latlng) < 1) {
+            routeStatus.textContent = 'Choose a different end point';
+            routeEnd = null;
+            return;
+          }
+
+          routeEndMarker = createRouteMarker(
+            snapped.latlng,
+            'B',
+            'route-point-end'
+          );
+
+          const route = routeBetweenSnaps(routeStart, routeEnd);
+
+          if (!route) {
+            routeStatus.textContent = 'No connected pedestrian route';
+            routeDistance.textContent = '—';
+            routeTime.textContent = '—';
+            return;
+          }
+
+          routeLineCasing = L.polyline(
+            route.coordinates.map(([lng, lat]) => [lat, lng]),
+            {
+              color: '#ffffff',
+              weight: 9,
+              opacity: 0.96,
+              lineCap: 'round',
+              lineJoin: 'round',
+              interactive: false
+            }
+          ).addTo(map);
+
+          routeLine = L.polyline(
+            route.coordinates.map(([lng, lat]) => [lat, lng]),
+            {
+              color: '#0f4fd8',
+              weight: 5,
+              opacity: 1,
+              lineCap: 'round',
+              lineJoin: 'round',
+              interactive: false
+            }
+          ).addTo(map);
+
+          const distanceMeters = route.distance;
+          const seconds = distanceMeters / walkingSpeedMetersPerSecond;
+
+          routeStatus.textContent = 'Route ready';
+          routeDistance.textContent =
+            distanceMeters < 1000
+              ? Math.round(distanceMeters) + ' m'
+              : (distanceMeters / 1000).toFixed(2) + ' km';
+          routeTime.textContent =
+            seconds < 60
+              ? Math.max(1, Math.round(seconds)) + ' sec'
+              : Math.max(1, Math.ceil(seconds / 60)) + ' min';
+        }
+      });
+
+      const editModeToggle = document.getElementById('editModeToggle');
+      const editToggle = document.getElementById('editToggle');
+      const editCard = document.getElementById('editCard');
+      const editStatus = document.getElementById('editStatus');
+      const editUndo = document.getElementById('editUndo');
+      const editFinish = document.getElementById('editFinish');
+      const editSave = document.getElementById('editSave');
+      const editDelete = document.getElementById('editDelete');
+      const editCancel = document.getElementById('editCancel');
+      const exportPathEdits = document.getElementById('exportPathEdits');
+
+      let editModeEnabled = false;
+      let drawingModeActive = false;
+      let drawingPoints = [];
+      let drawingMarkers = [];
+      let drawingLine = null;
+      let selectedPath = null;
+      let selectedPathVertices = [];
+      let selectedPathLine = null;
+
+      const showEditIcon = (visible) => {
+        editToggle?.classList.toggle('is-visible', visible);
+        editToggle?.setAttribute('aria-hidden', String(!visible));
+      };
+
+      const showEditCard = (visible) => {
+        editCard?.classList.toggle('is-open', visible);
+        editCard?.setAttribute('aria-hidden', String(!visible));
+      };
+
+      const setEditActionVisibility = ({
+        drawing = false,
+        editing = false,
+        deletable = false
+      } = {}) => {
+        if (editUndo) editUndo.hidden = !drawing;
+        if (editFinish) editFinish.hidden = !drawing;
+        if (editSave) editSave.hidden = !editing;
+        if (editDelete) editDelete.hidden = !(editing && deletable);
+      };
+
+      const clearDrawing = () => {
+        drawingMarkers.forEach((marker) => map.removeLayer(marker));
+        if (drawingLine) map.removeLayer(drawingLine);
+        drawingMarkers = [];
+        drawingPoints = [];
+        drawingLine = null;
+      };
+
+      const clearSelectedPath = () => {
+        selectedPathVertices.forEach((marker) => map.removeLayer(marker));
+        if (selectedPathLine) map.removeLayer(selectedPathLine);
+        selectedPathVertices = [];
+        selectedPathLine = null;
+        selectedPath = null;
+      };
+
+      const closeEditTools = () => {
+        clearDrawing();
+        clearSelectedPath();
+        drawingModeActive = false;
+        editToggle?.classList.remove('is-active');
+        editToggle?.setAttribute('aria-pressed', 'false');
+        showEditCard(false);
+        setEditActionVisibility();
+      };
+
+      const createEditPointMarker = (latlng, number) =>
+        L.marker(latlng, {
+          icon: L.divIcon({
+            className: 'edit-point-marker',
+            html: '<span>' + number + '</span>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+          }),
+          interactive: false,
+          keyboard: false
+        }).addTo(map);
+
+      const renderDrawingLine = () => {
+        if (drawingLine) map.removeLayer(drawingLine);
+
+        drawingLine = drawingPoints.length >= 2
+          ? L.polyline(drawingPoints, {
+              color: '#0f4fd8',
+              weight: 4,
+              opacity: 1,
+              dashArray: '7 5',
+              lineCap: 'round',
+              lineJoin: 'round',
+              interactive: false
+            }).addTo(map)
+          : null;
+      };
+
+      const persistPathEdits = () => {
+        writeSavedPathEdits(pathEditState);
+      };
+
+      const replaceEditOperation = (targetId, operation) => {
+        const key = String(targetId);
+
+        pathEditState.features = (pathEditState.features || [])
+          .filter((item) => String(pathEditTarget(item)) !== key);
+
+        pathEditState.features.push(operation);
+        persistPathEdits();
+      };
+
+      const removeEditOperation = (targetId) => {
+        const key = String(targetId);
+
+        pathEditState.features = (pathEditState.features || [])
+          .filter((item) => String(pathEditTarget(item)) !== key);
+
+        persistPathEdits();
+      };
+
+      const refreshAfterPathChange = () => {
+        pedestrianPathData.features = applyPathEdits();
+        rebuildPedestrianRouting();
+        refreshPedestrianLayers();
+
+        if (editModeEnabled) {
+          buildEditableHitLayer();
+        }
+      };
+
+      const renderSelectedPath = () => {
+        if (!selectedPath) return;
+
+        if (selectedPathLine) map.removeLayer(selectedPathLine);
+
+        selectedPathLine = L.polyline(selectedPath.coordinates, {
+          color: '#0f4fd8',
+          weight: 4,
+          opacity: 1,
+          dashArray: '7 5',
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false
+        }).addTo(map);
+
+        selectedPathVertices.forEach((marker) => map.removeLayer(marker));
+
+        selectedPathVertices = selectedPath.coordinates.map((latlng, index) => {
+          const marker = L.marker(latlng, {
+            draggable: true,
+            icon: L.divIcon({
+              className: 'edit-vertex-marker',
+              html: '<span>' + (index + 1) + '</span>',
+              iconSize: [18, 18],
+              iconAnchor: [9, 9]
+            })
+          }).addTo(map);
+
+          marker.on('drag', () => {
+            selectedPath.coordinates[index] = marker.getLatLng();
+            renderSelectedPath();
+          });
+
+          return marker;
+        });
+      };
+
+      const startDrawingMode = () => {
+        if (!editModeEnabled) return;
+
+        if (routeModeActive) clearRouteTest(false);
+
+        clearSelectedPath();
+        clearDrawing();
+        drawingModeActive = true;
+
+        pedestrianPathsActive = true;
+        pedestrianPathCasing?.addTo(map);
+        pedestrianPaths?.addTo(map);
+
+        editToggle?.classList.add('is-active');
+        editToggle?.setAttribute('aria-pressed', 'true');
+        editStatus.textContent = 'Click the map to add points';
+        showEditCard(true);
+        setEditActionVisibility({ drawing: true });
+      };
+
+      const finishCustomPath = () => {
+        if (drawingPoints.length < 2) {
+          editStatus.textContent = 'Add at least 2 points';
+          return;
+        }
+
+        const customId = 'custom-' + Date.now();
+
+        const geometry = {
+          type: 'LineString',
+          coordinates: drawingPoints.map((point) => [
+            Number(point.lng.toFixed(7)),
+            Number(point.lat.toFixed(7))
+          ])
+        };
+
+        replaceEditOperation(customId, {
+          type: 'Feature',
+          id: 'edit-' + Date.now(),
+          properties: {
+            operation: 'add',
+            targetId: customId,
+            highway: 'custom',
+            name: 'Custom pedestrian path',
+            source: 'custom'
+          },
+          geometry
+        });
+
+        refreshAfterPathChange();
+        closeEditTools();
+        editStatus.textContent = 'Custom path saved';
+        showEditCard(true);
+        setTimeout(() => showEditCard(false), 900);
+      };
+
+      const selectPathForEdit = (feature) => {
+        if (!editModeEnabled || !feature?.geometry) return;
+
+        if (feature.geometry.type !== 'LineString') {
+          editStatus.textContent = 'Only line paths can be edited';
+          showEditCard(true);
+          return;
+        }
+
+        clearDrawing();
+        clearSelectedPath();
+
+        selectedPath = {
+          id: feature.id,
+          isCustom: feature.properties?.source === 'custom',
+          name: feature.properties?.name || 'Pedestrian path',
+          coordinates: feature.geometry.coordinates.map(([lng, lat]) =>
+            L.latLng(Number(lat), Number(lng))
+          )
+        };
+
+        renderSelectedPath();
+        editToggle?.classList.add('is-active');
+        editToggle?.setAttribute('aria-pressed', 'true');
+        editStatus.textContent = selectedPath.isCustom
+          ? 'Editing custom path'
+          : 'Editing pedestrian path';
+
+        showEditCard(true);
+        setEditActionVisibility({
+          editing: true,
+          deletable: selectedPath.isCustom
+        });
+      };
+
+      const saveSelectedPath = () => {
+        if (!selectedPath) return;
+
+        const geometry = {
+          type: 'LineString',
+          coordinates: selectedPath.coordinates.map((point) => [
+            Number(point.lng.toFixed(7)),
+            Number(point.lat.toFixed(7))
+          ])
+        };
+
+        replaceEditOperation(selectedPath.id, {
+          type: 'Feature',
+          id: 'edit-' + Date.now(),
+          properties: {
+            operation: selectedPath.isCustom ? 'add' : 'update',
+            targetId: selectedPath.id,
+            ...(selectedPath.isCustom
+              ? {
+                  highway: 'custom',
+                  name: selectedPath.name,
+                  source: 'custom'
+                }
+              : {})
+          },
+          geometry
+        });
+
+        refreshAfterPathChange();
+        closeEditTools();
+        editStatus.textContent = 'Path changes saved';
+        showEditCard(true);
+        setTimeout(() => showEditCard(false), 900);
+      };
+
+      const deleteSelectedCustomPath = () => {
+        if (!selectedPath?.isCustom) return;
+
+        removeEditOperation(selectedPath.id);
+        refreshAfterPathChange();
+        closeEditTools();
+        editStatus.textContent = 'Custom path deleted';
+        showEditCard(true);
+        setTimeout(() => showEditCard(false), 900);
+      };
+
+      const buildEditableHitLayer = () => {
+        if (editableHitLayer && map.hasLayer(editableHitLayer)) {
+          map.removeLayer(editableHitLayer);
+        }
+
+        editableHitLayer = null;
+
+        if (!editModeEnabled) return;
+
+        editableHitLayer = L.geoJSON(pedestrianPathData, {
+          style: {
+            color: '#2563eb',
+            weight: 15,
+            opacity: 0
+          },
+          interactive: true,
+          onEachFeature: (feature, layer) => {
+            layer.on('click', (event) => {
+              if (!editModeEnabled) return;
+
+              event.originalEvent?.stopPropagation();
+              event.originalEvent?.preventDefault();
+              selectPathForEdit(feature);
+            });
+          }
+        }).addTo(map);
+      };
+
+      const exportCurrentPathEdits = () => {
+        const blob = new Blob(
+          [JSON.stringify(pathEditState, null, 2) + '\n'],
+          { type: 'application/geo+json' }
+        );
+
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'pedestrian_paths_edits.geojson';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      };
+
+      exportPathEdits?.addEventListener('click', exportCurrentPathEdits);
+      editSave?.addEventListener('click', saveSelectedPath);
+      editDelete?.addEventListener('click', deleteSelectedCustomPath);
+
+      editModeToggle?.addEventListener('change', () => {
+        editModeEnabled = Boolean(editModeToggle.checked);
+        showEditIcon(editModeEnabled);
+
+        if (editModeEnabled) {
+          pedestrianPathsActive = true;
+          pedestrianPathCasing?.addTo(map);
+          pedestrianPaths?.addTo(map);
+          buildEditableHitLayer();
+        } else {
+          closeEditTools();
+          buildEditableHitLayer();
+        }
+      });
+
+      editToggle?.addEventListener('click', () => {
+        if (!editModeEnabled) return;
+
+        if (drawingModeActive || selectedPath) {
+          closeEditTools();
+          return;
+        }
+
+        startDrawingMode();
+      });
+
+      editUndo?.addEventListener('click', () => {
+        if (!drawingModeActive || !drawingPoints.length) return;
+
+        drawingPoints.pop();
+
+        const marker = drawingMarkers.pop();
+        if (marker) map.removeLayer(marker);
+
+        renderDrawingLine();
+        editStatus.textContent = drawingPoints.length
+          ? drawingPoints.length + ' point' + (drawingPoints.length === 1 ? '' : 's')
+          : 'Click the map to add points';
+      });
+
+      editFinish?.addEventListener('click', finishCustomPath);
+      editCancel?.addEventListener('click', closeEditTools);
+
+      editModeEnabled = Boolean(editModeToggle?.checked);
+      showEditIcon(editModeEnabled);
+      buildEditableHitLayer();
+
+      map.on('click', (event) => {
+        if (!editModeEnabled || !drawingModeActive || routeModeActive) return;
+
+        const point = L.latLng(event.latlng.lat, event.latlng.lng);
+        drawingPoints.push(point);
+        drawingMarkers.push(createEditPointMarker(point, drawingPoints.length));
+        renderDrawingLine();
+
+        editStatus.textContent = drawingPoints.length +
+          ' point' + (drawingPoints.length === 1 ? '' : 's') +
+          ' · Finish when ready';
+      });
+
       const devPanel = document.getElementById('devPanel');
 
       const closeDevPanel = () => {
