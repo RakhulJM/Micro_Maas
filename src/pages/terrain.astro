@@ -34,7 +34,7 @@ import 'leaflet/dist/leaflet.css';
 
   <script is:inline src="https://unpkg.com/proj4"></script>
   <script is:inline src="https://unpkg.com/georaster"></script>
-  <script is:inline src="https://unpkg.com/georaster-layer-for-leaflet"></script>
+  <script is:inline src="https://unpkg.com/georaster-layer-for-leaflet/georaster-layer-for-leaflet.browserify.min.js"></script>
 
   <script>
     import('leaflet').then(async ({ default: L }) => {
@@ -87,14 +87,11 @@ import 'leaflet/dist/leaflet.css';
       }
 
       const tifBuffer = await tifResponse.arrayBuffer();
-      const parseGeoraster =
-        window.parseGeoraster ||
-        window.parse_georaster;
-
+      const parseGeoraster = window.parseGeoraster;
       const GeoRasterLayer = window.GeoRasterLayer;
 
       if (typeof parseGeoraster !== 'function' || typeof GeoRasterLayer !== 'function') {
-        throw new Error('GeoRaster libraries could not be loaded.');
+        throw new Error('GeoTIFF map libraries could not be loaded.');
       }
 
       const georaster = await parseGeoraster(tifBuffer);
