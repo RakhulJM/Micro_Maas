@@ -25,7 +25,7 @@ import 'leaflet/dist/leaflet.css';
       <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
     </div>
 
-    <div class="map-note">© OpenStreetMap contributors · Campus data saved locally</div>
+    <div class="map-note">Campus map · 2.5 km boundary</div>
   </main>
 
   <script>
@@ -47,129 +47,135 @@ import 'leaflet/dist/leaflet.css';
       const perimeterFeature = perimeterData.features[0];
       const ring = perimeterFeature.geometry.coordinates[0];
       const center = L.latLng(
-        ring.reduce((sum, point) => sum + point[1], 0) / ring.length,
-        ring.reduce((sum, point) => sum + point[0], 0) / ring.length
+        Number(perimeterFeature.properties.center[1]),
+        Number(perimeterFeature.properties.center[0])
       );
       const radius = Number(perimeterFeature.properties.radius_m);
 
+      const latRadius = radius / 111320;
+      const lonRadius =
+        radius / (111320 * Math.cos(center.lat * Math.PI / 180));
+
       const circleBounds = L.latLngBounds(
-        [
-          center.lat - radius / 111320,
-          center.lng - radius / (111320 * Math.cos(center.lat * Math.PI / 180))
-        ],
-        [
-          center.lat + radius / 111320,
-          center.lng + radius / (111320 * Math.cos(center.lat * Math.PI / 180))
-        ]
+        [center.lat - latRadius, center.lng - lonRadius],
+        [center.lat + latRadius, center.lng + lonRadius]
       );
 
       const map = L.map('map', {
         zoomControl: false,
-        minZoom: 14,
+        minZoom: 13,
         maxZoom: 20,
-        maxBounds: circleBounds.pad(0.02),
+        maxBounds: circleBounds.pad(0.08),
         maxBoundsViscosity: 1
-      }).setView(center, 15);
+      }).setView(center, 14);
 
-      const roadWidths = {
-        motorway: 5,
-        trunk: 4.5,
-        primary: 4,
-        secondary: 3.5,
-        tertiary: 3,
-        residential: 2.5,
-        unclassified: 2.2,
-        service: 1.8,
-        footway: 1.4,
-        path: 1.2
+      const colors = {
+        background: '#f1f3f5',
+        land: '#eef0ee',
+        building: '#dedbd4',
+        buildingEdge: '#bdb8af',
+        water: '#b9dce7',
+        green: '#d9e6d2',
+        park: '#d3e4cc',
+        roadCasing: '#c7c5c0',
+        road: '#ffffff',
+        majorRoad: '#e9c67b',
+        footway: '#d1cec7',
+        boundary: '#3b82f6'
       };
 
-      const roadColors = {
-        motorway: '#c7a46a',
-        trunk: '#d2ad70',
-        primary: '#ddb97c',
-        secondary: '#e0c28d',
-        tertiary: '#e3cca1',
-        residential: '#f1eee8',
-        unclassified: '#eeebe4',
-        service: '#e7e3db',
-        footway: '#c8c3ba',
-        path: '#c8c3ba'
+      const roadWidth = {
+        motorway: 7,
+        trunk: 6.5,
+        primary: 6,
+        secondary: 5.5,
+        tertiary: 5,
+        residential: 4.4,
+        unclassified: 4,
+        service: 3.4,
+        footway: 2.7,
+        path: 2.4
       };
 
-      const campusLayer = L.geoJSON(campusData, {
+      const isRoad = (feature) =>
+        Boolean(feature?.properties?.highway || feature?.properties?.route);
+
+      const roadStyle = (feature, casing = false) => {
+        const kind = feature?.properties?.highway;
+        const width = roadWidth[kind] || 3.5;
+        const major = ['motorway', 'trunk', 'primary', 'secondary', 'tertiary'].includes(kind);
+
+        return {
+          color: casing
+            ? colors.roadCasing
+            : (major ? colors.majorRoad : colors.road),
+          weight: casing ? width + 2.2 : width,
+          opacity: 0.96,
+          lineCap: 'round',
+          lineJoin: 'round'
+        };
+      };
+
+      const baseLayer = L.geoJSON(campusData, {
+        filter: (feature) => !isRoad(feature),
         style: (feature) => {
           const p = feature?.properties || {};
 
-          if (p.highway) {
-            return {
-              color: roadColors[p.highway] || '#d7d2c8',
-              weight: roadWidths[p.highway] || 1.7,
-              opacity: 0.95,
-              lineCap: 'round',
-              lineJoin: 'round'
-            };
-          }
-
           if (p.natural === 'water' || p.waterway) {
             return {
-              color: '#8fc4d5',
+              color: '#9ac6d3',
               weight: 1,
-              fillColor: '#b7dce6',
-              fillOpacity: 0.85
+              fillColor: colors.water,
+              fillOpacity: 0.95
             };
           }
 
-          if (p.building) {
+          if (p.leisure || p.landuse) {
             return {
-              color: '#aaa39a',
+              color: '#b7c7b0',
               weight: 0.7,
-              fillColor: '#d9d3ca',
-              fillOpacity: 0.92
+              fillColor: p.leisure === 'park' ? colors.park : colors.green,
+              fillOpacity: 0.9
             };
           }
 
           if (p.amenity === 'parking') {
             return {
-              color: '#bcb7ae',
+              color: '#c4c1bb',
               weight: 0.7,
-              fillColor: '#d7d5d0',
-              fillOpacity: 0.78
+              fillColor: '#dfe0dd',
+              fillOpacity: 0.9
             };
           }
 
-          if (p.landuse || p.leisure) {
+          if (p.building) {
             return {
-              color: '#b7c4ad',
+              color: colors.buildingEdge,
               weight: 0.7,
-              fillColor: '#dbe5d2',
-              fillOpacity: 0.72
+              fillColor: colors.building,
+              fillOpacity: 1
             };
           }
 
           return {
-            color: '#c3beb5',
-            weight: 0.8,
-            fillColor: '#e1ddd6',
-            fillOpacity: 0.55
+            color: '#d1cec8',
+            weight: 0.7,
+            fillColor: colors.land,
+            fillOpacity: 0.85
           };
-        },
+        }
+      }).addTo(map);
 
-        pointToLayer: (feature, latlng) => {
-          const type =
-            feature?.properties?.amenity ||
-            feature?.properties?.shop ||
-            feature?.properties?.tourism;
+      const roadCasing = L.geoJSON(campusData, {
+        filter: isRoad,
+        style: (feature) => roadStyle(feature, true),
+        interactive: false
+      }).addTo(map);
 
-          return L.circleMarker(latlng, {
-            radius: type ? 4 : 3,
-            color: '#4b5563',
-            weight: 1,
-            fillColor: '#ffffff',
-            fillOpacity: 0.95
-          });
-        },
-
+      const roads = L.geoJSON(campusData, {
+        filter: isRoad,
+        style: (feature) => roadStyle(feature),
+        interactive: false,
         onEachFeature: (feature, layer) => {
           const name = feature?.properties?.name;
           if (name) {
@@ -181,18 +187,58 @@ import 'leaflet/dist/leaflet.css';
         }
       }).addTo(map);
 
+      const labels = L.geoJSON(campusData, {
+        filter: (feature) =>
+          Boolean(feature?.properties?.name && feature?.properties?.building),
+        style: {
+          opacity: 0,
+          fillOpacity: 0
+        },
+        onEachFeature: (feature, layer) => {
+          layer.bindTooltip(feature.properties.name, {
+            permanent: true,
+            direction: 'center',
+            className: 'map-label'
+          });
+        }
+      }).addTo(map);
+
       const perimeterLayer = L.geoJSON(perimeterData, {
         style: {
-          color: '#2563eb',
+          color: colors.boundary,
           weight: 2,
-          opacity: 0.8,
-          fillColor: '#2563eb',
-          fillOpacity: 0.02
+          opacity: 0.7,
+          fill: false
         },
         interactive: false
       }).addTo(map);
 
-      map.fitBounds(perimeterLayer.getBounds(), { padding: [18, 18] });
+      /*
+       * Mask everything outside the 2.5 km perimeter.
+       * The source GeoJSON may contain long roads crossing the boundary;
+       * they remain in the source file but are not visible outside the circle.
+       */
+      const outer = [
+        [center.lat - 1, center.lng - 1],
+        [center.lat - 1, center.lng + 1],
+        [center.lat + 1, center.lng + 1],
+        [center.lat + 1, center.lng - 1]
+      ];
+
+      const inner = ring
+        .map(([lon, lat]) => [lat, lon])
+        .reverse();
+
+      L.polygon([outer, inner], {
+        stroke: false,
+        fillColor: '#eef1f3',
+        fillOpacity: 0.9,
+        interactive: false
+      }).addTo(map);
+
+      map.fitBounds(perimeterLayer.getBounds(), {
+        padding: [45, 45]
+      });
 
       function constrainToCircle() {
         const current = map.getCenter();
@@ -219,7 +265,23 @@ import 'leaflet/dist/leaflet.css';
 
       map.on('drag', constrainToCircle);
       map.on('moveend', constrainToCircle);
-      setTimeout(() => map.invalidateSize(), 100);
+
+      const toggleLabels = () => {
+        const visible = map.getZoom() >= 16;
+        labels.eachLayer((layer) => {
+          if (visible) {
+            layer.openTooltip();
+          } else {
+            layer.closeTooltip();
+          }
+        });
+      };
+
+      map.on('zoomend', toggleLabels);
+      setTimeout(() => {
+        map.invalidateSize();
+        toggleLabels();
+      }, 100);
 
       document.querySelectorAll('[data-map-action]').forEach((button) => {
         button.addEventListener('click', () => {
@@ -234,14 +296,17 @@ import 'leaflet/dist/leaflet.css';
 
         navigator.geolocation.getCurrentPosition(
           ({ coords }) => {
-            map.setView([coords.latitude, coords.longitude], 18);
+            map.setView([coords.latitude, coords.longitude], 17);
             setTimeout(constrainToCircle, 0);
           },
           () => alert('Location permission was not granted.')
         );
       });
 
-      void campusLayer;
+      void baseLayer;
+      void roadCasing;
+      void roads;
+      void labels;
     });
   </script>
 </MainLayout>
