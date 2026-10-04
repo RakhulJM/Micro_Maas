@@ -3,22 +3,6 @@ import MainLayout from '../layouts/MainLayout.astro';
 import '../styles/global.css';
 import 'leaflet/dist/leaflet.css';
 
-const mapModules = import.meta.glob('../../maps/*.{geojson,json}', {
-  eager: true,
-  query: '?raw',
-  import: 'default'
-});
-
-const mapFiles = Object.entries(mapModules)
-  .map(([path, raw]) => ({
-    name: path.split('/').pop() ?? path,
-    raw: String(raw)
-  }))
-  .sort((a, b) => a.name.localeCompare(b.name));
-
-const mapData = Object.fromEntries(
-  mapFiles.map((file) => [file.name, file.raw])
-);
 ---
 
 <MainLayout title="CampusMaaS · Map">
@@ -58,23 +42,10 @@ const mapData = Object.fromEntries(
           <section class="dev-card">
             <div class="dev-card-title">
               <strong>Maps</strong>
-              <span>{mapFiles.length}</span>
+              <span id="mapFileCount">0</span>
             </div>
-
-            <div class="map-file-list">
-              {mapFiles.map((file) => (
-                <label class="map-file-row">
-                  <span>
-                    <strong>{file.name}</strong>
-                    <small>maps/{file.name}</small>
-                  </span>
-                  <input
-                    type="checkbox"
-                    data-map-file={file.name}
-                    checked={file.name === 'campus.geojson' || file.name === 'perimeter.geojson'}
-                  />
-                </label>
-              ))}
+            <div class="map-file-list" id="mapFileList">
+              <div class="map-file-empty">Loading map files…</div>
             </div>
           </section>
 
@@ -102,19 +73,26 @@ const mapData = Object.fromEntries(
           </section>
         </div>
 
-        <div class="dev-panel-hint">Ctrl + Shift + J</div>
+        <div class="dev-panel-hint">Ctrl + Shift + U</div>
       </div>
     </section>
   </main>
 
-  <script define:vars={{ mapData }}>
+  <script>
     import('leaflet').then(async ({ default: L }) => {
-      if (!mapData['campus.geojson'] || !mapData['perimeter.geojson']) {
-        throw new Error('campus.geojson and perimeter.geojson are required.');
+      const [campusResponse, perimeterResponse] = await Promise.all([
+        fetch('/maps/campus.geojson'),
+        fetch('/maps/perimeter.geojson')
+      ]);
+
+      if (!campusResponse.ok || !perimeterResponse.ok) {
+        throw new Error('Campus map data could not be loaded.');
       }
 
-      const campusData = JSON.parse(mapData['campus.geojson']);
-      const perimeterData = JSON.parse(mapData['perimeter.geojson']);
+      const [campusData, perimeterData] = await Promise.all([
+        campusResponse.json(),
+        perimeterResponse.json()
+      ]);
 
       const perimeterFeature = perimeterData.features[0];
       const ring = perimeterFeature.geometry.coordinates[0];
@@ -451,18 +429,6 @@ const mapData = Object.fromEntries(
         updateBuildingLabels();
       }, 100);
 
-      const campusLayers = [
-        baseLayer,
-        roadCasing,
-        roads,
-        ...buildingLabels.map((item) => item.marker)
-      ];
-
-      const layerRegistry = new Map([
-        ['campus.geojson', campusLayers],
-        ['perimeter.geojson', [perimeterMask]]
-      ]);
-
       const genericStyle = (feature) => {
         const p = feature?.properties || {};
 
@@ -505,38 +471,100 @@ const mapData = Object.fromEntries(
         };
       };
 
-      const setLayerVisibility = (name, enabled) => {
-        if (!layerRegistry.has(name)) {
-          const raw = mapData[name];
-          if (!raw) return;
+      const campusLayers = [
+        baseLayer,
+        roadCasing,
+        roads,
+        ...buildingLabels.map((item) => item.marker)
+      ];
 
+      const layerRegistry = new Map([
+        ['campus.geojson', campusLayers],
+        ['perimeter.geojson', [perimeterMask]]
+      ]);
+
+      const renderGenericMapFile = (name) => {
+        const url = '/maps/' + encodeURIComponent(name);
+
+        return fetch(url)
+          .then((response) => {
+            if (!response.ok) throw new Error('Failed to load ' + name);
+            return response.json();
+          })
+          .then((data) => {
+            const layer = L.geoJSON(data, {
+              style: genericStyle,
+              interactive: false
+            }).addTo(map);
+
+            layerRegistry.set(name, [layer]);
+            return layer;
+          });
+      };
+
+      const setLayerVisibility = async (name, enabled) => {
+        if (!layerRegistry.has(name)) {
+          if (!enabled) return;
           try {
-            const data = JSON.parse(raw);
-            layerRegistry.set(name, [
-              L.geoJSON(data, {
-                style: genericStyle,
-                interactive: false
-              })
-            ]);
+            await renderGenericMapFile(name);
           } catch {
             return;
           }
         }
 
-        for (const layer of layerRegistry.get(name)) {
+        for (const layer of layerRegistry.get(name) || []) {
           if (enabled) {
             if (!map.hasLayer(layer)) layer.addTo(map);
           } else if (map.hasLayer(layer)) {
             map.removeLayer(layer);
           }
         }
-
-        if (enabled && map.hasLayer(perimeterMask)) {
-          perimeterMask.bringToFront();
-        }
       };
 
-      document.querySelectorAll('[data-map-file]').forEach((input) => {
+      const manifestResponse = await fetch('/maps/manifest.json');
+
+      if (manifestResponse.ok) {
+        const manifest = await manifestResponse.json();
+        const files = Array.isArray(manifest.files) ? manifest.files : [];
+        const list = document.getElementById('mapFileList');
+        const count = document.getElementById('mapFileCount');
+
+        if (count) count.textContent = String(files.length);
+
+        if (list) {
+          list.innerHTML = '';
+
+          for (const name of files) {
+            const row = document.createElement('label');
+            row.className = 'map-file-row';
+
+            const info = document.createElement('span');
+            const title = document.createElement('strong');
+            const path = document.createElement('small');
+
+            title.textContent = name;
+            path.textContent = 'maps/' + name;
+
+            info.append(title, path);
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked =
+              name === 'campus.geojson' ||
+              name === 'perimeter.geojson';
+            checkbox.setAttribute('data-map-file', name);
+
+            row.append(info, checkbox);
+            list.appendChild(row);
+
+            checkbox.addEventListener('change', () => {
+              void setLayerVisibility(name, checkbox.checked);
+            });
+          }
+        }
+      }
+
+            document.querySelectorAll('[data-map-file]').forEach((input) => {
         input.addEventListener('change', (event) => {
           const checkbox = event.currentTarget;
           setLayerVisibility(
@@ -545,32 +573,6 @@ const mapData = Object.fromEntries(
           );
         });
       });
-
-      const devPanel = document.getElementById('devPanel');
-      const closeDevPanel = () => {
-        devPanel?.classList.remove('is-open');
-        devPanel?.setAttribute('aria-hidden', 'true');
-      };
-
-      const toggleDevPanel = () => {
-        const open = !devPanel?.classList.contains('is-open');
-        devPanel?.classList.toggle('is-open', open);
-        devPanel?.setAttribute('aria-hidden', String(!open));
-      };
-
-      window.addEventListener('keydown', (event) => {
-        if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'j') {
-          event.preventDefault();
-          event.stopPropagation();
-          toggleDevPanel();
-        }
-
-        if (event.key === 'Escape') {
-          closeDevPanel();
-        }
-      }, true);
-
-      document.getElementById('devPanelClose')?.addEventListener('click', closeDevPanel);
 
       document.getElementById('resetMapView')?.addEventListener('click', () => {
         map.setView(center, perimeterZoom, { animate: true });
