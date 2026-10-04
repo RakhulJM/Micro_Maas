@@ -39,13 +39,24 @@ import 'leaflet/dist/leaflet.css';
       const note = document.getElementById('terrainNote');
 
       try {
-        const perimeterResponse = await fetch('/maps/perimeter.geojson');
+        const [perimeterResponse, terrainResponse] = await Promise.all([
+          fetch('/maps/perimeter.geojson'),
+          fetch('/maps/terrain/output_hh.tif')
+        ]);
+
         if (!perimeterResponse.ok) {
           throw new Error('Perimeter could not be loaded.');
         }
 
+        if (!terrainResponse.ok) {
+          throw new Error('GeoTIFF could not be loaded.');
+        }
+
         const perimeterData = await perimeterResponse.json();
+        const terrainBuffer = await terrainResponse.arrayBuffer();
+
         const perimeterFeature = perimeterData.features?.[0];
+
         if (!perimeterFeature) {
           throw new Error('Perimeter is empty.');
         }
@@ -79,36 +90,124 @@ import 'leaflet/dist/leaflet.css';
           preferCanvas: true
         }).setView(center, perimeterZoom);
 
-        // The COP30 GeoTIFF remains the source file in the repository.
-        // This compact browser dataset is extracted directly from that GeoTIFF
-        // so the map does not need an image overlay or a TIFF decoder in-browser.
-        const terrainResponse = await fetch('/maps/terrain/terrain-data.json');
-        if (!terrainResponse.ok) {
-          throw new Error('Terrain data could not be loaded.');
-        }
-
-        const terrain = await terrainResponse.json();
-
-        const compressed = Uint8Array.from(
-          atob(terrain.values),
-          (character) => character.charCodeAt(0)
+        // geotiff.js exposes fromArrayBuffer as a named export.
+        const geotiff = await import(
+          'https://cdn.jsdelivr.net/npm/geotiff@2.1.3/+esm'
         );
 
-        if (!('DecompressionStream' in window)) {
-          throw new Error('This browser does not support terrain data decoding.');
+        const fromArrayBuffer =
+          geotiff.fromArrayBuffer ||
+          geotiff.default?.fromArrayBuffer;
+
+        if (typeof fromArrayBuffer !== 'function') {
+          throw new Error('GeoTIFF decoder could not be initialized.');
         }
 
-        const decompression = new DecompressionStream('deflate');
-        const raw = await new Response(
-          new Blob([compressed]).stream().pipeThrough(decompression)
-        ).arrayBuffer();
+        const tiff = await fromArrayBuffer(terrainBuffer);
+        const image = await tiff.getImage();
 
-        const elevation = new Uint16Array(raw);
+        const width = image.getWidth();
+        const height = image.getHeight();
+        const samplesPerPixel = image.getSamplesPerPixel();
+
+        if (!width || !height) {
+          throw new Error('GeoTIFF has no raster dimensions.');
+        }
+
+        if (samplesPerPixel < 1) {
+          throw new Error('GeoTIFF contains no raster samples.');
+        }
+
+        const bbox = image.getBoundingBox();
+
+        if (!Array.isArray(bbox) || bbox.length !== 4) {
+          throw new Error('GeoTIFF has no geographic bounding box.');
+        }
+
+        const [minX, minY, maxX, maxY] = bbox.map(Number);
+
+        if (
+          !Number.isFinite(minX) ||
+          !Number.isFinite(minY) ||
+          !Number.isFinite(maxX) ||
+          !Number.isFinite(maxY) ||
+          maxX <= minX ||
+          maxY <= minY
+        ) {
+          throw new Error('GeoTIFF geographic bounds are invalid.');
+        }
+
+        // The supplied COP30 file is WGS84 geographic data.
+        if (
+          minX < -180 ||
+          maxX > 180 ||
+          minY < -90 ||
+          maxY > 90
+        ) {
+          throw new Error('GeoTIFF is not in WGS84 geographic coordinates.');
+        }
+
+        const rasterResult = await image.readRasters({
+          samples: [0],
+          interleave: false
+        });
+
+        const raster = rasterResult[0];
+
+        if (!raster) {
+          throw new Error('GeoTIFF elevation raster could not be read.');
+        }
+
+        const nodata =
+          typeof image.getGDALNoData === 'function'
+            ? image.getGDALNoData()
+            : null;
+
+        let minElevation = Infinity;
+        let maxElevation = -Infinity;
+
+        for (let i = 0; i < raster.length; i += 1) {
+          const value = Number(raster[i]);
+
+          if (!Number.isFinite(value)) continue;
+
+          if (
+            nodata !== null &&
+            Number.isFinite(Number(nodata)) &&
+            value === Number(nodata)
+          ) {
+            continue;
+          }
+
+          minElevation = Math.min(minElevation, value);
+          maxElevation = Math.max(maxElevation, value);
+        }
+
+        if (
+          !Number.isFinite(minElevation) ||
+          !Number.isFinite(maxElevation)
+        ) {
+          throw new Error('GeoTIFF contains no usable elevation values.');
+        }
 
         const sample = (x, y) => {
-          const px = Math.max(0, Math.min(terrain.width - 1, x));
-          const py = Math.max(0, Math.min(terrain.height - 1, y));
-          return elevation[py * terrain.width + px] * terrain.scale_m;
+          const px = Math.max(0, Math.min(width - 1, x));
+          const py = Math.max(0, Math.min(height - 1, y));
+          return Number(raster[py * width + px]);
+        };
+
+        const validElevation = (value) => {
+          if (!Number.isFinite(value)) return false;
+
+          if (
+            nodata !== null &&
+            Number.isFinite(Number(nodata)) &&
+            value === Number(nodata)
+          ) {
+            return false;
+          }
+
+          return true;
         };
 
         const getColor = (value, shade) => {
@@ -116,8 +215,8 @@ import 'leaflet/dist/leaflet.css';
             0,
             Math.min(
               1,
-              (value - terrain.min_m) /
-                Math.max(terrain.max_m - terrain.min_m, 1)
+              (value - minElevation) /
+                Math.max(maxElevation - minElevation, 1e-9)
             )
           );
 
@@ -171,8 +270,8 @@ import 'leaflet/dist/leaflet.css';
               return canvas;
             }
 
-            const image = context.createImageData(256, 256);
-            const data = image.data;
+            const imageData = context.createImageData(256, 256);
+            const data = imageData.data;
             const world = 2 ** coords.z;
 
             const west = (coords.x / world) * 360 - 180;
@@ -204,24 +303,23 @@ import 'leaflet/dist/leaflet.css';
 
               for (let px = 0; px < 256; px += 1) {
                 const lon = west + (px / 255) * lonSpan;
+                const index = (py * 256 + px) * 4;
 
                 const rx =
-                  (lon - terrain.bounds[0]) /
-                  (terrain.bounds[2] - terrain.bounds[0]) *
-                  (terrain.width - 1);
+                  (lon - minX) /
+                  (maxX - minX) *
+                  (width - 1);
 
                 const ry =
-                  (terrain.bounds[3] - lat) /
-                  (terrain.bounds[3] - terrain.bounds[1]) *
-                  (terrain.height - 1);
-
-                const index = (py * 256 + px) * 4;
+                  (maxY - lat) /
+                  (maxY - minY) *
+                  (height - 1);
 
                 if (
                   rx < 0 ||
                   ry < 0 ||
-                  rx > terrain.width - 1 ||
-                  ry > terrain.height - 1
+                  rx > width - 1 ||
+                  ry > height - 1
                 ) {
                   data[index] = 238;
                   data[index + 1] = 241;
@@ -232,8 +330,8 @@ import 'leaflet/dist/leaflet.css';
 
                 const x0 = Math.floor(rx);
                 const y0 = Math.floor(ry);
-                const x1 = Math.min(terrain.width - 1, x0 + 1);
-                const y1 = Math.min(terrain.height - 1, y0 + 1);
+                const x1 = Math.min(width - 1, x0 + 1);
+                const y1 = Math.min(height - 1, y0 + 1);
 
                 const fx = rx - x0;
                 const fy = ry - y0;
@@ -243,31 +341,61 @@ import 'leaflet/dist/leaflet.css';
                 const e01 = sample(x0, y1);
                 const e11 = sample(x1, y1);
 
+                const neighbors = [
+                  e00,
+                  e10,
+                  e01,
+                  e11
+                ].filter(validElevation);
+
+                if (!neighbors.length) {
+                  data[index] = 238;
+                  data[index + 1] = 241;
+                  data[index + 2] = 243;
+                  data[index + 3] = 255;
+                  continue;
+                }
+
+                const safeE00 = validElevation(e00) ? e00 : neighbors[0];
+                const safeE10 = validElevation(e10) ? e10 : safeE00;
+                const safeE01 = validElevation(e01) ? e01 : safeE00;
+                const safeE11 = validElevation(e11) ? e11 : safeE00;
+
                 const value =
-                  e00 * (1 - fx) * (1 - fy) +
-                  e10 * fx * (1 - fy) +
-                  e01 * (1 - fx) * fy +
-                  e11 * fx * fy;
+                  safeE00 * (1 - fx) * (1 - fy) +
+                  safeE10 * fx * (1 - fy) +
+                  safeE01 * (1 - fx) * fy +
+                  safeE11 * fx * fy;
 
                 const left = sample(
                   Math.max(0, x0 - 1),
                   Math.round(ry)
                 );
+
                 const right = sample(
-                  Math.min(terrain.width - 1, x1 + 1),
+                  Math.min(width - 1, x1 + 1),
                   Math.round(ry)
                 );
+
                 const up = sample(
                   Math.round(rx),
                   Math.max(0, y0 - 1)
                 );
+
                 const down = sample(
                   Math.round(rx),
-                  Math.min(terrain.height - 1, y1 + 1)
+                  Math.min(height - 1, y1 + 1)
                 );
 
-                const dx = right - left;
-                const dy = down - up;
+                const dx =
+                  validElevation(right) && validElevation(left)
+                    ? right - left
+                    : 0;
+
+                const dy =
+                  validElevation(down) && validElevation(up)
+                    ? down - up
+                    : 0;
 
                 const slope = Math.sqrt(dx * dx + dy * dy);
 
@@ -277,8 +405,7 @@ import 'leaflet/dist/leaflet.css';
                   dy * 0.012 -
                   Math.min(0.10, slope * 0.002);
 
-                const [red, green, blue] =
-                  getColor(value, shade);
+                const [red, green, blue] = getColor(value, shade);
 
                 data[index] = red;
                 data[index + 1] = green;
@@ -287,20 +414,20 @@ import 'leaflet/dist/leaflet.css';
               }
             }
 
-            context.putImageData(image, 0, 0);
+            context.putImageData(imageData, 0, 0);
             done(null, canvas);
             return canvas;
           }
         });
 
-        const terrainLayer = new TerrainGridLayer({
+        new TerrainGridLayer({
           tileSize: 256,
           updateWhenZooming: false,
           keepBuffer: 2,
           noWrap: true
         }).addTo(map);
 
-        // Mask only the area outside the existing perimeter.
+        // Keep the exact existing 1 km perimeter; do not alter its geometry.
         const outer = [
           [center.lat - 1, center.lng - 1],
           [center.lat - 1, center.lng + 1],
@@ -332,9 +459,12 @@ import 'leaflet/dist/leaflet.css';
             current.lat - center.lat
           );
 
-          const latOffset = Math.cos(bearing) * radius / 111320;
+          const latOffset =
+            Math.cos(bearing) * radius / 111320;
+
           const lonOffset =
-            Math.sin(bearing) * radius /
+            Math.sin(bearing) *
+            radius /
             (111320 * Math.cos(center.lat * Math.PI / 180));
 
           map.setView(
@@ -405,10 +535,15 @@ import 'leaflet/dist/leaflet.css';
         note?.setAttribute('data-ready', 'true');
         setTimeout(() => map.invalidateSize(), 100);
       } catch (error) {
-        console.error(error);
+        console.error('CampusMaaS terrain error:', error);
 
         if (note) {
-          note.textContent = 'Terrain failed to load';
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error);
+
+          note.textContent = 'Terrain failed to load · ' + message;
         }
       }
     });
