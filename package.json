@@ -1,0 +1,22 @@
+{
+  "name": "micro-maas",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/sync-maps.mjs",
+    "dev": "astro dev",
+    "prebuild": "node scripts/sync-maps.mjs",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "astro": "^5.14.3",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.20",
+    "typescript": "^5.9.2"
+  }
+}

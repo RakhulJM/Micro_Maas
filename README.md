@@ -3,11 +3,11 @@
 ## Clone
 
 ```bash
-git clone https://github.com/RakhulJM/Micro_Maas.git
+git clone https://github.com/ATITYARAM/Micro_Maas.git
 cd Micro_Maas
 ```
 
-## Virtual Environment
+## Python Environment
 
 ```bash
 python3 -m venv .venv
@@ -16,32 +16,31 @@ source .venv/bin/activate
 
 Windows:
 
-```bash
+```powershell
 .venv\Scripts\activate
 ```
 
-## Dependencies
+## Python Dependencies
 
 ```bash
 pip install pandas networkx geopy
 ```
 
-## Run
-
-### Graph Router
+## Astro
 
 ```bash
-python3 ad_router.py
+npm install
+npm run dev
 ```
 
-### Route Calculator
+Build:
 
 ```bash
-python3 router.py
+npm run build
 ```
 
-## Deactivate
+Preview:
 
 ```bash
-deactivate
+npm run preview
 ```
