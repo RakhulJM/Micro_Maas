@@ -179,10 +179,12 @@ import 'leaflet/dist/leaflet.css';
       }).addTo(map);
 
       /*
-       * Building labels are small, borderless map text positioned at
-       * the center of each named building. No popup/tooltip boxes.
+       * Each building gets a fixed label size calculated from its own
+       * bounding box at the base map zoom. The label then stays the
+       * same screen size while zooming.
        */
       const buildingLabels = [];
+      const labelBaseZoom = 18;
 
       for (const feature of campusData.features || []) {
         const name = feature?.properties?.name;
@@ -196,10 +198,29 @@ import 'leaflet/dist/leaflet.css';
 
         if (!bounds.isValid()) continue;
 
+        const northWest = map.project(bounds.getNorthWest(), labelBaseZoom);
+        const southEast = map.project(bounds.getSouthEast(), labelBaseZoom);
+
+        const boxWidth = Math.max(1, Math.abs(southEast.x - northWest.x));
+        const boxHeight = Math.max(1, Math.abs(southEast.y - northWest.y));
+        const maxDimension = Math.max(boxWidth, boxHeight);
+
+        // Label size is derived from the building's maximum dimension.
+        const fontSize = Math.max(7, Math.min(13, maxDimension * 0.075));
+        const maxLabelWidth = Math.max(18, boxWidth * 0.82);
+
+        const safeName = String(name)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+
         const label = L.marker(bounds.getCenter(), {
           icon: L.divIcon({
             className: 'building-label',
-            html: '<span>' + String(name).replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>',
+            html:
+              '<span style="--building-label-size:' + fontSize + 'px;--building-label-width:' +
+              maxLabelWidth + 'px">' + safeName + '</span>',
             iconSize: [0, 0],
             iconAnchor: [0, 0]
           }),
