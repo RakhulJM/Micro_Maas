@@ -15,18 +15,64 @@ import 'leaflet/dist/leaflet.css';
 
       <div class="top-actions">
         <button class="ghost-btn" type="button" id="locateBtn">◎ My location</button>
-        <button class="map-mode-toggle" type="button" id="mapModeToggle" aria-label="Switch map view" title="Switch map view">⇄</button>
+        <a class="map-switch" href="/terrain" aria-label="Open terrain view">
+          <span class="map-switch-label">Map</span>
+          <span class="map-switch-track" aria-hidden="true"><span class="map-switch-thumb"></span></span>
+          <span class="map-switch-label">Terrain</span>
+        </a>
         <button class="profile" type="button" aria-label="Profile">AR</button>
       </div>
     </header>
 
     <div id="map" class="map map-local" aria-label="Local campus map"></div>
-    <div id="googleMap" class="map map-google is-hidden" aria-label="Google campus map"></div>
-
     <div class="map-controls" aria-label="Map controls">
       <button type="button" data-map-action="zoom-in" aria-label="Zoom in">+</button>
       <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
     </div>
+    <button
+      class="path-toggle"
+      id="pathToggle"
+      type="button"
+      aria-label="Highlight pedestrian paths"
+      aria-pressed="false"
+      title="Highlight pedestrian paths"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M7 4v4c0 3 10 2 10 6v6" />
+        <circle cx="7" cy="4" r="1.7" />
+        <circle cx="17" cy="20" r="1.7" />
+      </svg>
+    </button>
+    <button
+      class="route-toggle"
+      id="routeToggle"
+      type="button"
+      aria-label="Test walking route"
+      aria-pressed="false"
+      title="Test walking route"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="6" cy="18" r="2.2" />
+        <circle cx="18" cy="6" r="2.2" />
+        <path d="M8 16c2.5-2 3-6 4.5-7.5C14 7 15.5 8 18 6" />
+      </svg>
+    </button>
+
+    <section class="route-card" id="routeCard" aria-live="polite" aria-hidden="true">
+      <div class="route-card-top">
+        <div>
+          <span class="route-card-kicker">WALKING TEST</span>
+          <strong id="routeStatus">Select a start point</strong>
+        </div>
+        <button type="button" class="route-card-close" id="routeClear" aria-label="Clear route">×</button>
+      </div>
+      <div class="route-result" id="routeResult">
+        <span>Distance</span>
+        <strong id="routeDistance">—</strong>
+        <span>Time</span>
+        <strong id="routeTime">—</strong>
+      </div>
+    </section>
 
     <div class="map-note" id="mapNote">Local map · 1 km boundary</div>
 
@@ -63,12 +109,7 @@ import 'leaflet/dist/leaflet.css';
 
             <div class="zoom-setting">
               <span>Maximum zoom</span>
-              <strong>23</strong>
-            </div>
-
-            <div class="zoom-setting">
-              <span>Override</span>
-              <strong>Shift + wheel</strong>
+              <strong>25</strong>
             </div>
 
             <button type="button" class="dev-action" id="resetMapView">Reset map view</button>
@@ -81,66 +122,21 @@ import 'leaflet/dist/leaflet.css';
   </main>
 
   <script>
-    const googleApiKey = import.meta.env.PUBLIC_GOOGLE_MAPS_API_KEY || '';
-    const googleMapId = import.meta.env.PUBLIC_GOOGLE_MAP_ID || 'DEMO_MAP_ID';
-
-    const loadGoogleMaps = (() => {
-      let promise;
-
-      return () => {
-        if (promise) return promise;
-
-        promise = new Promise((resolve, reject) => {
-          if (window.google?.maps) {
-            resolve(window.google.maps);
-            return;
-          }
-
-          if (!googleApiKey) {
-            reject(new Error('PUBLIC_GOOGLE_MAPS_API_KEY is not configured.'));
-            return;
-          }
-
-          const script = document.createElement('script');
-          script.src =
-            'https://maps.googleapis.com/maps/api/js?key=' +
-            encodeURIComponent(googleApiKey) +
-            '&loading=async&v=weekly';
-          script.async = true;
-          script.defer = true;
-
-          script.onload = () => {
-            if (window.google?.maps) {
-              resolve(window.google.maps);
-            } else {
-              reject(new Error('Google Maps API loaded without maps.'));
-            }
-          };
-
-          script.onerror = () => {
-            reject(new Error('Google Maps API could not be loaded.'));
-          };
-
-          document.head.appendChild(script);
-        });
-
-        return promise;
-      };
-    })();
-
     import('leaflet').then(async ({ default: L }) => {
-      const [campusResponse, perimeterResponse] = await Promise.all([
+      const [campusResponse, perimeterResponse, pathResponse] = await Promise.all([
         fetch('/maps/export.geojson'),
-        fetch('/maps/perimeter.geojson')
+        fetch('/maps/perimeter.geojson'),
+        fetch('/maps/pedestrian_paths.geojson')
       ]);
 
-      if (!campusResponse.ok || !perimeterResponse.ok) {
+      if (!campusResponse.ok || !perimeterResponse.ok || !pathResponse.ok) {
         throw new Error('Campus map data could not be loaded.');
       }
 
-      const [campusData, perimeterData] = await Promise.all([
+      const [campusData, perimeterData, pedestrianPathData] = await Promise.all([
         campusResponse.json(),
-        perimeterResponse.json()
+        perimeterResponse.json(),
+        pathResponse.json()
       ]);
 
       const perimeterFeature = perimeterData.features[0];
@@ -162,9 +158,9 @@ import 'leaflet/dist/leaflet.css';
 
       const map = L.map('map', {
         zoomControl: false,
-        minZoom: 1,
-        maxZoom: 23,
-        scrollWheelZoom: false,
+        minZoom: 18,
+        maxZoom: 25,
+        scrollWheelZoom: true,
         maxBounds: circleBounds,
         maxBoundsViscosity: 1
       }).setView(center, 18);
@@ -280,6 +276,275 @@ import 'leaflet/dist/leaflet.css';
       baseLayer.addTo(map);
       roadCasing.addTo(map);
       roads.addTo(map);
+
+      const pedestrianPathCasing = L.geoJSON(pedestrianPathData, {
+        style: {
+          color: '#ffffff',
+          weight: 7,
+          opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round'
+        },
+        interactive: false
+      });
+
+      const pedestrianPaths = L.geoJSON(pedestrianPathData, {
+        style: {
+          color: '#2563eb',
+          weight: 4,
+          opacity: 1,
+          lineCap: 'round',
+          lineJoin: 'round'
+        },
+        interactive: false
+      });
+
+      /*
+       * Lightweight pedestrian-network routing for the first prototype.
+       * Clicks are snapped to the nearest pedestrian segment and Dijkstra
+       * finds the shortest connected walking route.
+       */
+      const pedestrianSegments = [];
+      const pedestrianGraph = new Map();
+
+      const graphKey = (coordinate) =>
+        Number(coordinate[0]).toFixed(7) + ',' +
+        Number(coordinate[1]).toFixed(7);
+
+      const distanceBetween = (a, b) =>
+        L.latLng(Number(a[1]), Number(a[0]))
+          .distanceTo(L.latLng(Number(b[1]), Number(b[0])));
+
+      const addGraphEdge = (aKey, bKey, distance) => {
+        if (!pedestrianGraph.has(aKey)) pedestrianGraph.set(aKey, []);
+        if (!pedestrianGraph.has(bKey)) pedestrianGraph.set(bKey, []);
+
+        pedestrianGraph.get(aKey).push({ node: bKey, distance });
+        pedestrianGraph.get(bKey).push({ node: aKey, distance });
+      };
+
+      for (const feature of pedestrianPathData.features || []) {
+        const geometry = feature?.geometry;
+        if (!geometry) continue;
+
+        const lines = geometry.type === 'LineString'
+          ? [geometry.coordinates]
+          : geometry.type === 'MultiLineString'
+            ? geometry.coordinates
+            : [];
+
+        for (const line of lines) {
+          if (!Array.isArray(line) || line.length < 2) continue;
+
+          const keys = line.map(graphKey);
+
+          for (let i = 0; i < line.length - 1; i += 1) {
+            const a = line[i];
+            const b = line[i + 1];
+            const aKey = keys[i];
+            const bKey = keys[i + 1];
+            const distance = distanceBetween(a, b);
+
+            if (distance <= 0) continue;
+
+            addGraphEdge(aKey, bKey, distance);
+            pedestrianSegments.push({
+              a,
+              b,
+              aKey,
+              bKey,
+              distance
+            });
+          }
+        }
+      }
+
+      const projectToSegment = (point, a, b) => {
+        const refLat = point.lat * Math.PI / 180;
+        const scaleX = 111320 * Math.cos(refLat);
+        const scaleY = 111320;
+
+        const px = point.lng * scaleX;
+        const py = point.lat * scaleY;
+        const ax = Number(a[0]) * scaleX;
+        const ay = Number(a[1]) * scaleY;
+        const bx = Number(b[0]) * scaleX;
+        const by = Number(b[1]) * scaleY;
+
+        const dx = bx - ax;
+        const dy = by - ay;
+        const lengthSquared = dx * dx + dy * dy;
+
+        if (lengthSquared === 0) {
+          return {
+            coordinate: [Number(a[0]), Number(a[1])],
+            fraction: 0,
+            distance: Math.hypot(px - ax, py - ay)
+          };
+        }
+
+        const rawFraction = ((px - ax) * dx + (py - ay) * dy) / lengthSquared;
+        const fraction = Math.max(0, Math.min(1, rawFraction));
+        const x = ax + fraction * dx;
+        const y = ay + fraction * dy;
+
+        return {
+          coordinate: [
+            x / scaleX,
+            y / scaleY
+          ],
+          fraction,
+          distance: Math.hypot(px - x, py - y)
+        };
+      };
+
+      const snapToPedestrianPath = (latlng) => {
+        let best = null;
+
+        for (const segment of pedestrianSegments) {
+          const projection = projectToSegment(latlng, segment.a, segment.b);
+          const candidate = {
+            ...projection,
+            segment
+          };
+
+          if (!best || candidate.distance < best.distance) {
+            best = candidate;
+          }
+        }
+
+        if (!best) return null;
+
+        return {
+          ...best,
+          latlng: L.latLng(
+            Number(best.coordinate[1]),
+            Number(best.coordinate[0])
+          )
+        };
+      };
+
+      const routeBetweenSnaps = (startSnap, endSnap) => {
+        const startKey = 'snap:start';
+        const endKey = 'snap:end';
+        const graph = new Map();
+
+        for (const [key, edges] of pedestrianGraph.entries()) {
+          graph.set(key, edges.map((edge) => ({ ...edge })));
+        }
+
+        const connectSnap = (snapKey, snap) => {
+          graph.set(snapKey, []);
+
+          const { segment, fraction } = snap;
+          const aDistance = segment.distance * fraction;
+          const bDistance = segment.distance * (1 - fraction);
+
+          graph.get(snapKey).push(
+            { node: segment.aKey, distance: aDistance },
+            { node: segment.bKey, distance: bDistance }
+          );
+
+          if (graph.has(segment.aKey)) {
+            graph.get(segment.aKey).push({ node: snapKey, distance: aDistance });
+          }
+
+          if (graph.has(segment.bKey)) {
+            graph.get(segment.bKey).push({ node: snapKey, distance: bDistance });
+          }
+        };
+
+        connectSnap(startKey, startSnap);
+        connectSnap(endKey, endSnap);
+
+        const sameSegment =
+          startSnap.segment.aKey === endSnap.segment.aKey &&
+          startSnap.segment.bKey === endSnap.segment.bKey ||
+          startSnap.segment.aKey === endSnap.segment.bKey &&
+          startSnap.segment.bKey === endSnap.segment.aKey;
+
+        if (sameSegment) {
+          const directDistance =
+            Math.abs(startSnap.fraction - endSnap.fraction) *
+            startSnap.segment.distance;
+
+          graph.get(startKey).push({ node: endKey, distance: directDistance });
+          graph.get(endKey).push({ node: startKey, distance: directDistance });
+        }
+
+        const distances = new Map([[startKey, 0]]);
+        const previous = new Map();
+        const visited = new Set();
+        const queue = [{ node: startKey, distance: 0 }];
+
+        while (queue.length) {
+          queue.sort((a, b) => a.distance - b.distance);
+          const current = queue.shift();
+
+          if (!current || visited.has(current.node)) continue;
+          visited.add(current.node);
+
+          if (current.node === endKey) break;
+
+          for (const edge of graph.get(current.node) || []) {
+            if (visited.has(edge.node)) continue;
+
+            const nextDistance = current.distance + edge.distance;
+
+            if (nextDistance < (distances.get(edge.node) ?? Infinity)) {
+              distances.set(edge.node, nextDistance);
+              previous.set(edge.node, current.node);
+              queue.push({
+                node: edge.node,
+                distance: nextDistance
+              });
+            }
+          }
+        }
+
+        if (!distances.has(endKey)) return null;
+
+        const nodeKeys = [];
+        let cursor = endKey;
+
+        while (cursor) {
+          nodeKeys.push(cursor);
+          cursor = previous.get(cursor);
+        }
+
+        nodeKeys.reverse();
+
+        const coordinateByKey = new Map();
+
+        for (const feature of pedestrianPathData.features || []) {
+          const geometry = feature?.geometry;
+          if (!geometry) continue;
+
+          const lines = geometry.type === 'LineString'
+            ? [geometry.coordinates]
+            : geometry.type === 'MultiLineString'
+              ? geometry.coordinates
+              : [];
+
+          for (const line of lines || []) {
+            for (const coordinate of line || []) {
+              coordinateByKey.set(graphKey(coordinate), coordinate);
+            }
+          }
+        }
+
+        const routeCoordinates = nodeKeys
+          .map((key) => coordinateByKey.get(key))
+          .filter(Boolean);
+
+        routeCoordinates.unshift(startSnap.coordinate);
+        routeCoordinates.push(endSnap.coordinate);
+
+        return {
+          coordinates: routeCoordinates,
+          distance: distances.get(endKey)
+        };
+      };
 
       /*
        * Building labels scale with the actual on-screen building bounds.
@@ -403,40 +668,14 @@ import 'leaflet/dist/leaflet.css';
         interactive: false
       }).addTo(map);
 
-      // Normal zoom-out stops at the 1 km view.
+      // Keep the 1 km view as the normal zoom-out floor.
+      // All zooming uses the standard map interactions and +/- controls.
       const perimeterZoom = 18;
-      const maxZoom = 23;
+      const maxZoom = 25;
 
-      // Leaflet's real minimum is low enough for intentional overrides.
-      // The 1 km level is enforced by our normal interaction handlers.
-      map.setMinZoom(1);
+      map.setMinZoom(perimeterZoom);
       map.setMaxZoom(maxZoom);
       map.setView(center, perimeterZoom, { animate: false });
-
-      // Normal wheel scrolling respects the minimum zoom.
-      // Shift + wheel is the intentional override and may zoom farther out.
-      const mapElement = map.getContainer();
-
-      mapElement.addEventListener('wheel', (event) => {
-        event.preventDefault();
-
-        const direction = event.deltaY > 0 ? -1 : 1;
-        const allowBeyondLimit = event.shiftKey;
-        const currentZoom = map.getZoom();
-
-        if (direction < 0 && currentZoom <= perimeterZoom && !allowBeyondLimit) {
-          return;
-        }
-
-        const nextZoom = allowBeyondLimit
-          ? currentZoom + direction
-          : Math.max(perimeterZoom, currentZoom + direction);
-
-        map.setZoom(
-          Math.max(1, Math.min(maxZoom, nextZoom)),
-          { animate: false }
-        );
-      }, { passive: false });
 
       function constrainToPerimeter() {
         const current = map.getCenter();
@@ -613,130 +852,187 @@ import 'leaflet/dist/leaflet.css';
         }
       }
 
-      const localMapElement = document.getElementById('map');
-      const googleMapElement = document.getElementById('googleMap');
-      const mapModeToggle = document.getElementById('mapModeToggle');
-      const mapNote = document.getElementById('mapNote');
+      const pathToggle = document.getElementById('pathToggle');
+      let pedestrianPathsActive = false;
 
-      let googleMap = null;
-      let googleBoundaryMask = null;
-      let googleMode = false;
+      pathToggle?.addEventListener('click', () => {
+        pedestrianPathsActive = !pedestrianPathsActive;
 
-      const googleCenter = {
-        lat: center.lat,
-        lng: center.lng
+        for (const layer of [pedestrianPathCasing, pedestrianPaths]) {
+          if (pedestrianPathsActive) {
+            if (!map.hasLayer(layer)) layer.addTo(map);
+          } else if (map.hasLayer(layer)) {
+            map.removeLayer(layer);
+          }
+        }
+
+        pathToggle.classList.toggle('is-active', pedestrianPathsActive);
+        pathToggle.setAttribute('aria-pressed', String(pedestrianPathsActive));
+      });
+
+      const routeToggle = document.getElementById('routeToggle');
+      const routeCard = document.getElementById('routeCard');
+      const routeStatus = document.getElementById('routeStatus');
+      const routeDistance = document.getElementById('routeDistance');
+      const routeTime = document.getElementById('routeTime');
+      const routeClear = document.getElementById('routeClear');
+
+      const walkingSpeedMetersPerSecond = 1.4;
+      const snapTolerancePixels = 22;
+
+      let routeModeActive = false;
+      let routeStart = null;
+      let routeEnd = null;
+      let routeStartMarker = null;
+      let routeEndMarker = null;
+      let routeLine = null;
+      let routeLineCasing = null;
+
+      const showRouteCard = (visible = true) => {
+        routeCard?.classList.toggle('is-open', visible);
+        routeCard?.setAttribute('aria-hidden', String(!visible));
       };
 
-      const buildGoogleBoundaryMask = (googleMaps) => {
-        const outer = [
-          { lat: center.lat - 1, lng: center.lng - 1 },
-          { lat: center.lat - 1, lng: center.lng + 1 },
-          { lat: center.lat + 1, lng: center.lng + 1 },
-          { lat: center.lat + 1, lng: center.lng - 1 }
-        ];
+      const clearRouteTest = (keepMode = false) => {
+        routeStart = null;
+        routeEnd = null;
 
-        const inner = ring
-          .map(([lon, lat]) => ({ lat, lng: lon }))
-          .reverse();
+        if (routeStartMarker) map.removeLayer(routeStartMarker);
+        if (routeEndMarker) map.removeLayer(routeEndMarker);
+        if (routeLine) map.removeLayer(routeLine);
+        if (routeLineCasing) map.removeLayer(routeLineCasing);
 
-        return new googleMaps.Polygon({
-          paths: [outer, inner],
-          strokeOpacity: 0,
-          fillColor: '#eef1f3',
-          fillOpacity: 0.94,
-          clickable: false,
-          map: googleMap
-        });
+        routeStartMarker = null;
+        routeEndMarker = null;
+        routeLine = null;
+        routeLineCasing = null;
+
+        routeDistance.textContent = '—';
+        routeTime.textContent = '—';
+        routeStatus.textContent = 'Select a start point';
+
+        if (!keepMode) {
+          routeModeActive = false;
+          routeToggle?.classList.remove('is-active');
+          routeToggle?.setAttribute('aria-pressed', 'false');
+          showRouteCard(false);
+        } else {
+          showRouteCard(true);
+        }
       };
 
-      const showGoogleMap = async () => {
-        if (!googleMap) {
-          try {
-            const googleMaps = await loadGoogleMaps();
-            const mapsLibrary = await googleMaps.importLibrary('maps');
+      const createRouteMarker = (latlng, label, className) =>
+        L.marker(latlng, {
+          icon: L.divIcon({
+            className: 'route-point-marker ' + className,
+            html: '<span><b>' + label + '</b></span>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          }),
+          interactive: false,
+          keyboard: false
+        }).addTo(map);
 
-            const Map = mapsLibrary.Map;
+      routeToggle?.addEventListener('click', () => {
+        routeModeActive = !routeModeActive;
 
-            googleMap = new Map(googleMapElement, {
-              center: googleCenter,
-              zoom: 18,
-              minZoom: 1,
-              maxZoom: 23,
-              mapId: googleMapId,
-              streetViewControl: false,
-              fullscreenControl: false,
-              mapTypeControl: false,
-              zoomControl: false,
-              clickableIcons: false,
-              gestureHandling: 'greedy',
-              restriction: {
-                latLngBounds: {
-                  north: center.lat + latRadius,
-                  south: center.lat - latRadius,
-                  east: center.lng + lonRadius,
-                  west: center.lng - lonRadius
-                },
-                strictBounds: true
-              }
-            });
+        routeToggle.classList.toggle('is-active', routeModeActive);
+        routeToggle.setAttribute('aria-pressed', String(routeModeActive));
 
-            googleBoundaryMask = buildGoogleBoundaryMask(googleMaps);
-          } catch (error) {
-            console.error(error);
-            mapModeToggle?.classList.add('map-mode-error');
-            if (mapNote) {
-              mapNote.textContent = 'Google Maps requires an API key';
-            }
+        if (routeModeActive) {
+          clearRouteTest(true);
+          pedestrianPathsActive = true;
+          pedestrianPathCasing.addTo(map);
+          pedestrianPaths.addTo(map);
+          pathToggle?.classList.add('is-active');
+          pathToggle?.setAttribute('aria-pressed', 'true');
+          routeStatus.textContent = 'Select a start point';
+          showRouteCard(true);
+        } else {
+          clearRouteTest(false);
+        }
+      });
+
+      routeClear?.addEventListener('click', () => {
+        clearRouteTest(true);
+      });
+
+      map.on('click', (event) => {
+        if (!routeModeActive) return;
+
+        const snapped = snapToPedestrianPath(event.latlng);
+
+        if (!snapped) return;
+
+        const projected = map.latLngToContainerPoint(snapped.latlng);
+        const clicked = map.latLngToContainerPoint(event.latlng);
+        const pixelDistance = projected.distanceTo(clicked);
+
+        if (pixelDistance > snapTolerancePixels) return;
+
+        if (!routeStart) {
+          routeStart = snapped;
+          routeStartMarker = createRouteMarker(snapped.latlng, 'A', 'route-point-start');
+          routeStatus.textContent = 'Select an end point';
+          routeCard?.classList.add('is-open');
+          return;
+        }
+
+        if (!routeEnd) {
+          routeEnd = snapped;
+
+          if (routeStart.latlng.distanceTo(routeEnd.latlng) < 1) {
+            routeStatus.textContent = 'Choose a different end point';
+            routeEnd = null;
             return;
           }
-        }
+          routeEndMarker = createRouteMarker(snapped.latlng, 'B', 'route-point-end');
 
-        googleMode = true;
-        localMapElement?.classList.add('is-hidden');
-        googleMapElement?.classList.remove('is-hidden');
+          const route = routeBetweenSnaps(routeStart, routeEnd);
 
-        const localCenter = map.getCenter();
-        googleMap.setCenter({
-          lat: localCenter.lat,
-          lng: localCenter.lng
-        });
-        googleMap.setZoom(map.getZoom());
-
-        mapNote && (mapNote.textContent = 'Google map · live');
-        mapModeToggle?.setAttribute('title', 'Switch to local map');
-      };
-
-      const showLocalMap = () => {
-        if (!googleMode) return;
-
-        googleMode = false;
-        googleMapElement?.classList.add('is-hidden');
-        localMapElement?.classList.remove('is-hidden');
-
-        if (googleMap) {
-          const googleCenterNow = googleMap.getCenter();
-          const googleZoomNow = googleMap.getZoom();
-
-          if (googleCenterNow) {
-            map.setView(
-              [googleCenterNow.lat(), googleCenterNow.lng()],
-              googleZoomNow,
-              { animate: false }
-            );
+          if (!route) {
+            routeStatus.textContent = 'No connected pedestrian route';
+            routeDistance.textContent = '—';
+            routeTime.textContent = '—';
+            return;
           }
-        }
 
-        mapNote && (mapNote.textContent = 'Local map · 1 km boundary');
-        mapModeToggle?.setAttribute('title', 'Switch to Google map');
+          routeLineCasing = L.polyline(
+            route.coordinates.map(([lng, lat]) => [lat, lng]),
+            {
+              color: '#ffffff',
+              weight: 9,
+              opacity: 0.96,
+              lineCap: 'round',
+              lineJoin: 'round',
+              interactive: false
+            }
+          ).addTo(map);
 
-        setTimeout(() => map.invalidateSize(), 50);
-      };
+          routeLine = L.polyline(
+            route.coordinates.map(([lng, lat]) => [lat, lng]),
+            {
+              color: '#0f4fd8',
+              weight: 5,
+              opacity: 1,
+              lineCap: 'round',
+              lineJoin: 'round',
+              interactive: false
+            }
+          ).addTo(map);
 
-      mapModeToggle?.addEventListener('click', () => {
-        if (googleMode) {
-          showLocalMap();
-        } else {
-          void showGoogleMap();
+          const distanceMeters = route.distance;
+          const seconds = distanceMeters / walkingSpeedMetersPerSecond;
+
+          routeStatus.textContent = 'Route ready';
+          routeDistance.textContent =
+            distanceMeters < 1000
+              ? Math.round(distanceMeters) + ' m'
+              : (distanceMeters / 1000).toFixed(2) + ' km';
+          routeTime.textContent =
+            seconds < 60
+              ? Math.max(1, Math.round(seconds)) + ' sec'
+              : Math.max(1, Math.ceil(seconds / 60)) + ' min';
         }
       });
 
@@ -775,28 +1071,13 @@ import 'leaflet/dist/leaflet.css';
         button.addEventListener('click', () => {
           const action = button.getAttribute('data-map-action');
 
-          if (googleMode && googleMap) {
-            const current = googleMap.getZoom();
-
-            if (action === 'zoom-in') {
-              googleMap.setZoom(Math.min(maxZoom, current + 1));
-              return;
-            }
-
-            if (action === 'zoom-out') {
-              googleMap.setZoom(Math.max(1, current - 1));
-              return;
-            }
-          }
-
           if (action === 'zoom-in') {
             map.setZoom(Math.min(maxZoom, map.getZoom() + 1), { animate: true });
             return;
           }
 
           if (action === 'zoom-out') {
-            // The +/- control is an explicit override of the normal 1 km limit.
-            map.setZoom(Math.max(1, map.getZoom() - 1), { animate: true });
+            map.setZoom(Math.max(perimeterZoom, map.getZoom() - 1), { animate: true });
           }
         });
       });
@@ -809,15 +1090,6 @@ import 'leaflet/dist/leaflet.css';
             const location = L.latLng(coords.latitude, coords.longitude);
 
             if (center.distanceTo(location) > radius) return;
-
-            if (googleMode && googleMap) {
-              googleMap.setCenter({
-                lat: coords.latitude,
-                lng: coords.longitude
-              });
-              googleMap.setZoom(Math.max(googleMap.getZoom(), perimeterZoom));
-              return;
-            }
 
             map.setView(location, Math.max(map.getZoom(), perimeterZoom));
           },

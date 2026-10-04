@@ -1,0 +1,551 @@
+---
+import MainLayout from '../layouts/MainLayout.astro';
+import '../styles/global.css';
+import 'leaflet/dist/leaflet.css';
+---
+
+<MainLayout title="CampusMaaS · Terrain">
+  <main class="map-screen">
+    <header class="floating-header">
+      <a class="brand" href="/" aria-label="CampusMaaS home">
+        <span class="brand-mark">M</span>
+        <strong>CampusMaaS</strong>
+      </a>
+
+      <div class="top-actions">
+        <a class="map-switch map-switch-terrain" href="/" aria-label="Switch to local map">
+          <span class="map-switch-label">Map</span>
+          <span class="map-switch-track" aria-hidden="true">
+            <span class="map-switch-thumb"></span>
+          </span>
+          <span class="map-switch-label">Terrain</span>
+        </a>
+        <button class="profile" type="button" aria-label="Profile">AR</button>
+      </div>
+    </header>
+
+    <div id="terrainMap" class="map" aria-label="Interactive terrain map"></div>
+
+    <div class="map-controls" aria-label="Map controls">
+      <button type="button" data-map-action="zoom-in" aria-label="Zoom in">+</button>
+      <button type="button" data-map-action="zoom-out" aria-label="Zoom out">−</button>
+    </div>
+
+    <div class="map-note" id="terrainNote">Terrain · COP30 · 1 km boundary</div>
+  </main>
+
+  <script>
+    import('leaflet').then(async ({ default: L }) => {
+      const note = document.getElementById('terrainNote');
+
+      try {
+        const [perimeterResponse, terrainResponse] = await Promise.all([
+          fetch('/maps/perimeter.geojson'),
+          fetch('/maps/terrain/KEC_GLO30_DEM.tif')
+        ]);
+
+        if (!perimeterResponse.ok) {
+          throw new Error('Perimeter could not be loaded.');
+        }
+
+        if (!terrainResponse.ok) {
+          throw new Error('GeoTIFF could not be loaded.');
+        }
+
+        const perimeterData = await perimeterResponse.json();
+        const terrainBuffer = await terrainResponse.arrayBuffer();
+
+        const perimeterFeature = perimeterData.features?.[0];
+
+        if (!perimeterFeature) {
+          throw new Error('Perimeter is empty.');
+        }
+
+        const ring = perimeterFeature.geometry.coordinates[0];
+        const center = L.latLng(
+          Number(perimeterFeature.properties.center[1]),
+          Number(perimeterFeature.properties.center[0])
+        );
+
+        const radius = Number(perimeterFeature.properties.radius_m);
+        const perimeterZoom = 18;
+        const maxZoom = 23;
+
+        const latRadius = radius / 111320;
+        const lonRadius =
+          radius / (111320 * Math.cos(center.lat * Math.PI / 180));
+
+        const circleBounds = L.latLngBounds(
+          [center.lat - latRadius, center.lng - lonRadius],
+          [center.lat + latRadius, center.lng + lonRadius]
+        );
+
+        const map = L.map('terrainMap', {
+          zoomControl: false,
+          minZoom: 1,
+          maxZoom,
+          scrollWheelZoom: false,
+          maxBounds: circleBounds,
+          maxBoundsViscosity: 1,
+          preferCanvas: true
+        }).setView(center, perimeterZoom);
+
+        // geotiff.js exposes fromArrayBuffer as a named export.
+        const geotiff = await import(
+          'https://cdn.jsdelivr.net/npm/geotiff@2.1.3/+esm'
+        );
+
+        const fromArrayBuffer =
+          geotiff.fromArrayBuffer ||
+          geotiff.default?.fromArrayBuffer;
+
+        if (typeof fromArrayBuffer !== 'function') {
+          throw new Error('GeoTIFF decoder could not be initialized.');
+        }
+
+        const tiff = await fromArrayBuffer(terrainBuffer);
+        const image = await tiff.getImage();
+
+        const width = image.getWidth();
+        const height = image.getHeight();
+        const samplesPerPixel = image.getSamplesPerPixel();
+
+        if (!width || !height) {
+          throw new Error('GeoTIFF has no raster dimensions.');
+        }
+
+        if (samplesPerPixel < 1) {
+          throw new Error('GeoTIFF contains no raster samples.');
+        }
+
+        const bbox = image.getBoundingBox();
+
+        if (!Array.isArray(bbox) || bbox.length !== 4) {
+          throw new Error('GeoTIFF has no geographic bounding box.');
+        }
+
+        const [minX, minY, maxX, maxY] = bbox.map(Number);
+
+        if (
+          !Number.isFinite(minX) ||
+          !Number.isFinite(minY) ||
+          !Number.isFinite(maxX) ||
+          !Number.isFinite(maxY) ||
+          maxX <= minX ||
+          maxY <= minY
+        ) {
+          throw new Error('GeoTIFF geographic bounds are invalid.');
+        }
+
+        // The supplied COP30 file is WGS84 geographic data.
+        if (
+          minX < -180 ||
+          maxX > 180 ||
+          minY < -90 ||
+          maxY > 90
+        ) {
+          throw new Error('GeoTIFF is not in WGS84 geographic coordinates.');
+        }
+
+        const rasterResult = await image.readRasters({
+          samples: [0],
+          interleave: false
+        });
+
+        const raster = rasterResult[0];
+
+        if (!raster) {
+          throw new Error('GeoTIFF elevation raster could not be read.');
+        }
+
+        const nodata =
+          typeof image.getGDALNoData === 'function'
+            ? image.getGDALNoData()
+            : null;
+
+        let minElevation = Infinity;
+        let maxElevation = -Infinity;
+
+        for (let i = 0; i < raster.length; i += 1) {
+          const value = Number(raster[i]);
+
+          if (!Number.isFinite(value)) continue;
+
+          if (
+            nodata !== null &&
+            Number.isFinite(Number(nodata)) &&
+            value === Number(nodata)
+          ) {
+            continue;
+          }
+
+          minElevation = Math.min(minElevation, value);
+          maxElevation = Math.max(maxElevation, value);
+        }
+
+        if (
+          !Number.isFinite(minElevation) ||
+          !Number.isFinite(maxElevation)
+        ) {
+          throw new Error('GeoTIFF contains no usable elevation values.');
+        }
+
+        const sample = (x, y) => {
+          const px = Math.max(0, Math.min(width - 1, x));
+          const py = Math.max(0, Math.min(height - 1, y));
+          return Number(raster[py * width + px]);
+        };
+
+        const validElevation = (value) => {
+          if (!Number.isFinite(value)) return false;
+
+          if (
+            nodata !== null &&
+            Number.isFinite(Number(nodata)) &&
+            value === Number(nodata)
+          ) {
+            return false;
+          }
+
+          return true;
+        };
+
+        const getColor = (value, shade) => {
+          const t = Math.max(
+            0,
+            Math.min(
+              1,
+              (value - minElevation) /
+                Math.max(maxElevation - minElevation, 1e-9)
+            )
+          );
+
+          let r;
+          let g;
+          let b;
+
+          if (t < 0.25) {
+            const q = t / 0.25;
+            r = 224 - q * 28;
+            g = 233 - q * 7;
+            b = 211 - q * 22;
+          } else if (t < 0.55) {
+            const q = (t - 0.25) / 0.3;
+            r = 196 + q * 17;
+            g = 226 - q * 16;
+            b = 189 - q * 29;
+          } else if (t < 0.8) {
+            const q = (t - 0.55) / 0.25;
+            r = 213 + q * 17;
+            g = 210 - q * 19;
+            b = 161 - q * 18;
+          } else {
+            const q = (t - 0.8) / 0.2;
+            r = 230 - q * 14;
+            g = 191 - q * 18;
+            b = 143 - q * 8;
+          }
+
+          const light = Math.max(0.72, Math.min(1.16, shade));
+
+          return [
+            Math.round(r * light),
+            Math.round(g * light),
+            Math.round(b * light)
+          ];
+        };
+
+        const TerrainGridLayer = L.GridLayer.extend({
+          createTile(coords, done) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+
+            const context = canvas.getContext('2d', {
+              alpha: false
+            });
+
+            if (!context) {
+              done(new Error('Canvas unavailable.'), canvas);
+              return canvas;
+            }
+
+            const imageData = context.createImageData(256, 256);
+            const data = imageData.data;
+            const world = 2 ** coords.z;
+
+            const west = (coords.x / world) * 360 - 180;
+            const east = ((coords.x + 1) / world) * 360 - 180;
+
+            const north =
+              180 / Math.PI *
+              Math.atan(
+                Math.sinh(
+                  Math.PI *
+                  (1 - 2 * coords.y / world)
+                )
+              );
+
+            const south =
+              180 / Math.PI *
+              Math.atan(
+                Math.sinh(
+                  Math.PI *
+                  (1 - 2 * (coords.y + 1) / world)
+                )
+              );
+
+            const lonSpan = east - west;
+            const latSpan = north - south;
+
+            for (let py = 0; py < 256; py += 1) {
+              const lat = north - (py / 255) * latSpan;
+
+              for (let px = 0; px < 256; px += 1) {
+                const lon = west + (px / 255) * lonSpan;
+                const index = (py * 256 + px) * 4;
+
+                const rx =
+                  (lon - minX) /
+                  (maxX - minX) *
+                  (width - 1);
+
+                const ry =
+                  (maxY - lat) /
+                  (maxY - minY) *
+                  (height - 1);
+
+                if (
+                  rx < 0 ||
+                  ry < 0 ||
+                  rx > width - 1 ||
+                  ry > height - 1
+                ) {
+                  data[index] = 238;
+                  data[index + 1] = 241;
+                  data[index + 2] = 243;
+                  data[index + 3] = 255;
+                  continue;
+                }
+
+                const x0 = Math.floor(rx);
+                const y0 = Math.floor(ry);
+                const x1 = Math.min(width - 1, x0 + 1);
+                const y1 = Math.min(height - 1, y0 + 1);
+
+                const fx = rx - x0;
+                const fy = ry - y0;
+
+                const e00 = sample(x0, y0);
+                const e10 = sample(x1, y0);
+                const e01 = sample(x0, y1);
+                const e11 = sample(x1, y1);
+
+                const neighbors = [
+                  e00,
+                  e10,
+                  e01,
+                  e11
+                ].filter(validElevation);
+
+                if (!neighbors.length) {
+                  data[index] = 238;
+                  data[index + 1] = 241;
+                  data[index + 2] = 243;
+                  data[index + 3] = 255;
+                  continue;
+                }
+
+                const safeE00 = validElevation(e00) ? e00 : neighbors[0];
+                const safeE10 = validElevation(e10) ? e10 : safeE00;
+                const safeE01 = validElevation(e01) ? e01 : safeE00;
+                const safeE11 = validElevation(e11) ? e11 : safeE00;
+
+                const value =
+                  safeE00 * (1 - fx) * (1 - fy) +
+                  safeE10 * fx * (1 - fy) +
+                  safeE01 * (1 - fx) * fy +
+                  safeE11 * fx * fy;
+
+                const left = sample(
+                  Math.max(0, x0 - 1),
+                  Math.round(ry)
+                );
+
+                const right = sample(
+                  Math.min(width - 1, x1 + 1),
+                  Math.round(ry)
+                );
+
+                const up = sample(
+                  Math.round(rx),
+                  Math.max(0, y0 - 1)
+                );
+
+                const down = sample(
+                  Math.round(rx),
+                  Math.min(height - 1, y1 + 1)
+                );
+
+                const dx =
+                  validElevation(right) && validElevation(left)
+                    ? right - left
+                    : 0;
+
+                const dy =
+                  validElevation(down) && validElevation(up)
+                    ? down - up
+                    : 0;
+
+                const slope = Math.sqrt(dx * dx + dy * dy);
+
+                const shade =
+                  1 -
+                  dx * 0.018 -
+                  dy * 0.012 -
+                  Math.min(0.10, slope * 0.002);
+
+                const [red, green, blue] = getColor(value, shade);
+
+                data[index] = red;
+                data[index + 1] = green;
+                data[index + 2] = blue;
+                data[index + 3] = 255;
+              }
+            }
+
+            context.putImageData(imageData, 0, 0);
+            done(null, canvas);
+            return canvas;
+          }
+        });
+
+        new TerrainGridLayer({
+          tileSize: 256,
+          updateWhenZooming: false,
+          keepBuffer: 2,
+          noWrap: true
+        }).addTo(map);
+
+        // Keep the exact existing 1 km perimeter; do not alter its geometry.
+        const outer = [
+          [center.lat - 1, center.lng - 1],
+          [center.lat - 1, center.lng + 1],
+          [center.lat + 1, center.lng + 1],
+          [center.lat + 1, center.lng - 1],
+          [center.lat - 1, center.lng - 1]
+        ];
+
+        const inner = ring
+          .map(([lon, lat]) => [lat, lon])
+          .reverse();
+
+        L.polygon([outer, inner], {
+          stroke: false,
+          fillColor: '#eef1f3',
+          fillOpacity: 0.94,
+          interactive: false
+        }).addTo(map);
+
+        const clampToPerimeter = () => {
+          const current = map.getCenter();
+          const distance = center.distanceTo(current);
+
+          if (distance <= radius) return;
+
+          const bearing = Math.atan2(
+            (current.lng - center.lng) *
+              Math.cos(center.lat * Math.PI / 180),
+            current.lat - center.lat
+          );
+
+          const latOffset =
+            Math.cos(bearing) * radius / 111320;
+
+          const lonOffset =
+            Math.sin(bearing) *
+            radius /
+            (111320 * Math.cos(center.lat * Math.PI / 180));
+
+          map.setView(
+            [center.lat + latOffset, center.lng + lonOffset],
+            Math.max(map.getZoom(), perimeterZoom),
+            { animate: false }
+          );
+        };
+
+        map.on('drag', clampToPerimeter);
+        map.on('moveend', clampToPerimeter);
+
+        map.on('zoomend', () => {
+          if (map.getZoom() >= perimeterZoom) {
+            clampToPerimeter();
+          }
+        });
+
+        const mapElement = map.getContainer();
+
+        mapElement.addEventListener('wheel', (event) => {
+          event.preventDefault();
+
+          const direction = event.deltaY > 0 ? -1 : 1;
+          const overrideLimit = event.shiftKey;
+          const currentZoom = map.getZoom();
+
+          if (
+            direction < 0 &&
+            currentZoom <= perimeterZoom &&
+            !overrideLimit
+          ) {
+            return;
+          }
+
+          const nextZoom = overrideLimit
+            ? currentZoom + direction
+            : Math.max(perimeterZoom, currentZoom + direction);
+
+          map.setZoom(
+            Math.max(1, Math.min(maxZoom, nextZoom)),
+            { animate: false }
+          );
+        }, { passive: false });
+
+        document
+          .querySelectorAll('[data-map-action]')
+          .forEach((button) => {
+            button.addEventListener('click', () => {
+              const action = button.getAttribute('data-map-action');
+
+              if (action === 'zoom-in') {
+                map.setZoom(
+                  Math.min(maxZoom, map.getZoom() + 1),
+                  { animate: true }
+                );
+              }
+
+              if (action === 'zoom-out') {
+                map.setZoom(
+                  Math.max(1, map.getZoom() - 1),
+                  { animate: true }
+                );
+              }
+            });
+          });
+
+        note?.setAttribute('data-ready', 'true');
+        setTimeout(() => map.invalidateSize(), 100);
+      } catch (error) {
+        console.error('CampusMaaS terrain error:', error);
+
+        if (note) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error);
+
+          note.textContent = 'Terrain failed to load · ' + message;
+        }
+      }
+    });
+  </script>
+</MainLayout>

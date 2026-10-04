@@ -5,21 +5,45 @@ const root = process.cwd();
 const mapsDir = path.join(root, 'maps');
 const publicMapsDir = path.join(root, 'public', 'maps');
 
+const supported = /\.(geojson|json|tif|tiff)$/i;
+const manifestSupported = /\.(geojson|json)$/i;
+
+fs.rmSync(publicMapsDir, { recursive: true, force: true });
 fs.mkdirSync(publicMapsDir, { recursive: true });
 
-const files = fs.readdirSync(mapsDir)
-  .filter((name) => /\.(geojson|json)$/i.test(name))
-  .sort((a, b) => a.localeCompare(b));
+const files = [];
 
-for (const name of files) {
-  fs.copyFileSync(
-    path.join(mapsDir, name),
-    path.join(publicMapsDir, name)
-  );
+function collectFiles(directory, relativeDirectory = '') {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const absolutePath = path.join(directory, entry.name);
+    const relativePath = relativeDirectory
+      ? path.join(relativeDirectory, entry.name)
+      : entry.name;
+
+    if (entry.isDirectory()) {
+      collectFiles(absolutePath, relativePath);
+      continue;
+    }
+
+    if (supported.test(entry.name)) {
+      files.push(relativePath.replaceAll(path.sep, '/'));
+    }
+  }
+}
+
+collectFiles(mapsDir);
+files.sort((a, b) => a.localeCompare(b));
+
+for (const relativePath of files) {
+  const source = path.join(mapsDir, relativePath);
+  const destination = path.join(publicMapsDir, relativePath);
+
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.copyFileSync(source, destination);
 }
 
 const manifest = {
-  files,
+  files: files.filter((file) => manifestSupported.test(file)),
   generatedAt: new Date().toISOString()
 };
 
