@@ -280,6 +280,15 @@ import 'leaflet/dist/leaflet.css';
      * map controller. The developer switch must immediately show/hide both
      * editor tools even if the Leaflet/data initialization is still running.
      */
+    const closeDeveloperOverlay = () => {
+      const panel = document.getElementById('devPanel');
+
+      if (!panel) return;
+
+      panel.classList.remove('is-open');
+      panel.setAttribute('aria-hidden', 'true');
+    };
+
     const syncEditorToolVisibility = () => {
       const editModeToggle = document.getElementById('editModeToggle');
       const editToggle = document.getElementById('editToggle');
@@ -290,7 +299,9 @@ import 'leaflet/dist/leaflet.css';
         if (!button) continue;
 
         button.classList.toggle('is-visible', visible);
+        button.classList.toggle('is-active', false);
         button.setAttribute('aria-hidden', String(!visible));
+        button.setAttribute('aria-pressed', 'false');
         button.disabled = !visible;
         button.tabIndex = visible ? 0 : -1;
         button.style.display = visible ? 'grid' : 'none';
@@ -298,10 +309,16 @@ import 'leaflet/dist/leaflet.css';
     };
 
     const editModeCheckbox = document.getElementById('editModeToggle');
-    editModeCheckbox?.addEventListener('change', syncEditorToolVisibility);
+    editModeCheckbox?.addEventListener('change', () => {
+      syncEditorToolVisibility();
+      closeDeveloperOverlay();
+    });
     editModeCheckbox?.addEventListener('input', syncEditorToolVisibility);
     editModeCheckbox?.addEventListener('click', () => {
-      requestAnimationFrame(syncEditorToolVisibility);
+      requestAnimationFrame(() => {
+        syncEditorToolVisibility();
+        closeDeveloperOverlay();
+      });
     });
 
     syncEditorToolVisibility();
@@ -1992,6 +2009,10 @@ import 'leaflet/dist/leaflet.css';
         if (!editToggle) return;
 
         editToggle.classList.toggle('is-visible', visible);
+        if (!visible) {
+          editToggle.classList.remove('is-active');
+          editToggle.setAttribute('aria-pressed', 'false');
+        }
         editToggle.setAttribute('aria-hidden', String(!visible));
         editToggle.disabled = !visible;
         editToggle.tabIndex = visible ? 0 : -1;
@@ -2002,6 +2023,10 @@ import 'leaflet/dist/leaflet.css';
         if (!gateToggle) return;
 
         gateToggle.classList.toggle('is-visible', visible);
+        if (!visible) {
+          gateToggle.classList.remove('is-active');
+          gateToggle.setAttribute('aria-pressed', 'false');
+        }
         gateToggle.setAttribute('aria-hidden', String(!visible));
         gateToggle.disabled = !visible;
         gateToggle.tabIndex = visible ? 0 : -1;
@@ -2108,6 +2133,10 @@ import 'leaflet/dist/leaflet.css';
         editToggle?.classList.remove('is-active');
         editToggle?.setAttribute('aria-pressed', 'false');
         showEditCard(false);
+        if (gateModeActive) {
+          gateToggle?.classList.remove('is-active');
+          gateToggle?.setAttribute('aria-pressed', 'false');
+        }
         setEditActionVisibility();
 
         // Restore the invisible path hit layer after leaving draw mode.
@@ -2564,6 +2593,10 @@ import 'leaflet/dist/leaflet.css';
 
         if (routeModeActive) {
           clearRouteTest(false);
+        }
+
+        if (gateModeActive) {
+          closeGateTools();
         }
 
         clearDrawing();
@@ -3150,6 +3183,9 @@ import 'leaflet/dist/leaflet.css';
           closeEditTools();
         }
 
+        editToggle?.classList.remove('is-active');
+        editToggle?.setAttribute('aria-pressed', 'false');
+
         clearGatePreview();
         clearGateHandles();
         selectedGate = null;
@@ -3646,6 +3682,7 @@ import 'leaflet/dist/leaflet.css';
 
       editModeToggle?.addEventListener('change', () => {
         syncEditModeUi();
+        closeDeveloperOverlay();
 
         if (editModeEnabled) {
           pedestrianPathsActive = true;
