@@ -1384,6 +1384,7 @@ import 'leaflet/dist/leaflet.css';
       }
 
       const pathToggle = document.getElementById('pathToggle');
+      const showBasePedestrianToggle = document.getElementById('showBasePedestrianToggle');
 
       pathToggle?.addEventListener('click', () => {
         pedestrianPathsActive = !pedestrianPathsActive;
@@ -1602,7 +1603,6 @@ import 'leaflet/dist/leaflet.css';
       const editCancel = document.getElementById('editCancel');
       const savePathEdits = document.getElementById('savePathEdits');
       const pathEditFileStatus = document.getElementById('pathEditFileStatus');
-      const showBasePedestrianToggle = document.getElementById('showBasePedestrianToggle');
 
       let editModeEnabled = false;
       let pointEditorActive = false;
