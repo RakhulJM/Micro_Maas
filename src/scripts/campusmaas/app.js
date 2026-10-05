@@ -199,6 +199,65 @@
         pedestrianPathData.features || []
       );
 
+      const pedestrianGeometryKey = (coordinates) =>
+        coordinates
+          .map((coordinate) =>
+            Number(coordinate[0]).toFixed(7) + ',' +
+            Number(coordinate[1]).toFixed(7)
+          )
+          .join('|');
+
+      const basePedestrianGeometryKeys = new Set();
+
+      for (const feature of basePedestrianFeatures) {
+        const geometry = feature?.geometry;
+        if (!geometry) continue;
+
+        if (geometry.type === 'LineString') {
+          const key = pedestrianGeometryKey(geometry.coordinates || []);
+          if (key) {
+            basePedestrianGeometryKeys.add(key);
+            basePedestrianGeometryKeys.add(
+              pedestrianGeometryKey([...(geometry.coordinates || [])].reverse())
+            );
+          }
+          continue;
+        }
+
+        if (geometry.type === 'MultiLineString') {
+          for (const line of geometry.coordinates || []) {
+            const key = pedestrianGeometryKey(line || []);
+            if (!key) continue;
+
+            basePedestrianGeometryKeys.add(key);
+            basePedestrianGeometryKeys.add(
+              pedestrianGeometryKey([...(line || [])].reverse())
+            );
+          }
+        }
+      }
+
+      const campusFeatureUsesPedestrianGeometry = (feature) => {
+        const geometry = feature?.geometry;
+        if (!geometry) return false;
+
+        if (geometry.type === 'LineString') {
+          return basePedestrianGeometryKeys.has(
+            pedestrianGeometryKey(geometry.coordinates || [])
+          );
+        }
+
+        if (geometry.type === 'MultiLineString') {
+          return (geometry.coordinates || []).some((line) =>
+            basePedestrianGeometryKeys.has(
+              pedestrianGeometryKey(line || [])
+            )
+          );
+        }
+
+        return false;
+      };
+
       const normalizePedestrianFeatures = (features) =>
         (Array.isArray(features) ? features : []).map((feature, index) => {
           const normalized = cloneJson(feature);
@@ -422,6 +481,32 @@
         style: (feature) => roadStyle(feature),
         interactive: false
       });
+
+      const setPedestrianBackedRoadVisibility = (hide) => {
+        const applyVisibility = (layer, casing) => {
+          layer.eachLayer((child) => {
+            const feature = child?.feature;
+            if (!child?.setStyle || feature?.geometry?.type !== 'LineString') {
+              return;
+            }
+
+            if (campusFeatureUsesPedestrianGeometry(feature)) {
+              child.setStyle({
+                opacity: hide ? 0 : 0.96
+              });
+              return;
+            }
+
+            child.setStyle({
+              ...roadStyle(feature, casing),
+              opacity: 0.96
+            });
+          });
+        };
+
+        applyVisibility(roadCasing, true);
+        applyVisibility(roads, false);
+      };
 
       baseLayer.addTo(map);
       roadCasing.addTo(map);
@@ -2116,6 +2201,7 @@
         showDeletePointModal(false);
         pathTypePalette?.classList.remove('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'true');
+        setPedestrianBackedRoadVisibility(false);
         clearDrawing();
         clearEditableVertices();
         clearSelectedPath();
@@ -2617,6 +2703,8 @@
         pathTypePalette?.classList.add('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'false');
 
+        setPedestrianBackedRoadVisibility(true);
+
         pedestrianPathsActive = true;
         pedestrianPathCasing?.addTo(map);
         pedestrianPaths?.addTo(map);
@@ -2651,6 +2739,8 @@
 
         pathTypePalette?.classList.add('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'false');
+
+        setPedestrianBackedRoadVisibility(true);
 
         pedestrianPathsActive = true;
         pedestrianPathCasing?.addTo(map);
