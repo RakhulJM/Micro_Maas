@@ -51,9 +51,26 @@ try {
   await page.locator('#editDeletePoint:not([hidden])').waitFor({ state: 'visible' });
   await page.locator('#editDelete:not([hidden])').waitFor({ state: 'visible' });
 
+  const pointCountBeforeDelete = await page.locator('.edit-vertex-marker').count();
+  await page.locator('#editDeletePoint').click();
+  await page.waitForFunction(
+    (before) => document.querySelectorAll('.edit-vertex-marker').length < before,
+    pointCountBeforeDelete
+  );
+
+  // Select another point and delete its whole pedestrian path.
+  await page.locator('.edit-vertex-marker').first().click();
+  await page.locator('#editDelete:not([hidden])').waitFor({ state: 'visible' });
+  const pathPointCountBeforeDelete = await page.locator('.edit-vertex-marker').count();
+  await page.locator('#editDelete').click();
+  await page.waitForFunction(
+    (before) => document.querySelectorAll('.edit-vertex-marker').length < before,
+    pathPointCountBeforeDelete
+  );
+
   // Close editor with its X.
   await page.locator('#editCancel').click();
-  await page.locator('#editCard:not(.is-open)').waitFor({ state: 'attached' });
+  await page.locator('#editCard').waitFor({ state: 'hidden' });
 
   // Re-open editor and exercise New path.
   await page.locator('#editToggle').click();
@@ -72,11 +89,16 @@ try {
   await page.locator('#editCard.is-open').waitFor({ state: 'visible' });
   await page.locator('.edit-vertex-marker').first().waitFor({ state: 'visible' });
 
-  // Developer popup should open/close again after all editor interaction.
+  // Save the complete edited GeoJSON snapshot.
   await page.keyboard.press('Control+Shift+U');
   await page.locator('#devPanel.is-open').waitFor({ state: 'visible' });
+  await page.locator('#savePathEdits').click();
+  await page.locator('#pathEditFileStatus').waitFor({ state: 'visible' });
+  await page.waitForFunction(
+    () => document.getElementById('pathEditFileStatus')?.textContent === 'Saved'
+  );
   await page.locator('#devPanelClose').click();
-  await page.locator('#devPanel:not(.is-open)').waitFor({ state: 'attached' });
+  await page.locator('#devPanel').waitFor({ state: 'hidden' });
 
   if (pageErrors.length || consoleErrors.length) {
     throw new Error(
