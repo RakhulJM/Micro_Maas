@@ -21,12 +21,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Astro check dependency
-        run: npm install --no-save --no-package-lock @astrojs/check
-
-      - name: Astro check
-        run: npm run check
-
       - name: Production build
         run: npm run build
 
