@@ -58,6 +58,20 @@ import 'leaflet/dist/leaflet.css';
       </svg>
     </button>
     <button
+      class="gate-toggle"
+      id="gateToggle"
+      type="button"
+      aria-label="Edit campus gates"
+      aria-pressed="false"
+      title="Edit campus gates"
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="5" y="4" width="14" height="16" rx="1.5" />
+        <path d="M9 4v16M15 4v16M5 9h4M15 9h4M5 15h4M15 15h4" />
+      </svg>
+    </button>
+    <button
       class="edit-toggle"
       id="editToggle"
       type="button"
@@ -105,7 +119,42 @@ import 'leaflet/dist/leaflet.css';
       </div>
     </section>
 
+    <section class="gate-card" id="gateCard" aria-live="polite" aria-hidden="true">
+      <div class="edit-card-top">
+        <div>
+          <span class="edit-card-kicker">GATE EDITOR</span>
+          <strong id="gateStatus">Drag on the map to create a gate</strong>
+        </div>
+        <button type="button" class="route-card-close" id="gateCancel" aria-label="Close gate editor">×</button>
+      </div>
+      <div class="edit-actions">
+        <button type="button" class="edit-action edit-action-primary" id="gateNew">New gate</button>
+        <button type="button" class="edit-action" id="gateRename" hidden>Rename</button>
+        <button type="button" class="edit-action edit-delete-action" id="gateDelete" hidden>Delete gate</button>
+      </div>
+    </section>
+
     <div class="map-note" id="mapNote">Local map · 1 km boundary</div>
+
+    <section class="gate-name-modal" id="gateNameModal" aria-hidden="true">
+      <div class="gate-name-dialog" role="dialog" aria-modal="true" aria-labelledby="gateNameTitle">
+        <div class="delete-point-header">
+          <div>
+            <span class="delete-point-kicker">CAMPUS GATE</span>
+            <strong id="gateNameTitle">Name this gate</strong>
+          </div>
+          <button type="button" class="route-card-close" id="gateNameCancel" aria-label="Cancel gate">×</button>
+        </div>
+        <label class="gate-name-field">
+          <span>Gate name</span>
+          <input id="gateNameInput" type="text" maxlength="80" autocomplete="off" placeholder="Main Gate" />
+        </label>
+        <div class="gate-name-actions">
+          <button type="button" class="edit-action" id="gateNameCancelButton">Cancel</button>
+          <button type="button" class="edit-action edit-action-primary" id="gateNameConfirm">Create gate</button>
+        </div>
+      </div>
+    </section>
 
     <section class="delete-point-modal" id="deletePointModal" aria-hidden="true">
       <div class="delete-point-dialog" role="dialog" aria-modal="true" aria-labelledby="deletePointTitle">
@@ -180,6 +229,13 @@ import 'leaflet/dist/leaflet.css';
 
             <button type="button" class="dev-action" id="savePathEdits">Save pedestrian GeoJSON</button>
 
+            <div class="zoom-setting">
+              <span>Gate edit file</span>
+              <strong id="gateEditFileStatus">Loaded</strong>
+            </div>
+
+            <button type="button" class="dev-action" id="saveGateEdits">Save gates GeoJSON</button>
+
             <label class="edit-mode-setting">
               <span>
                 <strong>Show original network</strong>
@@ -252,22 +308,32 @@ import 'leaflet/dist/leaflet.css';
     }, true);
 
     import('leaflet').then(async ({ default: L }) => {
-      const [campusResponse, perimeterResponse, pathResponse, pathEditResponse, pathConfigResponse] = await Promise.all([
+      const [campusResponse, perimeterResponse, pathResponse, pathEditResponse, pathConfigResponse, gatesResponse] = await Promise.all([
         fetch('/maps/export.geojson'),
         fetch('/maps/perimeter.geojson'),
         fetch('/maps/pedestrian_paths.geojson'),
         fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
-        fetch('/maps/pedestrian_path_config.json')
+        fetch('/maps/pedestrian_path_config.json'),
+        fetch('/maps/gates.geojson', { cache: 'no-store' })
       ]);
 
       if (!campusResponse.ok || !perimeterResponse.ok || !pathResponse.ok) {
         throw new Error('Campus map data could not be loaded.');
       }
 
-      const [campusData, perimeterData, pedestrianPathData] = await Promise.all([
+      const [campusData, perimeterData, pedestrianPathData, gatesData] = await Promise.all([
         campusResponse.json(),
         perimeterResponse.json(),
-        pathResponse.json()
+        pathResponse.json(),
+        gatesResponse?.ok ? gatesResponse.json() : Promise.resolve({
+          type: 'FeatureCollection',
+          properties: {
+            format: 'campusmaas-gates',
+            version: 1,
+            description: 'Campus entry and access gate geometry'
+          },
+          features: []
+        })
       ]);
 
       const pedestrianConfig = pathConfigResponse.ok
@@ -339,6 +405,38 @@ import 'leaflet/dist/leaflet.css';
 
       pedestrianPathData.features = pathEditState.features;
 
+      const normalizedGateFeatures =
+        Array.isArray(gatesData?.features)
+          ? gatesData.features
+              .filter((feature) => feature?.geometry?.type === 'Polygon')
+              .map((feature, index) => {
+                const normalized = cloneJson(feature);
+                normalized.type = 'Feature';
+                normalized.id = String(
+                  normalized.id ??
+                  normalized.properties?.['@id'] ??
+                  'gate-' + String(index + 1).padStart(3, '0')
+                );
+
+                if (!normalized.properties) normalized.properties = {};
+                normalized.properties.type = 'gate';
+                normalized.properties.name =
+                  normalized.properties.name || 'Unnamed Gate';
+
+                return normalized;
+              })
+          : [];
+
+      const gateFeatureData = {
+        type: 'FeatureCollection',
+        properties: {
+          format: 'campusmaas-gates',
+          version: 1,
+          description: 'Campus entry and access gate geometry'
+        },
+        features: normalizedGateFeatures
+      };
+
       let pathEditDirty = false;
 
       const perimeterFeature = perimeterData.features[0];
@@ -382,6 +480,9 @@ import 'leaflet/dist/leaflet.css';
       const customPathPane = map.createPane('customPathPane');
       customPathPane.style.zIndex = '620';
       customPathPane.style.pointerEvents = 'none';
+
+      const gatePane = map.createPane('gatePane');
+      gatePane.style.zIndex = '640';
 
       const colors = {
         background: '#f1f3f5',
@@ -499,6 +600,7 @@ import 'leaflet/dist/leaflet.css';
       let pedestrianPaths = null;
       let customPathCasing = null;
       let customPaths = null;
+      let gateLayer = null;
       let editableHitLayer = null;
       let pedestrianPathsActive = false;
 
@@ -617,6 +719,59 @@ import 'leaflet/dist/leaflet.css';
       createPedestrianLayers();
       customPathCasing.addTo(map);
       customPaths.addTo(map);
+
+      const gateFeatureRing = (feature) =>
+        feature?.geometry?.type === 'Polygon' &&
+        Array.isArray(feature.geometry.coordinates?.[0])
+          ? feature.geometry.coordinates[0]
+          : null;
+
+      const gateBoundsForFeature = (feature) => {
+        const ring = gateFeatureRing(feature);
+        if (!ring || ring.length < 4) return null;
+
+        const latlngs = ring.map(([lng, lat]) => [
+          Number(lat),
+          Number(lng)
+        ]);
+
+        return L.latLngBounds(latlngs);
+      };
+
+      const createGateLayer = () => {
+        gateLayer = L.geoJSON(gateFeatureData, {
+          pane: 'gatePane',
+          style: {
+            color: '#475569',
+            weight: 2,
+            opacity: 0.95,
+            fillColor: '#ffffff',
+            fillOpacity: 0.18
+          },
+          interactive: editModeEnabled,
+          onEachFeature: (feature, layer) => {
+            layer.on('click', (event) => {
+              if (!editModeEnabled || gateModeActive) return;
+
+              event.originalEvent?.stopPropagation();
+              event.originalEvent?.preventDefault();
+              selectGateForEdit(feature);
+            });
+          }
+        });
+      };
+
+      const refreshGateLayer = () => {
+        if (gateLayer && map.hasLayer(gateLayer)) {
+          map.removeLayer(gateLayer);
+        }
+
+        createGateLayer();
+        gateLayer?.addTo(map);
+      };
+
+      createGateLayer();
+      gateLayer.addTo(map);
 
       let basePedestrianDebugLayer = null;
 
@@ -1628,6 +1783,10 @@ import 'leaflet/dist/leaflet.css';
         if (routeModeActive) {
           clearRouteTest(true);
 
+          if (gateModeActive) {
+            closeGateTools();
+          }
+
           if (editModeEnabled) {
             editModeEnabled = false;
             if (editModeToggle) editModeToggle.checked = false;
@@ -1747,6 +1906,20 @@ import 'leaflet/dist/leaflet.css';
       const editCancel = document.getElementById('editCancel');
       const savePathEdits = document.getElementById('savePathEdits');
       const pathEditFileStatus = document.getElementById('pathEditFileStatus');
+      const saveGateEdits = document.getElementById('saveGateEdits');
+      const gateEditFileStatus = document.getElementById('gateEditFileStatus');
+      const gateToggle = document.getElementById('gateToggle');
+      const gateCard = document.getElementById('gateCard');
+      const gateStatus = document.getElementById('gateStatus');
+      const gateCancel = document.getElementById('gateCancel');
+      const gateNew = document.getElementById('gateNew');
+      const gateRename = document.getElementById('gateRename');
+      const gateDelete = document.getElementById('gateDelete');
+      const gateNameModal = document.getElementById('gateNameModal');
+      const gateNameInput = document.getElementById('gateNameInput');
+      const gateNameCancel = document.getElementById('gateNameCancel');
+      const gateNameCancelButton = document.getElementById('gateNameCancelButton');
+      const gateNameConfirm = document.getElementById('gateNameConfirm');
       const deletePointModal = document.getElementById('deletePointModal');
       const deletePointCancel = document.getElementById('deletePointCancel');
       const deletePointMerge = document.getElementById('deletePointMerge');
@@ -1755,10 +1928,20 @@ import 'leaflet/dist/leaflet.css';
       let editModeEnabled = false;
       let pointEditorActive = false;
       let drawingModeActive = false;
+      let gateModeActive = false;
       let drawingPoints = [];
       let drawingMarkers = [];
       let drawingLine = null;
       let drawingLineCasing = null;
+
+      let gateEditDirty = false;
+      let selectedGate = null;
+      let gatePreview = null;
+      let gatePointerId = null;
+      let gatePointerStart = null;
+      let pendingGateBounds = null;
+      let gateNameEditId = null;
+      let gateHandleMarkers = [];
 
       let defaultVertexMarkers = [];
       let editableVertexMarkers = [];
@@ -1968,6 +2151,51 @@ import 'leaflet/dist/leaflet.css';
         } finally {
           savePathEdits.disabled = false;
         }
+      };
+
+      const buildGateEditPayload = () => ({
+        type: 'FeatureCollection',
+        properties: {
+          format: 'campusmaas-gates',
+          version: 1,
+          description: 'Campus entry and access gate geometry'
+        },
+        features: cloneJson(gateFeatureData.features || [])
+      });
+
+      const saveCurrentGateEdits = async () => {
+        if (!saveGateEdits) return;
+
+        saveGateEdits.disabled = true;
+        if (gateEditFileStatus) gateEditFileStatus.textContent = 'Saving…';
+
+        try {
+          const response = await fetch('/__campusmaas/save-gates', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(buildGateEditPayload())
+          });
+
+          if (!response.ok) {
+            throw new Error('Gate save endpoint unavailable');
+          }
+
+          gateEditDirty = false;
+          if (gateEditFileStatus) gateEditFileStatus.textContent = 'Saved';
+        } catch (error) {
+          console.error(error);
+          if (gateEditFileStatus) gateEditFileStatus.textContent = 'Save failed';
+          alert('Gates GeoJSON could not be saved. Run the project with npm run dev to enable direct file saving.');
+        } finally {
+          saveGateEdits.disabled = false;
+        }
+      };
+
+      const markGateEditsDirty = () => {
+        gateEditDirty = true;
+        if (gateEditFileStatus) gateEditFileStatus.textContent = 'Unsaved';
       };
 
       const findEffectiveFeature = (featureId) =>
@@ -2430,6 +2658,509 @@ import 'leaflet/dist/leaflet.css';
         editStatus.textContent = 'Custom path saved · all points active';
       };
 
+      const showGateCard = (visible = true) => {
+        gateCard?.classList.toggle('is-open', visible);
+        gateCard?.setAttribute('aria-hidden', String(!visible));
+      };
+
+      const showGateIcon = (visible) => {
+        if (!gateToggle) return;
+
+        gateToggle.classList.toggle('is-visible', visible);
+        gateToggle.setAttribute('aria-hidden', String(!visible));
+        gateToggle.disabled = !visible;
+        gateToggle.tabIndex = visible ? 0 : -1;
+      };
+
+      const showGateNameModal = (visible, mode = 'create', feature = null) => {
+        gateNameEditId = mode === 'rename' && feature ? String(feature.id) : null;
+        gateNameModal?.classList.toggle('is-open', visible);
+        gateNameModal?.setAttribute('aria-hidden', String(!visible));
+
+        if (!gateNameInput || !visible) return;
+
+        gateNameInput.value = mode === 'rename'
+          ? String(feature?.properties?.name || '')
+          : '';
+
+        if (gateNameConfirm) {
+          gateNameConfirm.textContent = mode === 'rename' ? 'Save name' : 'Create gate';
+        }
+
+        requestAnimationFrame(() => {
+          gateNameInput.focus();
+          gateNameInput.select();
+        });
+      };
+
+      const clearGatePreview = () => {
+        if (gatePreview) map.removeLayer(gatePreview);
+        gatePreview = null;
+        pendingGateBounds = null;
+      };
+
+      const clearGateHandles = () => {
+        gateHandleMarkers.forEach((marker) => map.removeLayer(marker));
+        gateHandleMarkers = [];
+      };
+
+      const gateHandleIcon = (kind) =>
+        L.divIcon({
+          className: 'gate-handle-marker gate-handle-' + kind,
+          html: '<span></span>',
+          iconSize: kind === 'move' ? [18, 18] : [14, 14],
+          iconAnchor: kind === 'move' ? [9, 9] : [7, 7]
+        });
+
+      const updateGateFeatureGeometry = (feature, bounds) => {
+        if (!feature || !bounds) return;
+
+        const sw = bounds.getSouthWest();
+        const nw = bounds.getNorthWest();
+        const ne = bounds.getNorthEast();
+        const se = bounds.getSouthEast();
+        const centerPoint = bounds.getCenter();
+
+        feature.geometry = {
+          type: 'Polygon',
+          coordinates: [[
+            [Number(sw.lng.toFixed(7)), Number(sw.lat.toFixed(7))],
+            [Number(nw.lng.toFixed(7)), Number(nw.lat.toFixed(7))],
+            [Number(ne.lng.toFixed(7)), Number(ne.lat.toFixed(7))],
+            [Number(se.lng.toFixed(7)), Number(se.lat.toFixed(7))],
+            [Number(sw.lng.toFixed(7)), Number(sw.lat.toFixed(7))]
+          ]]
+        };
+
+        feature.properties.access_point = [
+          Number(centerPoint.lng.toFixed(7)),
+          Number(centerPoint.lat.toFixed(7))
+        ];
+
+        markGateEditsDirty();
+      };
+
+      const refreshGateHandles = () => {
+        if (!selectedGate) {
+          clearGateHandles();
+          return;
+        }
+
+        const feature = gateFeatureData.features.find(
+          (item) => String(item.id) === String(selectedGate.id)
+        );
+
+        const bounds = gateBoundsForFeature(feature);
+        if (!feature || !bounds) {
+          clearGateHandles();
+          return;
+        }
+
+        clearGateHandles();
+
+        const corners = [
+          ['nw', bounds.getNorthWest()],
+          ['ne', bounds.getNorthEast()],
+          ['se', bounds.getSouthEast()],
+          ['sw', bounds.getSouthWest()]
+        ];
+
+        for (const [kind, latlng] of corners) {
+          const marker = L.marker(latlng, {
+            icon: gateHandleIcon(kind),
+            draggable: true,
+            zIndexOffset: 1800,
+            keyboard: false
+          }).addTo(map);
+
+          marker.on('drag', () => {
+            const currentFeature = gateFeatureData.features.find(
+              (item) => String(item.id) === String(selectedGate.id)
+            );
+            if (!currentFeature) return;
+
+            const currentBounds = gateBoundsForFeature(currentFeature);
+            if (!currentBounds) return;
+
+            const opposite = {
+              nw: currentBounds.getSouthEast(),
+              ne: currentBounds.getSouthWest(),
+              se: currentBounds.getNorthWest(),
+              sw: currentBounds.getNorthEast()
+            }[kind];
+
+            const nextBounds = L.latLngBounds(opposite, marker.getLatLng());
+            const center = nextBounds.getCenter();
+
+            if (nextBounds.getSouth() === nextBounds.getNorth() || nextBounds.getWest() === nextBounds.getEast()) {
+              return;
+            }
+
+            updateGateFeatureGeometry(currentFeature, nextBounds);
+            const layer = gateLayer?.getLayers().find(
+              (item) => String(item.feature?.id) === String(currentFeature.id)
+            );
+            if (layer?.setBounds) layer.setBounds(nextBounds);
+            else if (layer?.setLatLngs) layer.setLatLngs([[
+              nextBounds.getSouthWest(),
+              nextBounds.getNorthWest(),
+              nextBounds.getNorthEast(),
+              nextBounds.getSouthEast()
+            ]]);
+
+            void center;
+          });
+
+          marker.on('dragend', () => refreshGateHandles());
+          gateHandleMarkers.push(marker);
+        }
+
+        const centerMarker = L.marker(bounds.getCenter(), {
+          icon: gateHandleIcon('move'),
+          draggable: true,
+          zIndexOffset: 1801,
+          keyboard: false
+        }).addTo(map);
+
+        let moveStartBounds = null;
+
+        centerMarker.on('dragstart', () => {
+          const currentFeature = gateFeatureData.features.find(
+            (item) => String(item.id) === String(selectedGate.id)
+          );
+          moveStartBounds = gateBoundsForFeature(currentFeature);
+        });
+
+        centerMarker.on('drag', () => {
+          if (!moveStartBounds) return;
+
+          const currentCenter = moveStartBounds.getCenter();
+          const nextCenter = centerMarker.getLatLng();
+          const deltaLat = nextCenter.lat - currentCenter.lat;
+          const deltaLng = nextCenter.lng - currentCenter.lng;
+
+          const nextBounds = L.latLngBounds(
+            [
+              moveStartBounds.getSouth() + deltaLat,
+              moveStartBounds.getWest() + deltaLng
+            ],
+            [
+              moveStartBounds.getNorth() + deltaLat,
+              moveStartBounds.getEast() + deltaLng
+            ]
+          );
+
+          const currentFeature = gateFeatureData.features.find(
+            (item) => String(item.id) === String(selectedGate.id)
+          );
+          if (!currentFeature) return;
+
+          updateGateFeatureGeometry(currentFeature, nextBounds);
+
+          const layer = gateLayer?.getLayers().find(
+            (item) => String(item.feature?.id) === String(currentFeature.id)
+          );
+          if (layer?.setBounds) layer.setBounds(nextBounds);
+          else if (layer?.setLatLngs) layer.setLatLngs([[
+            nextBounds.getSouthWest(),
+            nextBounds.getNorthWest(),
+            nextBounds.getNorthEast(),
+            nextBounds.getSouthEast()
+          ]]);
+        });
+
+        centerMarker.on('dragend', () => refreshGateHandles());
+        gateHandleMarkers.push(centerMarker);
+      };
+
+      const selectGateForEdit = (feature) => {
+        if (!editModeEnabled || gateModeActive || !feature) return;
+
+        selectedGate = feature;
+        showGateCard(true);
+        gateStatus.textContent =
+          (feature.properties?.name || 'Unnamed Gate') + ' · resize or move';
+        gateNew.hidden = false;
+        gateRename.hidden = false;
+        gateDelete.hidden = false;
+        refreshGateHandles();
+      };
+
+      const updateGatePreview = (bounds) => {
+        if (!gatePreview) {
+          gatePreview = L.rectangle(bounds, {
+            pane: 'gatePane',
+            color: '#2563eb',
+            weight: 2,
+            dashArray: '6 5',
+            fillColor: '#2563eb',
+            fillOpacity: 0.12,
+            interactive: false
+          }).addTo(map);
+        } else {
+          gatePreview.setBounds(bounds);
+        }
+      };
+
+      const startGateMode = () => {
+        if (!editModeEnabled) return;
+
+        if (routeModeActive) {
+          clearRouteTest(false);
+        }
+
+        if (pointEditorActive || drawingModeActive) {
+          closeEditTools();
+        }
+
+        clearGatePreview();
+        clearGateHandles();
+        selectedGate = null;
+        gateModeActive = true;
+
+        gateToggle?.classList.add('is-active');
+        gateToggle?.setAttribute('aria-pressed', 'true');
+        gateStatus.textContent = 'Drag on the map to create a rectangular gate';
+        gateNew.hidden = false;
+        gateRename.hidden = true;
+        gateDelete.hidden = true;
+        showGateCard(true);
+      };
+
+      const closeGateTools = () => {
+        if (gatePointerId !== null) {
+          try {
+            map.getContainer().releasePointerCapture(gatePointerId);
+          } catch {
+            // Pointer capture may already be released.
+          }
+        }
+
+        gatePointerId = null;
+        gatePointerStart = null;
+        clearGatePreview();
+        clearGateHandles();
+        selectedGate = null;
+        gateModeActive = false;
+        gateToggle?.classList.remove('is-active');
+        gateToggle?.setAttribute('aria-pressed', 'false');
+        showGateCard(false);
+        gateRename.hidden = true;
+        gateDelete.hidden = true;
+        if (map.dragging && !map.dragging.enabled()) {
+          map.dragging.enable();
+        }
+        map.getContainer().classList.remove('is-gate-drawing');
+      };
+
+      const createGateFromBounds = (bounds, name) => {
+        const centerPoint = bounds.getCenter();
+        const sw = bounds.getSouthWest();
+        const nw = bounds.getNorthWest();
+        const ne = bounds.getNorthEast();
+        const se = bounds.getSouthEast();
+        const gateId = 'gate-' + Date.now();
+
+        const feature = {
+          type: 'Feature',
+          id: gateId,
+          properties: {
+            type: 'gate',
+            name
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [[
+              [Number(sw.lng.toFixed(7)), Number(sw.lat.toFixed(7))],
+              [Number(nw.lng.toFixed(7)), Number(nw.lat.toFixed(7))],
+              [Number(ne.lng.toFixed(7)), Number(ne.lat.toFixed(7))],
+              [Number(se.lng.toFixed(7)), Number(se.lat.toFixed(7))],
+              [Number(sw.lng.toFixed(7)), Number(sw.lat.toFixed(7))]
+            ]]
+          }
+        };
+
+        feature.properties.access_point = [
+          Number(centerPoint.lng.toFixed(7)),
+          Number(centerPoint.lat.toFixed(7))
+        ];
+
+        gateFeatureData.features.push(feature);
+        selectedGate = feature;
+        markGateEditsDirty();
+        refreshGateLayer();
+        refreshGateHandles();
+
+        gateStatus.textContent = name + ' · resize or move';
+        gateNew.hidden = false;
+        gateRename.hidden = false;
+        gateDelete.hidden = false;
+      };
+
+      const cancelGateName = () => {
+        showGateNameModal(false);
+        clearGatePreview();
+        pendingGateBounds = null;
+      };
+
+      const confirmGateName = () => {
+        const name = gateNameInput?.value.trim();
+
+        if (!name) {
+          gateNameInput?.focus();
+          return;
+        }
+
+        if (gateNameEditId) {
+          const feature = gateFeatureData.features.find(
+            (item) => String(item.id) === String(gateNameEditId)
+          );
+
+          if (feature) {
+            feature.properties = {
+              ...(feature.properties || {}),
+              type: 'gate',
+              name
+            };
+            markGateEditsDirty();
+            selectedGate = feature;
+            gateStatus.textContent = name + ' · resize or move';
+          }
+        } else if (pendingGateBounds) {
+          createGateFromBounds(pendingGateBounds, name);
+        }
+
+        showGateNameModal(false);
+        clearGatePreview();
+        pendingGateBounds = null;
+      };
+
+      const beginGatePointer = (event) => {
+        if (!gateModeActive || gatePointerId !== null) return;
+        if (event.button !== undefined && event.button !== 0) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        gatePointerId = event.pointerId ?? 1;
+        gatePointerStart = map.mouseEventToLatLng(event);
+        pendingGateBounds = null;
+
+        map.dragging.disable();
+        map.getContainer().classList.add('is-gate-drawing');
+        map.getContainer().setPointerCapture?.(gatePointerId);
+      };
+
+      const moveGatePointer = (event) => {
+        if (!gateModeActive || gatePointerId !== event.pointerId || !gatePointerStart) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const current = map.mouseEventToLatLng(event);
+        const bounds = L.latLngBounds(gatePointerStart, current);
+        pendingGateBounds = bounds;
+        updateGatePreview(bounds);
+      };
+
+      const finishGatePointer = (event) => {
+        if (gatePointerId !== event.pointerId || !gatePointerStart) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const current = map.mouseEventToLatLng(event);
+        const bounds = L.latLngBounds(gatePointerStart, current);
+        const width = Math.abs(bounds.getEast() - bounds.getWest());
+        const height = Math.abs(bounds.getNorth() - bounds.getSouth());
+
+        try {
+          map.getContainer().releasePointerCapture?.(gatePointerId);
+        } catch {
+          // Ignore a pointer capture that was already released.
+        }
+
+        gatePointerId = null;
+        gatePointerStart = null;
+        map.dragging.enable();
+        map.getContainer().classList.remove('is-gate-drawing');
+
+        if (width < 0.00001 || height < 0.00001) {
+          clearGatePreview();
+          gateStatus.textContent = 'Drag a larger rectangle to create a gate';
+          return;
+        }
+
+        pendingGateBounds = bounds;
+        updateGatePreview(bounds);
+        showGateNameModal(true, 'create');
+      };
+
+      const deleteSelectedGate = () => {
+        if (!selectedGate) return;
+
+        const deletedName = selectedGate.properties?.name || 'Gate';
+
+        gateFeatureData.features = gateFeatureData.features.filter(
+          (feature) => String(feature.id) !== String(selectedGate.id)
+        );
+
+        selectedGate = null;
+        clearGateHandles();
+        markGateEditsDirty();
+        refreshGateLayer();
+        gateStatus.textContent = deletedName + ' deleted';
+        gateRename.hidden = true;
+        gateDelete.hidden = true;
+      };
+
+      gateNameCancel?.addEventListener('click', cancelGateName);
+      gateNameCancelButton?.addEventListener('click', cancelGateName);
+      gateNameConfirm?.addEventListener('click', confirmGateName);
+      gateNameInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          confirmGateName();
+        }
+      });
+
+      gateToggle?.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (!editModeEnabled || gateToggle.disabled) return;
+
+        if (gateModeActive) {
+          closeGateTools();
+          return;
+        }
+
+        startGateMode();
+      });
+
+      gateCancel?.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeGateTools();
+      });
+
+      gateNew?.addEventListener('click', () => {
+        startGateMode();
+      });
+
+      gateRename?.addEventListener('click', () => {
+        if (!selectedGate) return;
+        showGateNameModal(true, 'rename', selectedGate);
+      });
+
+      gateDelete?.addEventListener('click', deleteSelectedGate);
+
+      const gateContainer = map.getContainer();
+      gateContainer.addEventListener('pointerdown', beginGatePointer, true);
+      gateContainer.addEventListener('pointermove', moveGatePointer, true);
+      gateContainer.addEventListener('pointerup', finishGatePointer, true);
+      gateContainer.addEventListener('pointercancel', finishGatePointer, true);
+
       const showDeletePointModal = (visible = true) => {
         deletePointModal?.classList.toggle('is-open', visible);
         deletePointModal?.setAttribute('aria-hidden', String(!visible));
@@ -2596,6 +3327,7 @@ import 'leaflet/dist/leaflet.css';
       };
 
       savePathEdits?.addEventListener('click', saveCurrentPathEdits);
+      saveGateEdits?.addEventListener('click', saveCurrentGateEdits);
       editNewPath?.addEventListener('click', startDrawingMode);
       editDeletePoint?.addEventListener('click', () => {
         if (drawingModeActive) return;
@@ -2609,6 +3341,7 @@ import 'leaflet/dist/leaflet.css';
       editModeToggle?.addEventListener('change', () => {
         editModeEnabled = Boolean(editModeToggle.checked);
         showEditIcon(editModeEnabled);
+        showGateIcon(editModeEnabled);
 
         if (editModeEnabled) {
           pedestrianPathsActive = true;
@@ -2617,9 +3350,11 @@ import 'leaflet/dist/leaflet.css';
           buildEditableHitLayer();
         } else {
           closeEditTools();
+          closeGateTools();
           clearEditableVertices();
           buildDefaultVertexMarkers();
           buildEditableHitLayer();
+          refreshGateLayer();
         }
       });
 
@@ -2628,6 +3363,13 @@ import 'leaflet/dist/leaflet.css';
         event.stopPropagation();
 
         if (!editModeEnabled || !editToggle || editToggle.disabled) return;
+
+        if (gateModeActive) {
+          closeGateTools();
+          startPointEditorMode();
+          editToggle.focus({ preventScroll: true });
+          return;
+        }
 
         if (pointEditorActive || drawingModeActive) {
           closeEditTools();
@@ -2667,10 +3409,17 @@ import 'leaflet/dist/leaflet.css';
           : 'Base fallback';
       }
 
+      if (gateEditFileStatus) {
+        gateEditFileStatus.textContent =
+          gatesResponse?.ok ? 'Loaded' : 'Empty';
+      }
+
       buildDefaultVertexMarkers();
 
       editModeEnabled = Boolean(editModeToggle?.checked);
       showEditIcon(editModeEnabled);
+      showGateIcon(editModeEnabled);
+      refreshGateLayer();
       buildEditableHitLayer();
 
       map.on('click', (event) => {
@@ -2742,6 +3491,16 @@ import 'leaflet/dist/leaflet.css';
 
         if (devPanel?.classList.contains('is-open')) {
           closeDevPanel();
+          return;
+        }
+
+        if (gateNameModal?.classList.contains('is-open')) {
+          cancelGateName();
+          return;
+        }
+
+        if (gateModeActive || gateCard?.classList.contains('is-open')) {
+          closeGateTools();
           return;
         }
 
