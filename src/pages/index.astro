@@ -107,6 +107,28 @@ import 'leaflet/dist/leaflet.css';
 
     <div class="map-note" id="mapNote">Local map · 1 km boundary</div>
 
+    <section class="delete-point-modal" id="deletePointModal" aria-hidden="true">
+      <div class="delete-point-dialog" role="dialog" aria-modal="true" aria-labelledby="deletePointTitle">
+        <div class="delete-point-header">
+          <div>
+            <span class="delete-point-kicker">DELETE POINT</span>
+            <strong id="deletePointTitle">What should happen to the attached lines?</strong>
+          </div>
+          <button type="button" class="route-card-close" id="deletePointCancel" aria-label="Cancel delete">×</button>
+        </div>
+        <div class="delete-point-options">
+          <button type="button" class="delete-point-option" id="deletePointMerge">
+            <strong>Merge lines</strong>
+            <span>Remove the point and connect the lines around it.</span>
+          </button>
+          <button type="button" class="delete-point-option" id="deletePointDrop">
+            <strong>Remove attached lines</strong>
+            <span>Remove the point and the line segments connected to it.</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
     <section class="dev-panel" id="devPanel" aria-hidden="true">
       <div class="dev-panel-shell">
         <header class="dev-panel-header">
@@ -1603,6 +1625,10 @@ import 'leaflet/dist/leaflet.css';
       const editCancel = document.getElementById('editCancel');
       const savePathEdits = document.getElementById('savePathEdits');
       const pathEditFileStatus = document.getElementById('pathEditFileStatus');
+      const deletePointModal = document.getElementById('deletePointModal');
+      const deletePointCancel = document.getElementById('deletePointCancel');
+      const deletePointMerge = document.getElementById('deletePointMerge');
+      const deletePointDrop = document.getElementById('deletePointDrop');
 
       let editModeEnabled = false;
       let pointEditorActive = false;
@@ -1702,6 +1728,7 @@ import 'leaflet/dist/leaflet.css';
       };
 
       const closeEditTools = () => {
+        showDeletePointModal(false);
         clearDrawing();
         clearEditableVertices();
         clearSelectedPath();
@@ -2180,7 +2207,71 @@ import 'leaflet/dist/leaflet.css';
         editStatus.textContent = 'Custom path saved · all points active';
       };
 
-      const deleteSelectedPoint = () => {
+      const showDeletePointModal = (visible = true) => {
+        deletePointModal?.classList.toggle('is-open', visible);
+        deletePointModal?.setAttribute('aria-hidden', String(!visible));
+      };
+
+      const mergeDeletedPoint = (target, feature, coordinates) => {
+        if (coordinates.length <= 2) {
+          pedestrianPathData.features = (pedestrianPathData.features || [])
+            .filter((item) => String(item.id) !== String(feature.id));
+          editStatus.textContent = 'Path deleted';
+          return;
+        }
+
+        coordinates.splice(target.vertexIndex, 1);
+        saveEditedFeatureGeometry(feature.id, coordinates);
+        editStatus.textContent = 'Point deleted · lines merged';
+      };
+
+      const removeAttachedLines = (target, feature, coordinates) => {
+        /*
+         * Removing the two segments attached to a middle vertex splits the
+         * original LineString into the valid path pieces on either side.
+         */
+        if (coordinates.length <= 2 || target.vertexIndex === 0 || target.vertexIndex === coordinates.length - 1) {
+          pedestrianPathData.features = (pedestrianPathData.features || [])
+            .filter((item) => String(item.id) !== String(feature.id));
+          editStatus.textContent = 'Point and attached line deleted';
+          return;
+        }
+
+        const left = coordinates.slice(0, target.vertexIndex);
+        const right = coordinates.slice(target.vertexIndex + 1);
+
+        pedestrianPathData.features = (pedestrianPathData.features || [])
+          .filter((item) => String(item.id) !== String(feature.id));
+
+        const sourceProperties = cloneJson(feature.properties || {});
+        const makeSplitFeature = (points, suffix) => ({
+          type: 'Feature',
+          id: String(feature.id) + '-' + suffix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+          properties: {
+            ...sourceProperties,
+            source: sourceProperties.source || 'edited'
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: points.map((point) => [
+              Number(point.lng.toFixed(7)),
+              Number(point.lat.toFixed(7))
+            ])
+          }
+        });
+
+        if (left.length >= 2) {
+          pedestrianPathData.features.push(makeSplitFeature(left, 'left'));
+        }
+
+        if (right.length >= 2) {
+          pedestrianPathData.features.push(makeSplitFeature(right, 'right'));
+        }
+
+        editStatus.textContent = 'Point and attached lines deleted';
+      };
+
+      const deleteSelectedPoint = (mode = 'merge') => {
         if (!selectedPoint) return;
 
         const target = { ...selectedPoint };
@@ -2189,25 +2280,17 @@ import 'leaflet/dist/leaflet.css';
 
         if (!feature || !coordinates || !coordinates[target.vertexIndex]) return;
 
+        showDeletePointModal(false);
         selectedPoint = null;
         selectedPath = null;
 
-        if (coordinates.length <= 2) {
-          pedestrianPathData.features = (pedestrianPathData.features || [])
-            .filter((item) => String(item.id) !== String(feature.id));
-          markPathEditsDirty();
-          editStatus.textContent = 'Path deleted';
-          refreshAfterPathChange();
-          setEditActionVisibility({
-            pointEditor: pointEditorActive
-          });
-          return;
+        if (mode === 'drop') {
+          removeAttachedLines(target, feature, coordinates);
+        } else {
+          mergeDeletedPoint(target, feature, coordinates);
         }
 
-        coordinates.splice(target.vertexIndex, 1);
-        saveEditedFeatureGeometry(feature.id, coordinates);
-
-        editStatus.textContent = 'Point deleted';
+        markPathEditsDirty();
         refreshAfterPathChange();
         setEditActionVisibility({
           pointEditor: pointEditorActive
@@ -2291,7 +2374,12 @@ import 'leaflet/dist/leaflet.css';
 
       savePathEdits?.addEventListener('click', saveCurrentPathEdits);
       editNewPath?.addEventListener('click', startDrawingMode);
-      editDeletePoint?.addEventListener('click', deleteSelectedPoint);
+      editDeletePoint?.addEventListener('click', () => {
+        if (selectedPoint) showDeletePointModal(true);
+      });
+      deletePointMerge?.addEventListener('click', () => deleteSelectedPoint('merge'));
+      deletePointDrop?.addEventListener('click', () => deleteSelectedPoint('drop'));
+      deletePointCancel?.addEventListener('click', () => showDeletePointModal(false));
       editDelete?.addEventListener('click', deleteSelectedPath);
 
       editModeToggle?.addEventListener('change', () => {
