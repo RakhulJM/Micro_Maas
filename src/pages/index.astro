@@ -1796,9 +1796,6 @@ import 'leaflet/dist/leaflet.css';
           interactive: false
         }).addTo(map);
 
-        drawingLine.bringToFront();
-        drawingLineCasing.bringToFront();
-
         drawingLine = L.polyline(drawingPoints, {
           pane: 'drawingPreviewPane',
           color: '#0f4fd8',
