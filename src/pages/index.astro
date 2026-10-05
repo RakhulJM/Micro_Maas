@@ -3080,8 +3080,24 @@ import 'leaflet/dist/leaflet.css';
 
         const current = map.mouseEventToLatLng(event);
         const bounds = L.latLngBounds(gatePointerStart, current);
-        const width = Math.abs(bounds.getEast() - bounds.getWest());
-        const height = Math.abs(bounds.getNorth() - bounds.getSouth());
+        /*
+         * Gates are small campus access objects. Use a meter-based minimum
+         * instead of a raw degree threshold so tiny rectangles are still
+         * valid and behave consistently at this latitude.
+         */
+        const gateWidthMeters = L.latLng(
+          bounds.getSouth(),
+          bounds.getWest()
+        ).distanceTo(
+          L.latLng(bounds.getSouth(), bounds.getEast())
+        );
+        const gateHeightMeters = L.latLng(
+          bounds.getSouth(),
+          bounds.getWest()
+        ).distanceTo(
+          L.latLng(bounds.getNorth(), bounds.getWest())
+        );
+        const minimumGateSizeMeters = 0.5;
 
         try {
           map.getContainer().releasePointerCapture?.(gatePointerId);
@@ -3094,9 +3110,12 @@ import 'leaflet/dist/leaflet.css';
         map.dragging.enable();
         map.getContainer().classList.remove('is-gate-drawing');
 
-        if (width < 0.00001 || height < 0.00001) {
+        if (
+          gateWidthMeters < minimumGateSizeMeters ||
+          gateHeightMeters < minimumGateSizeMeters
+        ) {
           clearGatePreview();
-          gateStatus.textContent = 'Drag a larger rectangle to create a gate';
+          gateStatus.textContent = 'Drag a slightly larger gate rectangle';
           return;
         }
 
