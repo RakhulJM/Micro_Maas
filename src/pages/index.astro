@@ -1964,6 +1964,24 @@ import 'leaflet/dist/leaflet.css';
         editToggle.setAttribute('aria-hidden', String(!visible));
         editToggle.disabled = !visible;
         editToggle.tabIndex = visible ? 0 : -1;
+        editToggle.style.display = visible ? 'grid' : 'none';
+      };
+
+      const showGateIcon = (visible) => {
+        if (!gateToggle) return;
+
+        gateToggle.classList.toggle('is-visible', visible);
+        gateToggle.setAttribute('aria-hidden', String(!visible));
+        gateToggle.disabled = !visible;
+        gateToggle.tabIndex = visible ? 0 : -1;
+        gateToggle.style.display = visible ? 'grid' : 'none';
+      };
+
+      const syncEditModeUi = () => {
+        const enabled = Boolean(editModeToggle?.checked);
+        editModeEnabled = enabled;
+        showEditIcon(enabled);
+        showGateIcon(enabled);
       };
 
       const showEditCard = (visible) => {
@@ -2669,15 +2687,6 @@ import 'leaflet/dist/leaflet.css';
       const showGateCard = (visible = true) => {
         gateCard?.classList.toggle('is-open', visible);
         gateCard?.setAttribute('aria-hidden', String(!visible));
-      };
-
-      const showGateIcon = (visible) => {
-        if (!gateToggle) return;
-
-        gateToggle.classList.toggle('is-visible', visible);
-        gateToggle.setAttribute('aria-hidden', String(!visible));
-        gateToggle.disabled = !visible;
-        gateToggle.tabIndex = visible ? 0 : -1;
       };
 
       const showGateNameModal = (visible, mode = 'create', feature = null) => {
@@ -3599,9 +3608,7 @@ import 'leaflet/dist/leaflet.css';
       editDelete?.addEventListener('click', deleteSelectedPath);
 
       editModeToggle?.addEventListener('change', () => {
-        editModeEnabled = Boolean(editModeToggle.checked);
-        showEditIcon(editModeEnabled);
-        showGateIcon(editModeEnabled);
+        syncEditModeUi();
 
         if (editModeEnabled) {
           pedestrianPathsActive = true;
@@ -3677,9 +3684,7 @@ import 'leaflet/dist/leaflet.css';
 
       buildDefaultVertexMarkers();
 
-      editModeEnabled = Boolean(editModeToggle?.checked);
-      showEditIcon(editModeEnabled);
-      showGateIcon(editModeEnabled);
+      syncEditModeUi();
       refreshGateLayer();
       buildEditableHitLayer();
 
