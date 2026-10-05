@@ -1791,7 +1791,9 @@ import 'leaflet/dist/leaflet.css';
             editModeEnabled = false;
             if (editModeToggle) editModeToggle.checked = false;
             showEditIcon(false);
+            showGateIcon(false);
             closeEditTools();
+            refreshGateLayer();
             buildEditableHitLayer();
           }
 
@@ -3352,6 +3354,7 @@ import 'leaflet/dist/leaflet.css';
           pedestrianPathsActive = true;
           pedestrianPathCasing?.addTo(map);
           pedestrianPaths?.addTo(map);
+          refreshGateLayer();
           buildEditableHitLayer();
         } else {
           closeEditTools();
