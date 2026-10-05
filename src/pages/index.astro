@@ -2323,16 +2323,67 @@ import 'leaflet/dist/leaflet.css';
         setEditActionVisibility({ drawing: true });
       };
 
+      const findNearestPedestrianVertex = (latlng) => {
+        let best = null;
+        const seen = new Set();
+
+        for (const feature of pedestrianPathData.features || []) {
+          const geometry = feature?.geometry;
+          if (!geometry) continue;
+
+          const lines = geometry.type === 'LineString'
+            ? [geometry.coordinates]
+            : geometry.type === 'MultiLineString'
+              ? geometry.coordinates
+              : [];
+
+          for (const line of lines) {
+            if (!Array.isArray(line)) continue;
+
+            for (const coordinate of line) {
+              if (!Array.isArray(coordinate) || coordinate.length < 2) continue;
+
+              const key =
+                Number(coordinate[0]).toFixed(7) + ',' +
+                Number(coordinate[1]).toFixed(7);
+
+              if (seen.has(key)) continue;
+              seen.add(key);
+
+              const candidate = L.latLng(
+                Number(coordinate[1]),
+                Number(coordinate[0])
+              );
+
+              const distance = latlng.distanceTo(candidate);
+
+              if (!best || distance < best.distance) {
+                best = {
+                  type: 'vertex',
+                  latlng: candidate,
+                  distance,
+                  nodeKey: key
+                };
+              }
+            }
+          }
+        }
+
+        return best;
+      };
+
       const snapDrawingPoint = (point) => {
         /*
-         * Drawing has its own snapping rule:
-         * 1. Prefer an existing network vertex.
-         * 2. Otherwise snap onto the nearest existing path segment.
-         *
-         * The returned coordinate becomes one of the new path's actual
-         * vertices, so connecting to an existing point is a real topology
-         * connection, not just a visual coincidence.
+         * New Path snapping deliberately checks raw feature vertices first.
+         * This is independent of the routing graph, so every visible
+         * existing point is a valid snap target.
          */
+        const vertex = findNearestPedestrianVertex(point);
+
+        if (vertex && vertex.distance <= snapToleranceMeters) {
+          return vertex.latlng;
+        }
+
         const snapped = snapToPedestrianPath(point);
 
         if (!snapped || snapped.distance > snapToleranceMeters) {
@@ -2631,9 +2682,18 @@ import 'leaflet/dist/leaflet.css';
          * coordinate. It is still recorded as a vertex of the new path.
          */
         const clicked = L.latLng(event.latlng.lat, event.latlng.lng);
-        const snap = snapToPedestrianPath(clicked);
-        const connected = snap && snap.distance <= snapToleranceMeters;
-        const point = connected ? snap.latlng : clicked;
+        const vertexSnap = findNearestPedestrianVertex(clicked);
+        const pathSnap = snapToPedestrianPath(clicked);
+
+        let snap = null;
+        if (vertexSnap && vertexSnap.distance <= snapToleranceMeters) {
+          snap = vertexSnap;
+        } else if (pathSnap && pathSnap.distance <= snapToleranceMeters) {
+          snap = pathSnap;
+        }
+
+        const connected = Boolean(snap);
+        const point = snap?.latlng || clicked;
 
         drawingPoints.push(point);
         drawingMarkers.push(createEditPointMarker(point, drawingPoints.length));
