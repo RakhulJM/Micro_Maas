@@ -2962,7 +2962,9 @@ import 'leaflet/dist/leaflet.css';
         gateToggle?.classList.remove('is-active');
         gateToggle?.setAttribute('aria-pressed', 'false');
         showGateCard(false);
+        gateEdit.hidden = true;
         gateRename.hidden = true;
+        gateRotate.hidden = true;
         gateDelete.hidden = true;
         if (map.dragging && !map.dragging.enabled()) {
           map.dragging.enable();
