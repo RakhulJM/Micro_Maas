@@ -2933,14 +2933,28 @@ import 'leaflet/dist/leaflet.css';
         markGateEditsDirty();
       };
 
+      const findGateLayer = (featureId) => {
+        if (!gateLayer) return null;
+
+        let match = null;
+
+        gateLayer.eachLayer((layer) => {
+          if (
+            String(layer?.feature?.id) === String(featureId) ||
+            String(layer?.options?.featureId) === String(featureId)
+          ) {
+            match = layer;
+          }
+        });
+
+        return match;
+      };
+
       const refreshGateLayerGeometry = (feature) => {
         const model = gateModelForFeature(feature);
         if (!model || !gateLayer) return;
 
-        const layer = gateLayer.getLayers().find(
-          (item) => String(item.feature?.id) === String(feature.id)
-        );
-
+        const layer = findGateLayer(feature.id);
         if (!layer?.setLatLngs) return;
 
         const corners = gateCornersFromModel(model);
@@ -2951,6 +2965,8 @@ import 'leaflet/dist/leaflet.css';
           corners[2],
           corners[3]
         ]]);
+
+        layer.redraw?.();
       };
 
       const refreshGateHandles = () => {
@@ -3118,7 +3134,22 @@ import 'leaflet/dist/leaflet.css';
           keyboard: false
         }).addTo(map);
 
-        centerMarker.on('drag', () => {
+        centerMarker.on('mousedown', (event) => {
+          event.originalEvent?.stopPropagation();
+        });
+
+        centerMarker.on('click', (event) => {
+          event.originalEvent?.stopPropagation();
+        });
+
+        centerMarker.on('dragstart', (event) => {
+          event.originalEvent?.stopPropagation();
+          map.dragging.disable();
+        });
+
+        centerMarker.on('drag', (event) => {
+          event.originalEvent?.stopPropagation();
+
           const feature = gateFeatureData.features.find(
             (item) => String(item.id) === String(selectedGate.id)
           );
@@ -3126,6 +3157,10 @@ import 'leaflet/dist/leaflet.css';
           const currentModel = gateModelForFeature(feature);
           if (!feature || !currentModel) return;
 
+          /*
+           * The center point is the move handle. Dragging it moves the
+           * complete gate while preserving width, height and rotation.
+           */
           updateGateFeatureGeometry(feature, {
             ...currentModel,
             center: centerMarker.getLatLng()
@@ -3135,7 +3170,11 @@ import 'leaflet/dist/leaflet.css';
           refreshGateLayerGeometry(feature);
         });
 
-        centerMarker.on('dragend', () => refreshGateHandles());
+        centerMarker.on('dragend', (event) => {
+          event.originalEvent?.stopPropagation();
+          map.dragging.enable();
+          refreshGateHandles();
+        });
         gateHandleMarkers.push(centerMarker);
       };
 
@@ -3417,14 +3456,25 @@ import 'leaflet/dist/leaflet.css';
         const feature = gateFeatureData.features.find(
           (item) => String(item.id) === String(selectedGate.id)
         );
+
         const model = gateModelForFeature(feature);
         if (!feature || !model) return;
 
-        model.rotation_deg =
-          Math.round((model.rotation_deg + deltaDegrees) * 1) / 1;
+        let nextRotation = model.rotation_deg + deltaDegrees;
+
+        while (nextRotation > 180) nextRotation -= 360;
+        while (nextRotation <= -180) nextRotation += 360;
+
+        model.rotation_deg = Number(nextRotation.toFixed(1));
 
         updateGateFeatureGeometry(feature, model);
         selectedGate = feature;
+
+        /*
+         * Update the polygon first, then recreate the five handles from the
+         * new geometry. This guarantees the visual gate and handles stay in
+         * sync for every 1-degree rotation.
+         */
         refreshGateLayerGeometry(feature);
         refreshGateHandles();
 
@@ -3487,8 +3537,17 @@ import 'leaflet/dist/leaflet.css';
         startGateMode();
       });
 
-      gateRotateLeft?.addEventListener('click', () => rotateSelectedGate(-1));
-      gateRotateRight?.addEventListener('click', () => rotateSelectedGate(1));
+      gateRotateLeft?.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        rotateSelectedGate(-1);
+      });
+
+      gateRotateRight?.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        rotateSelectedGate(1);
+      });
 
       gateRename?.addEventListener('click', () => {
         if (!selectedGate) return;
