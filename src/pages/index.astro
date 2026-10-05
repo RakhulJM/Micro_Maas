@@ -969,27 +969,76 @@ import 'leaflet/dist/leaflet.css';
       };
 
       const snapToPedestrianPath = (latlng) => {
-        let best = null;
+        let bestVertex = null;
+        let bestSegment = null;
+
+        /*
+         * Existing vertices have priority over segment projection. This makes
+         * clicking an existing point mean "connect this new path here",
+         * rather than creating a nearly-identical point beside it.
+         */
+        const seenVertices = new Set();
+
+        for (const segment of pedestrianSegments) {
+          for (const [coordinate, key] of [
+            [segment.a, segment.aKey],
+            [segment.b, segment.bKey]
+          ]) {
+            if (seenVertices.has(key)) continue;
+            seenVertices.add(key);
+
+            const candidateLatLng = L.latLng(
+              Number(coordinate[1]),
+              Number(coordinate[0])
+            );
+
+            const distance = latlng.distanceTo(candidateLatLng);
+            if (!bestVertex || distance < bestVertex.distance) {
+              bestVertex = {
+                type: 'vertex',
+                coordinate: [Number(coordinate[0]), Number(coordinate[1])],
+                fraction: 0,
+                distance,
+                nodeKey: key,
+                segment
+              };
+            }
+          }
+        }
 
         for (const segment of pedestrianSegments) {
           const projection = projectToSegment(latlng, segment.a, segment.b);
           const candidate = {
+            type: 'segment',
             ...projection,
             segment
           };
 
-          if (!best || candidate.distance < best.distance) {
-            best = candidate;
+          if (!bestSegment || candidate.distance < bestSegment.distance) {
+            bestSegment = candidate;
           }
         }
 
-        if (!best) return null;
+        if (
+          bestVertex &&
+          bestVertex.distance <= snapToleranceMeters
+        ) {
+          return {
+            ...bestVertex,
+            latlng: L.latLng(
+              Number(bestVertex.coordinate[1]),
+              Number(bestVertex.coordinate[0])
+            )
+          };
+        }
+
+        if (!bestSegment) return null;
 
         return {
-          ...best,
+          ...bestSegment,
           latlng: L.latLng(
-            Number(best.coordinate[1]),
-            Number(best.coordinate[0])
+            Number(bestSegment.coordinate[1]),
+            Number(bestSegment.coordinate[0])
           )
         };
       };
@@ -2265,7 +2314,7 @@ import 'leaflet/dist/leaflet.css';
 
         editToggle?.classList.add('is-active');
         editToggle?.setAttribute('aria-pressed', 'true');
-        editStatus.textContent = 'Click to draw · points snap to nearby network';
+        editStatus.textContent = 'Click to draw · connect to existing points or cross existing paths';
         showEditCard(true);
         setEditActionVisibility({ drawing: true });
       };
@@ -2568,9 +2617,16 @@ import 'leaflet/dist/leaflet.css';
         drawingMarkers.push(createEditPointMarker(point, drawingPoints.length));
         renderDrawingLine();
 
+        const snap = snapToPedestrianPath(event.latlng);
+        const connected = snap && snap.distance <= snapToleranceMeters;
+
         editStatus.textContent = drawingPoints.length +
           ' point' + (drawingPoints.length === 1 ? '' : 's') +
-          ' · Finish when ready';
+          (connected
+            ? snap.type === 'vertex'
+              ? ' · connected to existing point'
+              : ' · connected to existing path'
+            : ' · Finish when ready');
       });
 
       window.addEventListener('keydown', (event) => {
