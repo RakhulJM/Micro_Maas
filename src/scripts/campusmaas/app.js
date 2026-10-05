@@ -1741,6 +1741,11 @@
       let gateNameEditId = null;
       let gateHandleMarkers = [];
 
+      let centerGatePointerId = null;
+      let centerGatePointerStart = null;
+      let centerGateDragStartModel = null;
+      let centerGateMapWasEnabled = true;
+
       let defaultVertexMarkers = [];
       let editableVertexMarkers = [];
       let editablePathLines = new Map();
@@ -3366,6 +3371,128 @@
       gateDelete?.addEventListener('click', deleteSelectedGate);
 
       const gateContainer = map.getContainer();
+
+      const isPointerOnGateCenter = (event) => {
+        if (!editModeEnabled || gateModeActive || !selectedGate) return false;
+        if (event.button !== undefined && event.button !== 0) return false;
+        if (gateNameModal?.classList.contains('is-open')) return false;
+
+        const feature = gateFeatureData.features.find(
+          (item) => String(item.id) === String(selectedGate.id)
+        );
+        const model = gateModelForFeature(feature);
+
+        if (!feature || !model) return false;
+
+        const rect = gateContainer.getBoundingClientRect();
+        const pointerX = event.clientX - rect.left;
+        const pointerY = event.clientY - rect.top;
+        const centerPoint = map.latLngToContainerPoint(model.center);
+
+        return Math.hypot(
+          pointerX - centerPoint.x,
+          pointerY - centerPoint.y
+        ) <= 24;
+      };
+
+      const beginCenterGatePointer = (event) => {
+        if (centerGatePointerId !== null) return;
+        if (!isPointerOnGateCenter(event)) return;
+
+        const feature = gateFeatureData.features.find(
+          (item) => String(item.id) === String(selectedGate.id)
+        );
+        const model = gateModelForFeature(feature);
+
+        if (!feature || !model) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        centerGatePointerId = event.pointerId ?? 1;
+        centerGatePointerStart = map.mouseEventToLatLng(event);
+        centerGateDragStartModel = model;
+        centerGateMapWasEnabled = map.dragging.enabled();
+
+        map.dragging.disable();
+        gateContainer.classList.add('is-gate-moving');
+        gateContainer.setPointerCapture?.(centerGatePointerId);
+      };
+
+      const moveCenterGatePointer = (event) => {
+        if (
+          centerGatePointerId === null ||
+          event.pointerId !== centerGatePointerId ||
+          !centerGatePointerStart ||
+          !centerGateDragStartModel
+        ) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const currentPointer = map.mouseEventToLatLng(event);
+        const delta = gateLatLngToLocal(
+          centerGatePointerStart,
+          currentPointer
+        );
+
+        const nextCenter = gateLocalToLatLng(
+          centerGateDragStartModel.center,
+          delta.x,
+          delta.y
+        );
+
+        const feature = gateFeatureData.features.find(
+          (item) => String(item.id) === String(selectedGate.id)
+        );
+
+        if (!feature) return;
+
+        updateGateFeatureGeometry(feature, {
+          ...centerGateDragStartModel,
+          center: nextCenter
+        });
+
+        selectedGate = feature;
+
+        const centerMarker = gateHandleMarkers[gateHandleMarkers.length - 1];
+        centerMarker?.setLatLng(nextCenter);
+
+        refreshGateLayerGeometry(feature);
+      };
+
+      const finishCenterGatePointer = (event) => {
+        if (
+          centerGatePointerId === null ||
+          (event.pointerId !== undefined && event.pointerId !== centerGatePointerId)
+        ) return;
+
+        event.preventDefault?.();
+        event.stopPropagation?.();
+
+        try {
+          gateContainer.releasePointerCapture?.(centerGatePointerId);
+        } catch {
+          // Pointer capture may already be released.
+        }
+
+        centerGatePointerId = null;
+        centerGatePointerStart = null;
+        centerGateDragStartModel = null;
+        gateContainer.classList.remove('is-gate-moving');
+
+        if (centerGateMapWasEnabled) {
+          map.dragging.enable();
+        }
+
+        refreshGateHandles();
+      };
+
+      gateContainer.addEventListener('pointerdown', beginCenterGatePointer, true);
+      gateContainer.addEventListener('pointermove', moveCenterGatePointer, true);
+      gateContainer.addEventListener('pointerup', finishCenterGatePointer, true);
+      gateContainer.addEventListener('pointercancel', finishCenterGatePointer, true);
+
       gateContainer.addEventListener('pointerdown', beginGatePointer, true);
       gateContainer.addEventListener('pointermove', moveGatePointer, true);
       gateContainer.addEventListener('pointerup', finishGatePointer, true);
