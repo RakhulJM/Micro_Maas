@@ -1574,7 +1574,7 @@
       ];
 
       const layerRegistry = new Map([
-        ['campus.geojson', campusLayers],
+        ['export_places.geojson', campusLayers],
         ['perimeter.geojson', [perimeterMask]]
       ]);
 
@@ -1645,7 +1645,7 @@
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.checked =
-              name === 'campus.geojson' ||
+              name === 'export_places.geojson' ||
               name === 'perimeter.geojson';
             checkbox.setAttribute('data-map-file', name);
 
