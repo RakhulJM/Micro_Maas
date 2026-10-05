@@ -100,11 +100,10 @@
     }, true);
 
     import('leaflet').then(async ({ default: L }) => {
-      const [campusResponse, perimeterResponse, pathEditResponse, pathConfigResponse, gatesResponse] = await Promise.all([
+      const [campusResponse, perimeterResponse, pathEditResponse, gatesResponse] = await Promise.all([
         fetch('/maps/export_places.geojson'),
         fetch('/maps/perimeter.geojson'),
         fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
-        fetch('/maps/pedestrian_path_config.json'),
         fetch('/maps/gates.geojson', { cache: 'no-store' })
       ]);
 
@@ -127,29 +126,31 @@
         })
       ]);
 
-      const pedestrianConfig = pathConfigResponse.ok
-        ? await pathConfigResponse.json()
-        : {
-            version: 1,
-            routing: {
-              walking_speed_mps: 1.4,
-              snap_tolerance_m: 8
-            },
-            render: {
-              highlight: {
-                casing_weight: 7,
-                path_weight: 4
-              },
-              route: {
-                casing_weight: 9,
-                path_weight: 5
-              },
-              editor: {
-                preview_weight: 4,
-                preview_dash: '7 5'
-              }
-            }
-          };
+      /*
+       * Path rendering/routing defaults live in the application now.
+       * The only external path dataset is pedestrian_paths_edits.geojson.
+       */
+      const pedestrianConfig = {
+        version: 1,
+        routing: {
+          walking_speed_mps: 1.4,
+          snap_tolerance_m: 8
+        },
+        render: {
+          highlight: {
+            casing_weight: 7,
+            path_weight: 4
+          },
+          route: {
+            casing_weight: 9,
+            path_weight: 5
+          },
+          editor: {
+            preview_weight: 4,
+            preview_dash: '7 5'
+          }
+        }
+      };
 
       const committedPathEdits = pedestrianPathData;
 
