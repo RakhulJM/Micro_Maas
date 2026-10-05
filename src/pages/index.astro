@@ -1944,7 +1944,6 @@ import 'leaflet/dist/leaflet.css';
 
       let gateEditDirty = false;
       let selectedGate = null;
-      let gateShapeEditActive = false;
       let gatePreview = null;
       let gatePointerId = null;
       let gatePointerStart = null;
@@ -2721,36 +2720,162 @@ import 'leaflet/dist/leaflet.css';
           iconAnchor: kind === 'move' ? [9, 9] : [7, 7]
         });
 
-      const updateGateFeatureGeometry = (feature, bounds) => {
-        if (!feature || !bounds) return;
+      const gateMetersPerDegreeLat = 111320;
 
-        const sw = bounds.getSouthWest();
-        const nw = bounds.getNorthWest();
-        const ne = bounds.getNorthEast();
-        const se = bounds.getSouthEast();
-        const centerPoint = bounds.getCenter();
+      const gateLatLngToLocal = (center, point) => {
+        const cosLat = Math.cos(center.lat * Math.PI / 180);
+
+        return {
+          x: (point.lng - center.lng) * gateMetersPerDegreeLat * cosLat,
+          y: (point.lat - center.lat) * gateMetersPerDegreeLat
+        };
+      };
+
+      const gateLocalToLatLng = (center, x, y) => {
+        const cosLat = Math.cos(center.lat * Math.PI / 180);
+
+        return L.latLng(
+          center.lat + y / gateMetersPerDegreeLat,
+          center.lng + x / (gateMetersPerDegreeLat * cosLat)
+        );
+      };
+
+      const rotateLocalPoint = (x, y, degrees) => {
+        const radians = degrees * Math.PI / 180;
+        const cos = Math.cos(radians);
+        const sin = Math.sin(radians);
+
+        return {
+          x: x * cos - y * sin,
+          y: x * sin + y * cos
+        };
+      };
+
+      const gateModelForFeature = (feature) => {
+        const ring = gateFeatureRing(feature);
+        if (!ring || ring.length < 5) return null;
+
+        const corners = ring.slice(0, 4).map(([lng, lat]) =>
+          L.latLng(Number(lat), Number(lng))
+        );
+
+        const center = feature.properties?.center
+          ? L.latLng(
+              Number(feature.properties.center[1]),
+              Number(feature.properties.center[0])
+            )
+          : L.latLng(
+              (corners[0].lat + corners[1].lat + corners[2].lat + corners[3].lat) / 4,
+              (corners[0].lng + corners[1].lng + corners[2].lng + corners[3].lng) / 4
+            );
+
+        const width = Number(feature.properties?.width_m) ||
+          corners[1].distanceTo(corners[2]);
+
+        const height = Number(feature.properties?.height_m) ||
+          corners[0].distanceTo(corners[1]);
+
+        let rotation = Number(feature.properties?.rotation_deg);
+
+        if (!Number.isFinite(rotation)) {
+          /*
+           * Existing gates are created as axis-aligned SW -> NW -> NE -> SE.
+           * Recover that orientation when loading an older gate file.
+           */
+          rotation = 0;
+        }
+
+        return {
+          center,
+          width_m: Math.max(0.5, width),
+          height_m: Math.max(0.5, height),
+          rotation_deg: rotation
+        };
+      };
+
+      const gateCornersFromModel = (model) => {
+        const halfWidth = model.width_m / 2;
+        const halfHeight = model.height_m / 2;
+
+        const localCorners = [
+          [-halfWidth, -halfHeight],
+          [-halfWidth, halfHeight],
+          [halfWidth, halfHeight],
+          [halfWidth, -halfHeight]
+        ];
+
+        return localCorners.map(([x, y]) => {
+          const rotated = rotateLocalPoint(
+            x,
+            y,
+            model.rotation_deg
+          );
+
+          return gateLocalToLatLng(
+            model.center,
+            rotated.x,
+            rotated.y
+          );
+        });
+      };
+
+      const updateGateFeatureGeometry = (feature, model) => {
+        if (!feature || !model) return;
+
+        const corners = gateCornersFromModel(model);
+        const ring = corners.map((point) => [
+          Number(point.lng.toFixed(7)),
+          Number(point.lat.toFixed(7))
+        ]);
+
+        ring.push([...ring[0]]);
 
         feature.geometry = {
           type: 'Polygon',
-          coordinates: [[
-            [Number(sw.lng.toFixed(7)), Number(sw.lat.toFixed(7))],
-            [Number(nw.lng.toFixed(7)), Number(nw.lat.toFixed(7))],
-            [Number(ne.lng.toFixed(7)), Number(ne.lat.toFixed(7))],
-            [Number(se.lng.toFixed(7)), Number(se.lat.toFixed(7))],
-            [Number(sw.lng.toFixed(7)), Number(sw.lat.toFixed(7))]
-          ]]
+          coordinates: [ring]
         };
 
-        feature.properties.access_point = [
-          Number(centerPoint.lng.toFixed(7)),
-          Number(centerPoint.lat.toFixed(7))
-        ];
+        feature.properties = {
+          ...(feature.properties || {}),
+          type: 'gate',
+          center: [
+            Number(model.center.lng.toFixed(7)),
+            Number(model.center.lat.toFixed(7))
+          ],
+          access_point: [
+            Number(model.center.lng.toFixed(7)),
+            Number(model.center.lat.toFixed(7))
+          ],
+          width_m: Number(model.width_m.toFixed(3)),
+          height_m: Number(model.height_m.toFixed(3)),
+          rotation_deg: Number(model.rotation_deg.toFixed(1))
+        };
 
         markGateEditsDirty();
       };
 
+      const refreshGateLayerGeometry = (feature) => {
+        const model = gateModelForFeature(feature);
+        if (!model || !gateLayer) return;
+
+        const layer = gateLayer.getLayers().find(
+          (item) => String(item.feature?.id) === String(feature.id)
+        );
+
+        if (!layer?.setLatLngs) return;
+
+        const corners = gateCornersFromModel(model);
+
+        layer.setLatLngs([[
+          corners[0],
+          corners[1],
+          corners[2],
+          corners[3]
+        ]]);
+      };
+
       const refreshGateHandles = () => {
-        if (!selectedGate || !gateShapeEditActive || !editModeEnabled) {
+        if (!selectedGate || !editModeEnabled) {
           clearGateHandles();
           return;
         }
@@ -2759,123 +2884,176 @@ import 'leaflet/dist/leaflet.css';
           (item) => String(item.id) === String(selectedGate.id)
         );
 
-        const bounds = gateBoundsForFeature(feature);
-        if (!feature || !bounds) {
+        const model = gateModelForFeature(feature);
+
+        if (!feature || !model) {
           clearGateHandles();
           return;
         }
 
         clearGateHandles();
 
-        const corners = [
-          ['nw', bounds.getNorthWest()],
-          ['ne', bounds.getNorthEast()],
-          ['se', bounds.getSouthEast()],
-          ['sw', bounds.getSouthWest()]
-        ];
+        const corners = gateCornersFromModel(model);
+        const cornerKinds = ['sw', 'nw', 'ne', 'se'];
 
-        for (const [kind, latlng] of corners) {
+        /*
+         * Four corner points resize the rectangle. Holding Shift while
+         * dragging a corner rotates the rectangle around its center.
+         */
+        corners.forEach((latlng, index) => {
           const marker = L.marker(latlng, {
-            icon: gateHandleIcon(kind),
+            icon: gateHandleIcon(cornerKinds[index]),
             draggable: true,
             zIndexOffset: 1800,
             keyboard: false
           }).addTo(map);
 
-          marker.on('drag', () => {
+          let dragStartModel = null;
+          let fixedCorner = null;
+          let initialPointerAngle = null;
+
+          marker.on('dragstart', () => {
             const currentFeature = gateFeatureData.features.find(
               (item) => String(item.id) === String(selectedGate.id)
             );
+
+            dragStartModel = gateModelForFeature(currentFeature);
+            if (!dragStartModel) return;
+
+            const initialCorners = gateCornersFromModel(dragStartModel);
+            fixedCorner = initialCorners[(index + 2) % 4];
+
+            const pointerLocal = gateLatLngToLocal(
+              dragStartModel.center,
+              initialCorners[index]
+            );
+
+            initialPointerAngle = Math.atan2(
+              pointerLocal.y,
+              pointerLocal.x
+            );
+          });
+
+          marker.on('drag', (event) => {
+            if (!dragStartModel) return;
+
+            const currentFeature = gateFeatureData.features.find(
+              (item) => String(item.id) === String(selectedGate.id)
+            );
+
             if (!currentFeature) return;
 
-            const currentBounds = gateBoundsForFeature(currentFeature);
-            if (!currentBounds) return;
+            if (event.originalEvent?.shiftKey && initialPointerAngle !== null) {
+              const pointerLocal = gateLatLngToLocal(
+                dragStartModel.center,
+                marker.getLatLng()
+              );
 
-            const opposite = {
-              nw: currentBounds.getSouthEast(),
-              ne: currentBounds.getSouthWest(),
-              se: currentBounds.getNorthWest(),
-              sw: currentBounds.getNorthEast()
-            }[kind];
+              const currentAngle = Math.atan2(
+                pointerLocal.y,
+                pointerLocal.x
+              );
 
-            const nextBounds = L.latLngBounds(opposite, marker.getLatLng());
-            const center = nextBounds.getCenter();
+              const delta =
+                (currentAngle - initialPointerAngle) * 180 / Math.PI;
 
-            if (nextBounds.getSouth() === nextBounds.getNorth() || nextBounds.getWest() === nextBounds.getEast()) {
-              return;
+              const nextRotation =
+                Math.round((dragStartModel.rotation_deg + delta) * 1) / 1;
+
+              updateGateFeatureGeometry(currentFeature, {
+                ...dragStartModel,
+                rotation_deg: nextRotation
+              });
+            } else {
+              const pointerLocal = gateLatLngToLocal(
+                dragStartModel.center,
+                marker.getLatLng()
+              );
+
+              const pointerUnrotated = rotateLocalPoint(
+                pointerLocal.x,
+                pointerLocal.y,
+                -dragStartModel.rotation_deg
+              );
+
+              const oppositeLocal = gateLatLngToLocal(
+                dragStartModel.center,
+                fixedCorner
+              );
+
+              const oppositeUnrotated = rotateLocalPoint(
+                oppositeLocal.x,
+                oppositeLocal.y,
+                -dragStartModel.rotation_deg
+              );
+
+              const halfWidth = Math.max(
+                0.25,
+                Math.abs(pointerUnrotated.x - oppositeUnrotated.x) / 2
+              );
+
+              const halfHeight = Math.max(
+                0.25,
+                Math.abs(pointerUnrotated.y - oppositeUnrotated.y) / 2
+              );
+
+              const newCenterLocal = {
+                x: (pointerUnrotated.x + oppositeUnrotated.x) / 2,
+                y: (pointerUnrotated.y + oppositeUnrotated.y) / 2
+              };
+
+              const centerOffset = rotateLocalPoint(
+                newCenterLocal.x,
+                newCenterLocal.y,
+                dragStartModel.rotation_deg
+              );
+
+              updateGateFeatureGeometry(currentFeature, {
+                center: gateLocalToLatLng(
+                  dragStartModel.center,
+                  centerOffset.x,
+                  centerOffset.y
+                ),
+                width_m: halfWidth * 2,
+                height_m: halfHeight * 2,
+                rotation_deg: dragStartModel.rotation_deg
+              });
             }
 
-            updateGateFeatureGeometry(currentFeature, nextBounds);
-            const layer = gateLayer?.getLayers().find(
-              (item) => String(item.feature?.id) === String(currentFeature.id)
-            );
-            if (layer?.setBounds) layer.setBounds(nextBounds);
-            else if (layer?.setLatLngs) layer.setLatLngs([[
-              nextBounds.getSouthWest(),
-              nextBounds.getNorthWest(),
-              nextBounds.getNorthEast(),
-              nextBounds.getSouthEast()
-            ]]);
-
-            void center;
+            selectedGate = currentFeature;
+            refreshGateLayerGeometry(currentFeature);
           });
 
           marker.on('dragend', () => refreshGateHandles());
           gateHandleMarkers.push(marker);
-        }
+        });
 
-        const centerMarker = L.marker(bounds.getCenter(), {
+        /*
+         * Fifth point: center handle moves the entire gate without changing
+         * size or rotation.
+         */
+        const centerMarker = L.marker(model.center, {
           icon: gateHandleIcon('move'),
           draggable: true,
           zIndexOffset: 1801,
           keyboard: false
         }).addTo(map);
 
-        let moveStartBounds = null;
-
-        centerMarker.on('dragstart', () => {
-          const currentFeature = gateFeatureData.features.find(
-            (item) => String(item.id) === String(selectedGate.id)
-          );
-          moveStartBounds = gateBoundsForFeature(currentFeature);
-        });
-
         centerMarker.on('drag', () => {
-          if (!moveStartBounds) return;
-
-          const currentCenter = moveStartBounds.getCenter();
-          const nextCenter = centerMarker.getLatLng();
-          const deltaLat = nextCenter.lat - currentCenter.lat;
-          const deltaLng = nextCenter.lng - currentCenter.lng;
-
-          const nextBounds = L.latLngBounds(
-            [
-              moveStartBounds.getSouth() + deltaLat,
-              moveStartBounds.getWest() + deltaLng
-            ],
-            [
-              moveStartBounds.getNorth() + deltaLat,
-              moveStartBounds.getEast() + deltaLng
-            ]
-          );
-
-          const currentFeature = gateFeatureData.features.find(
+          const feature = gateFeatureData.features.find(
             (item) => String(item.id) === String(selectedGate.id)
           );
-          if (!currentFeature) return;
 
-          updateGateFeatureGeometry(currentFeature, nextBounds);
+          const currentModel = gateModelForFeature(feature);
+          if (!feature || !currentModel) return;
 
-          const layer = gateLayer?.getLayers().find(
-            (item) => String(item.feature?.id) === String(currentFeature.id)
-          );
-          if (layer?.setBounds) layer.setBounds(nextBounds);
-          else if (layer?.setLatLngs) layer.setLatLngs([[
-            nextBounds.getSouthWest(),
-            nextBounds.getNorthWest(),
-            nextBounds.getNorthEast(),
-            nextBounds.getSouthEast()
-          ]]);
+          updateGateFeatureGeometry(feature, {
+            ...currentModel,
+            center: centerMarker.getLatLng()
+          });
+
+          selectedGate = feature;
+          refreshGateLayerGeometry(feature);
         });
 
         centerMarker.on('dragend', () => refreshGateHandles());
@@ -2886,17 +3064,17 @@ import 'leaflet/dist/leaflet.css';
         if (!editModeEnabled || gateModeActive || !feature) return;
 
         selectedGate = feature;
-        gateShapeEditActive = false;
         showGateCard(true);
         gateStatus.textContent =
-          (feature.properties?.name || 'Unnamed Gate') + ' · selected';
+          (feature.properties?.name || 'Unnamed Gate') + ' · 5-point edit';
+
         gateNew.hidden = false;
-        gateEdit.hidden = false;
-        gateEdit.textContent = 'Edit shape';
         gateRename.hidden = false;
-        gateRotate.hidden = true;
+        gateRotateLeft.hidden = false;
+        gateRotateRight.hidden = false;
         gateDelete.hidden = false;
-        clearGateHandles();
+
+        refreshGateHandles();
       };
 
       const updateGatePreview = (bounds) => {
@@ -2929,16 +3107,15 @@ import 'leaflet/dist/leaflet.css';
         clearGatePreview();
         clearGateHandles();
         selectedGate = null;
-        gateShapeEditActive = false;
         gateModeActive = true;
 
         gateToggle?.classList.add('is-active');
         gateToggle?.setAttribute('aria-pressed', 'true');
         gateStatus.textContent = 'Drag on the map to create a rectangular gate';
         gateNew.hidden = false;
-        gateEdit.hidden = true;
         gateRename.hidden = true;
-        gateRotate.hidden = true;
+        gateRotateLeft.hidden = true;
+        gateRotateRight.hidden = true;
         gateDelete.hidden = true;
         showGateCard(true);
       };
@@ -2957,14 +3134,13 @@ import 'leaflet/dist/leaflet.css';
         clearGatePreview();
         clearGateHandles();
         selectedGate = null;
-        gateShapeEditActive = false;
         gateModeActive = false;
         gateToggle?.classList.remove('is-active');
         gateToggle?.setAttribute('aria-pressed', 'false');
         showGateCard(false);
-        gateEdit.hidden = true;
         gateRename.hidden = true;
-        gateRotate.hidden = true;
+        gateRotateLeft.hidden = true;
+        gateRotateRight.hidden = true;
         gateDelete.hidden = true;
         if (map.dragging && !map.dragging.enabled()) {
           map.dragging.enable();
@@ -2985,7 +3161,18 @@ import 'leaflet/dist/leaflet.css';
           id: gateId,
           properties: {
             type: 'gate',
-            name
+            name,
+            center: [
+              Number(centerPoint.lng.toFixed(7)),
+              Number(centerPoint.lat.toFixed(7))
+            ],
+            width_m: Number(
+              bounds.getSouthWest().distanceTo(bounds.getSouthEast()).toFixed(3)
+            ),
+            height_m: Number(
+              bounds.getSouthWest().distanceTo(bounds.getNorthWest()).toFixed(3)
+            ),
+            rotation_deg: 0
           },
           geometry: {
             type: 'Polygon',
@@ -3008,17 +3195,15 @@ import 'leaflet/dist/leaflet.css';
         selectedGate = feature;
         markGateEditsDirty();
         refreshGateLayer();
-        refreshGateHandles();
 
-        gateShapeEditActive = false;
-        gateStatus.textContent = name + ' · created';
+        gateStatus.textContent = name + ' · 5-point edit';
         gateNew.hidden = false;
-        gateEdit.hidden = false;
-        gateEdit.textContent = 'Edit shape';
         gateRename.hidden = false;
-        gateRotate.hidden = true;
+        gateRotateLeft.hidden = false;
+        gateRotateRight.hidden = false;
         gateDelete.hidden = false;
-        clearGateHandles();
+
+        refreshGateHandles();
       };
 
       const cancelGateName = () => {
@@ -3048,7 +3233,7 @@ import 'leaflet/dist/leaflet.css';
             };
             markGateEditsDirty();
             selectedGate = feature;
-            gateStatus.textContent = name + (gateShapeEditActive ? ' · editing shape' : ' · selected');
+            gateStatus.textContent = name + ' · 5-point edit';
           }
         } else if (pendingGateBounds) {
           createGateFromBounds(pendingGateBounds, name);
@@ -3144,56 +3329,26 @@ import 'leaflet/dist/leaflet.css';
         showGateNameModal(true, 'create');
       };
 
-      const toggleGateShapeEdit = () => {
+      const rotateSelectedGate = (deltaDegrees) => {
         if (!editModeEnabled || !selectedGate || gateModeActive) return;
-
-        gateShapeEditActive = !gateShapeEditActive;
-        gateEdit.textContent = gateShapeEditActive ? 'Done' : 'Edit shape';
-        gateRotate.hidden = !gateShapeEditActive;
-
-        gateStatus.textContent = gateShapeEditActive
-          ? (selectedGate.properties?.name || 'Unnamed Gate') + ' · resize or move'
-          : (selectedGate.properties?.name || 'Unnamed Gate') + ' · selected';
-
-        refreshGateHandles();
-      };
-
-      const rotateSelectedGate = () => {
-        if (!editModeEnabled || !selectedGate || !gateShapeEditActive) return;
 
         const feature = gateFeatureData.features.find(
           (item) => String(item.id) === String(selectedGate.id)
         );
-        const bounds = gateBoundsForFeature(feature);
-        if (!feature || !bounds) return;
+        const model = gateModelForFeature(feature);
+        if (!feature || !model) return;
 
-        const center = bounds.getCenter();
-        const width = bounds.getEast() - bounds.getWest();
-        const height = bounds.getNorth() - bounds.getSouth();
+        model.rotation_deg =
+          Math.round((model.rotation_deg + deltaDegrees) * 1) / 1;
 
-        /*
-         * Rotate by 90 degrees. Since the initial gate is rectangular and
-         * axis-aligned, a quarter-turn keeps it rectangular while swapping
-         * its width and height. This also keeps the existing corner handles
-         * compatible with the rotated result.
-         */
-        const nextBounds = L.latLngBounds(
-          [
-            center.lat - (width / 2),
-            center.lng - (height / 2)
-          ],
-          [
-            center.lat + (width / 2),
-            center.lng + (height / 2)
-          ]
-        );
-
-        updateGateFeatureGeometry(feature, nextBounds);
-        refreshGateLayer();
+        updateGateFeatureGeometry(feature, model);
+        selectedGate = feature;
+        refreshGateLayerGeometry(feature);
         refreshGateHandles();
 
         gateStatus.textContent =
-          (feature.properties?.name || 'Unnamed Gate') + ' · rotated 90°';
+          (feature.properties?.name || 'Unnamed Gate') +
+          ' · rotation ' + model.rotation_deg.toFixed(1) + '°';
       };
 
       const deleteSelectedGate = () => {
@@ -3206,14 +3361,13 @@ import 'leaflet/dist/leaflet.css';
         );
 
         selectedGate = null;
-        gateShapeEditActive = false;
         clearGateHandles();
         markGateEditsDirty();
         refreshGateLayer();
         gateStatus.textContent = deletedName + ' deleted';
-        gateEdit.hidden = true;
         gateRename.hidden = true;
-        gateRotate.hidden = true;
+        gateRotateLeft.hidden = true;
+        gateRotateRight.hidden = true;
         gateDelete.hidden = true;
       };
 
@@ -3251,9 +3405,8 @@ import 'leaflet/dist/leaflet.css';
         startGateMode();
       });
 
-      gateEdit?.addEventListener('click', toggleGateShapeEdit);
-
-      gateRotate?.addEventListener('click', rotateSelectedGate);
+      gateRotateLeft?.addEventListener('click', () => rotateSelectedGate(-1));
+      gateRotateRight?.addEventListener('click', () => rotateSelectedGate(1));
 
       gateRename?.addEventListener('click', () => {
         if (!selectedGate) return;
