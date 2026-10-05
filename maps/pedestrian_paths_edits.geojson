@@ -4213,6 +4213,36 @@
           ]
         ]
       }
+    },
+    {
+      "type": "Feature",
+      "id": "custom-1791189295065",
+      "properties": {
+        "highway": "custom",
+        "name": "Custom pedestrian path",
+        "source": "custom"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6056913,
+            11.2716585
+          ],
+          [
+            77.6056999,
+            11.2719934
+          ],
+          [
+            77.6057455,
+            11.2725327
+          ],
+          [
+            77.6057531,
+            11.2727062
+          ]
+        ]
+      }
     }
   ]
 }
