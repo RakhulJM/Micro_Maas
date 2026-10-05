@@ -101,7 +101,7 @@ import 'leaflet/dist/leaflet.css';
         <button type="button" class="edit-action edit-action-primary" id="editFinish" hidden>Finish</button>
         <button type="button" class="edit-action" id="editUndo" hidden>Undo</button>
         <button type="button" class="edit-action edit-delete-action" id="editDeletePoint" hidden>Delete point</button>
-        <button type="button" class="edit-action edit-delete-action" id="editDelete" hidden>Delete custom</button>
+        <button type="button" class="edit-action edit-delete-action" id="editDelete" hidden>Delete path</button>
       </div>
     </section>
 
@@ -2146,32 +2146,31 @@ import 'leaflet/dist/leaflet.css';
           name: feature.properties?.name || 'Pedestrian path'
         };
 
-        const suffix = selectedPath.isCustom
-          ? ' · Delete custom to remove'
-          : '';
-
-        editStatus.textContent = 'Path selected' + suffix;
+        editStatus.textContent = 'Path selected · Delete path to remove';
         showEditCard(true);
         setEditActionVisibility({
           pointEditor: pointEditorActive,
           pathEditing: true,
-          pathDeletable: selectedPath.isCustom,
+          pathDeletable: true,
           pointSelected: Boolean(selectedPoint)
         });
       };
 
-      const deleteSelectedCustomPath = () => {
-        if (!selectedPath?.isCustom) return;
+      const deleteSelectedPath = () => {
+        if (!selectedPath?.id) return;
 
-        const targetId = selectedPath.id;
+        const targetId = String(selectedPath.id);
+        const deletedName = selectedPath.name || 'Pedestrian path';
+
+        pedestrianPathData.features = (pedestrianPathData.features || [])
+          .filter((item) => String(item.id) !== targetId);
+
         selectedPath = null;
         selectedPoint = null;
 
-        pedestrianPathData.features = (pedestrianPathData.features || [])
-          .filter((item) => String(item.id) !== String(targetId));
         markPathEditsDirty();
-        editStatus.textContent = 'Custom path deleted';
         refreshAfterPathChange();
+        editStatus.textContent = deletedName + ' deleted';
         setEditActionVisibility({
           pointEditor: pointEditorActive
         });
@@ -2208,7 +2207,7 @@ import 'leaflet/dist/leaflet.css';
       savePathEdits?.addEventListener('click', saveCurrentPathEdits);
       editNewPath?.addEventListener('click', startDrawingMode);
       editDeletePoint?.addEventListener('click', deleteSelectedPoint);
-      editDelete?.addEventListener('click', deleteSelectedCustomPath);
+      editDelete?.addEventListener('click', deleteSelectedPath);
 
       editModeToggle?.addEventListener('change', () => {
         editModeEnabled = Boolean(editModeToggle.checked);
