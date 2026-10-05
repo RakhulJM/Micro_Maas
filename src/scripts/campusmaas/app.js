@@ -431,6 +431,7 @@
       let editableHitLayer = null;
       let pedestrianPathsActive = false;
       let pedestrianNetworkVisible = true;
+      let gateLayerVisible = true;
 
       // Declared before the gate layer is created during map initialization.
       let editModeEnabled = false;
@@ -498,26 +499,35 @@
         createPedestrianLayers();
 
         /*
-         * Keep the complete saved working network visible in white.
-         * The blue layer is added only when the network is actively
-         * highlighted for routing/editing.
+         * Rebuild operations must respect the developer-controlled
+         * visibility state. A hidden path dataset must never be re-added by
+         * routing, editing, classification, or geometry refreshes.
          */
+        if (!pedestrianNetworkVisible) {
+          clearDefaultVertices();
+          return;
+        }
+
         pedestrianPathCasing.addTo(map);
 
         if (pedestrianPathsActive) {
           pedestrianPaths.addTo(map);
         }
 
+        if (editModeEnabled && !drawingModeActive) {
+          buildDefaultVertexMarkers();
+        }
       };
 
       createPedestrianLayers();
 
       /*
-       * The final working pedestrian network is always visible as the
-       * normal white map network, including manually added paths loaded
-       * from pedestrian_paths_edits.geojson.
+       * The final working pedestrian network is visible by default, but its
+       * developer visibility switch remains authoritative after initialization.
        */
-      pedestrianPathCasing.addTo(map);
+      if (pedestrianNetworkVisible) {
+        pedestrianPathCasing.addTo(map);
+      }
 
       const gateFeatureRing = (feature) =>
         feature?.geometry?.type === 'Polygon' &&
@@ -566,11 +576,16 @@
         }
 
         createGateLayer();
-        gateLayer?.addTo(map);
+
+        if (gateLayerVisible) {
+          gateLayer?.addTo(map);
+        }
       };
 
       createGateLayer();
-      gateLayer.addTo(map);
+      if (gateLayerVisible) {
+        gateLayer.addTo(map);
+      }
 
       let basePedestrianDebugLayer = null;
 
@@ -1597,28 +1612,46 @@
         const layers = [pedestrianPathCasing, pedestrianPaths].filter(Boolean);
 
         for (const layer of layers) {
-          if (enabled) {
+          if (pedestrianNetworkVisible) {
             if (!map.hasLayer(layer)) layer.addTo(map);
           } else if (map.hasLayer(layer)) {
             map.removeLayer(layer);
           }
         }
 
-        if (!enabled && pedestrianPathsActive) {
+        if (!pedestrianNetworkVisible) {
           pedestrianPathsActive = false;
           const pathToggle = document.getElementById('pathToggle');
           pathToggle?.classList.remove('is-active');
           pathToggle?.setAttribute('aria-pressed', 'false');
+
+          clearDefaultVertices();
+          clearEditableVertices();
+          clearDrawingSnap();
+
+          if (routeModeActive) {
+            routeModeActive = false;
+            const routeToggle = document.getElementById('routeToggle');
+            routeToggle?.classList.remove('is-active');
+            routeToggle?.setAttribute('aria-pressed', 'false');
+            clearRouteTest(false);
+          }
+        } else if (editModeEnabled && !drawingModeActive) {
+          buildDefaultVertexMarkers();
         }
       };
 
       const setGateVisibility = (enabled) => {
+        gateLayerVisible = Boolean(enabled);
+
         if (!gateLayer) return;
 
-        if (enabled) {
+        if (gateLayerVisible) {
           if (!map.hasLayer(gateLayer)) gateLayer.addTo(map);
         } else if (map.hasLayer(gateLayer)) {
           map.removeLayer(gateLayer);
+          clearGateHandles();
+          selectedGate = null;
         }
       };
 
@@ -1632,6 +1665,7 @@
         } else {
           if (map.hasLayer(perimeterMask)) map.removeLayer(perimeterMask);
           map.setMaxBounds(null);
+          map.options.maxBounds = null;
         }
       };
 
@@ -1823,6 +1857,13 @@
         }).addTo(map);
 
       routeToggle?.addEventListener('click', () => {
+        if (!pedestrianNetworkVisible) {
+          routeModeActive = false;
+          routeToggle.classList.remove('is-active');
+          routeToggle.setAttribute('aria-pressed', 'false');
+          return;
+        }
+
         routeModeActive = !routeModeActive;
 
         routeToggle.classList.toggle('is-active', routeModeActive);
@@ -2093,6 +2134,13 @@
 
       const buildDefaultVertexMarkers = () => {
         clearDefaultVertices();
+
+        /*
+         * These dots are editor affordances, not part of the map dataset.
+         * They must never remain visible while the pedestrian layer is off
+         * or while Edit Mode is off.
+         */
+        if (!editModeEnabled || !pedestrianNetworkVisible) return;
 
         for (const feature of pedestrianPathData.features || []) {
           if (feature?.geometry?.type !== 'LineString') continue;
@@ -4114,9 +4162,16 @@
         closeDeveloperOverlay();
 
         if (editModeEnabled) {
-          pedestrianPathsActive = true;
-          pedestrianPathCasing?.addTo(map);
-          pedestrianPaths?.addTo(map);
+          pedestrianPathsActive = pedestrianNetworkVisible;
+
+          if (pedestrianNetworkVisible) {
+            pedestrianPathCasing?.addTo(map);
+            pedestrianPaths?.addTo(map);
+            buildDefaultVertexMarkers();
+          } else {
+            clearDefaultVertices();
+          }
+
           refreshGateLayer();
           buildEditableHitLayer();
         } else {
