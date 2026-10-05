@@ -176,6 +176,25 @@ import 'leaflet/dist/leaflet.css';
   </main>
 
   <script>
+    // Keep the developer shortcut available even if map/data loading is delayed.
+    window.addEventListener('keydown', (event) => {
+      const isDeveloperShortcut =
+        event.ctrlKey &&
+        event.shiftKey &&
+        (event.code === 'KeyU' || event.key?.toLowerCase() === 'u');
+
+      if (!isDeveloperShortcut) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const panel = document.getElementById('devPanel');
+      if (!panel) return;
+
+      const open = panel.classList.toggle('is-open');
+      panel.setAttribute('aria-hidden', String(!open));
+    }, true);
+
     import('leaflet').then(async ({ default: L }) => {
       const [campusResponse, perimeterResponse, pathResponse, pathEditResponse, pathConfigResponse] = await Promise.all([
         fetch('/maps/export.geojson'),
@@ -2314,16 +2333,10 @@ import 'leaflet/dist/leaflet.css';
       };
 
       window.addEventListener('keydown', (event) => {
-        if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'u') {
-          event.preventDefault();
-          event.stopPropagation();
-          toggleDevPanel();
-        }
-
         if (event.key === 'Escape') {
           closeDevPanel();
         }
-      }, true);
+      });
 
       document.getElementById('devPanelClose')?.addEventListener('click', closeDevPanel);
 
