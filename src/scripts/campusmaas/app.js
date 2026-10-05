@@ -2537,8 +2537,8 @@
         L.divIcon({
           className: 'gate-handle-marker gate-handle-' + kind,
           html: '<span></span>',
-          iconSize: kind === 'move' ? [18, 18] : [14, 14],
-          iconAnchor: kind === 'move' ? [9, 9] : [7, 7]
+          iconSize: kind === 'move' ? [30, 30] : [26, 26],
+          iconAnchor: kind === 'move' ? [15, 15] : [13, 13]
         });
 
       const gateMetersPerDegreeLat = 111320;
@@ -2876,13 +2876,7 @@
           keyboard: false
         }).addTo(map);
 
-        centerMarker.on('mousedown', (event) => {
-          event.originalEvent?.stopPropagation();
-        });
-
-        centerMarker.on('click', (event) => {
-          event.originalEvent?.stopPropagation();
-        });
+        centerMarker.dragging?.enable();
 
         let centerDragMapWasEnabled = true;
 
