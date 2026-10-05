@@ -3036,7 +3036,12 @@ import 'leaflet/dist/leaflet.css';
       };
 
       const beginGatePointer = (event) => {
-        if (!gateModeActive || gatePointerId !== null) return;
+        if (
+          !gateModeActive ||
+          selectedGate ||
+          gateNameModal?.classList.contains('is-open') ||
+          gatePointerId !== null
+        ) return;
         if (event.button !== undefined && event.button !== 0) return;
 
         event.preventDefault();
