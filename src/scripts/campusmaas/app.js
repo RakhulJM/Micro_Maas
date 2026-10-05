@@ -1669,29 +1669,55 @@
         }
       };
 
+      /*
+       * Layer toggles change Leaflet's layer DOM without recreating the map.
+       * Re-measure labels after the layer operation so building names keep
+       * the same clean size/width as they have after a fresh page load.
+       */
+      const refreshMapPresentation = () => {
+        requestAnimationFrame(() => {
+          map.invalidateSize({ pan: false, debounceMoveend: true });
+
+          requestAnimationFrame(() => {
+            updateBuildingLabels();
+          });
+        });
+      };
+
       const setLayerVisibility = async (name, enabled) => {
         if (name === 'pedestrian_paths_edits.geojson') {
           setPedestrianNetworkVisibility(enabled);
+          refreshMapPresentation();
           return;
         }
 
         if (name === 'gates.geojson') {
           setGateVisibility(enabled);
+          refreshMapPresentation();
           return;
         }
 
         if (name === 'perimeter.geojson') {
           setPerimeterVisibility(enabled);
+          refreshMapPresentation();
           return;
         }
 
         if (!layerRegistry.has(name)) {
-          if (!enabled) return;
+          if (!enabled) {
+            refreshMapPresentation();
+            return;
+          }
+
           try {
             await renderGenericMapFile(name);
           } catch {
+            refreshMapPresentation();
             return;
           }
+
+          refreshMapPresentation();
+          return;
         }
 
         for (const layer of layerRegistry.get(name) || []) {
@@ -1701,6 +1727,8 @@
             map.removeLayer(layer);
           }
         }
+
+        refreshMapPresentation();
       };
 
       const renderGenericMapFile = (name) => {
