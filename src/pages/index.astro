@@ -2111,6 +2111,10 @@ import 'leaflet/dist/leaflet.css';
       };
 
       const selectEditablePoint = (featureId, vertexIndex) => {
+        // Existing points are only targets while drawing; they must never
+        // enter point-selection/delete state during New Path mode.
+        if (drawingModeActive) return;
+
         selectedPoint = {
           featureId: String(featureId),
           vertexIndex
@@ -2320,6 +2324,15 @@ import 'leaflet/dist/leaflet.css';
       };
 
       const snapDrawingPoint = (point) => {
+        /*
+         * Drawing has its own snapping rule:
+         * 1. Prefer an existing network vertex.
+         * 2. Otherwise snap onto the nearest existing path segment.
+         *
+         * The returned coordinate becomes one of the new path's actual
+         * vertices, so connecting to an existing point is a real topology
+         * connection, not just a visual coincidence.
+         */
         const snapped = snapToPedestrianPath(point);
 
         if (!snapped || snapped.distance > snapToleranceMeters) {
@@ -2534,6 +2547,7 @@ import 'leaflet/dist/leaflet.css';
       savePathEdits?.addEventListener('click', saveCurrentPathEdits);
       editNewPath?.addEventListener('click', startDrawingMode);
       editDeletePoint?.addEventListener('click', () => {
+        if (drawingModeActive) return;
         if (selectedPoint) showDeletePointModal(true);
       });
       deletePointMerge?.addEventListener('click', () => deleteSelectedPoint('merge'));
@@ -2611,14 +2625,22 @@ import 'leaflet/dist/leaflet.css';
       map.on('click', (event) => {
         if (!editModeEnabled || !drawingModeActive || routeModeActive) return;
 
-        const point = snapDrawingPoint(L.latLng(event.latlng.lat, event.latlng.lng));
+        /*
+         * One click = one vertex in the new path.
+         * When the click lands near an existing vertex, use that exact
+         * coordinate. It is still recorded as a vertex of the new path.
+         */
+        const clicked = L.latLng(event.latlng.lat, event.latlng.lng);
+        const snap = snapToPedestrianPath(clicked);
+        const connected = snap && snap.distance <= snapToleranceMeters;
+        const point = connected ? snap.latlng : clicked;
 
         drawingPoints.push(point);
         drawingMarkers.push(createEditPointMarker(point, drawingPoints.length));
         renderDrawingLine();
 
-        const snap = snapToPedestrianPath(event.latlng);
-        const connected = snap && snap.distance <= snapToleranceMeters;
+        // Drawing mode owns the controls: no delete/select action can appear.
+        setEditActionVisibility({ drawing: true });
 
         editStatus.textContent = drawingPoints.length +
           ' point' + (drawingPoints.length === 1 ? '' : 's') +
