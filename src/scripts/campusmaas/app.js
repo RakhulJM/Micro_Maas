@@ -265,14 +265,6 @@
       drawingPreviewPane.style.zIndex = '650';
       drawingPreviewPane.style.pointerEvents = 'none';
 
-      /*
-       * Persisted custom paths must remain visible after reload even when
-       * the general pedestrian-network highlight is off.
-       */
-      const customPathPane = map.createPane('customPathPane');
-      customPathPane.style.zIndex = '620';
-      customPathPane.style.pointerEvents = 'none';
-
       const gatePane = map.createPane('gatePane');
       gatePane.style.zIndex = '640';
 
@@ -390,8 +382,6 @@
 
       let pedestrianPathCasing = null;
       let pedestrianPaths = null;
-      let customPathCasing = null;
-      let customPaths = null;
       let gateLayer = null;
       let editableHitLayer = null;
       let pedestrianPathsActive = false;
@@ -440,44 +430,7 @@
           interactive: false
         });
 
-        /*
-         * Custom paths are persisted editing results. Keep them visible on
-         * the normal map so a path does not appear to disappear after reload.
-         */
-        const customFeatures = {
-          type: 'FeatureCollection',
-          features: (pedestrianPathData.features || []).filter(
-            (feature) => feature?.properties?.source === 'custom'
-          )
-        };
 
-        /*
-         * Persisted custom paths use the same lightweight visual treatment
-         * as a normal footpath. They are data, not a selection/highlight.
-         */
-        customPathCasing = L.geoJSON(customFeatures, {
-          pane: 'customPathPane',
-          style: {
-            color: colors.roadCasing,
-            weight: roadWidth.footway + 2.2,
-            opacity: 0.96,
-            lineCap: 'round',
-            lineJoin: 'round'
-          },
-          interactive: false
-        });
-
-        customPaths = L.geoJSON(customFeatures, {
-          pane: 'customPathPane',
-          style: {
-            color: colors.road,
-            weight: roadWidth.footway,
-            opacity: 0.96,
-            lineCap: 'round',
-            lineJoin: 'round'
-          },
-          interactive: false
-        });
       };
 
       const refreshPedestrianLayers = () => {
@@ -489,14 +442,6 @@
           map.removeLayer(pedestrianPaths);
         }
 
-        if (customPathCasing && map.hasLayer(customPathCasing)) {
-          map.removeLayer(customPathCasing);
-        }
-
-        if (customPaths && map.hasLayer(customPaths)) {
-          map.removeLayer(customPaths);
-        }
-
         createPedestrianLayers();
 
         if (pedestrianPathsActive) {
@@ -504,16 +449,9 @@
           pedestrianPaths.addTo(map);
         }
 
-        /*
-         * Persisted custom paths are always visible, including after reload.
-         */
-        customPathCasing.addTo(map);
-        customPaths.addTo(map);
       };
 
       createPedestrianLayers();
-      customPathCasing.addTo(map);
-      customPaths.addTo(map);
 
       const gateFeatureRing = (feature) =>
         feature?.geometry?.type === 'Polygon' &&
