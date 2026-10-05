@@ -1,0 +1,24 @@
+---
+---
+
+<section class="delete-point-modal" id="deletePointModal" aria-hidden="true">
+  <div class="delete-point-dialog" role="dialog" aria-modal="true" aria-labelledby="deletePointTitle">
+    <div class="delete-point-header">
+      <div>
+        <span class="delete-point-kicker">DELETE POINT</span>
+        <strong id="deletePointTitle">What should happen to the attached lines?</strong>
+      </div>
+      <button type="button" class="route-card-close" id="deletePointCancel" aria-label="Cancel delete">×</button>
+    </div>
+    <div class="delete-point-options">
+      <button type="button" class="delete-point-option" id="deletePointMerge">
+        <strong>Merge lines</strong>
+        <span>Remove the point and connect the lines around it.</span>
+      </button>
+      <button type="button" class="delete-point-option" id="deletePointDrop">
+        <strong>Remove attached lines</strong>
+        <span>Remove the point and the line segments connected to it.</span>
+      </button>
+    </div>
+  </div>
+</section>
