@@ -554,12 +554,16 @@ import 'leaflet/dist/leaflet.css';
           )
         };
 
+        /*
+         * Persisted custom paths use the same lightweight visual treatment
+         * as a normal footpath. They are data, not a selection/highlight.
+         */
         customPathCasing = L.geoJSON(customFeatures, {
           pane: 'customPathPane',
           style: {
-            color: '#ffffff',
-            weight: 9,
-            opacity: 0.98,
+            color: colors.roadCasing,
+            weight: roadWidth.footway + 2.2,
+            opacity: 0.96,
             lineCap: 'round',
             lineJoin: 'round'
           },
@@ -569,9 +573,9 @@ import 'leaflet/dist/leaflet.css';
         customPaths = L.geoJSON(customFeatures, {
           pane: 'customPathPane',
           style: {
-            color: '#0f4fd8',
-            weight: 5,
-            opacity: 1,
+            color: colors.road,
+            weight: roadWidth.footway,
+            opacity: 0.96,
             lineCap: 'round',
             lineJoin: 'round'
           },
