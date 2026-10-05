@@ -30,8 +30,15 @@ try {
 
   // Enable editor mode and close developer popup.
   await page.locator('#editModeToggle').check();
+  await page.waitForTimeout(250);
+
+  console.log('editModeToggle.checked =', await page.locator('#editModeToggle').isChecked());
+  console.log('editToggle.class =', await page.locator('#editToggle').getAttribute('class'));
+  console.log('page errors before editor close =', JSON.stringify(pageErrors));
+  console.log('console errors before editor close =', JSON.stringify(consoleErrors));
+
   await page.locator('#devPanelClose').click();
-  await page.locator('#devPanel:not(.is-open)').waitFor({ state: 'attached' });
+  await page.locator('#devPanel').waitFor({ state: 'hidden' });
   await page.locator('#editToggle.is-visible').waitFor({ state: 'visible' });
 
   // Pencil -> point editor.
