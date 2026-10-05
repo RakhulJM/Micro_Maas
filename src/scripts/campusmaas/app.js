@@ -343,11 +343,14 @@
         const kind = feature?.properties?.highway;
         const width = roadWidth[kind] || 3.5;
         const major = ['motorway', 'trunk', 'primary', 'secondary', 'tertiary'].includes(kind);
+        const mainExternalRoad =
+          feature?.id === 'way/129894647' ||
+          feature?.properties?.ref === 'MDR1137';
 
         return {
           color: casing
             ? colors.roadCasing
-            : (major ? colors.majorRoad : colors.road),
+            : (mainExternalRoad ? '#111827' : (major ? colors.majorRoad : colors.road)),
           weight: casing ? width + 2.2 : width,
           opacity: 0.96,
           lineCap: 'round',
