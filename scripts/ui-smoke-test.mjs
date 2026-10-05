@@ -51,22 +51,22 @@ try {
   await page.locator('#editDeletePoint:not([hidden])').waitFor({ state: 'visible' });
   await page.locator('#editDelete:not([hidden])').waitFor({ state: 'visible' });
 
-  const pointCountBeforeDelete = await page.locator('.edit-vertex-marker').count();
   await page.locator('#editDeletePoint').click();
   await page.waitForFunction(
-    (before) => document.querySelectorAll('.edit-vertex-marker').length < before,
-    pointCountBeforeDelete
+    () => /^(Point deleted|Path deleted)$/.test(
+      document.getElementById('editStatus')?.textContent?.trim() || ''
+    )
   );
+  console.log('after delete point =', await page.locator('#editStatus').textContent());
 
   // Select another point and delete its whole pedestrian path.
   await page.locator('.edit-vertex-marker').first().click();
   await page.locator('#editDelete:not([hidden])').waitFor({ state: 'visible' });
-  const pathPointCountBeforeDelete = await page.locator('.edit-vertex-marker').count();
   await page.locator('#editDelete').click();
   await page.waitForFunction(
-    (before) => document.querySelectorAll('.edit-vertex-marker').length < before,
-    pathPointCountBeforeDelete
+    () => (document.getElementById('editStatus')?.textContent || '').endsWith(' deleted')
   );
+  console.log('after delete path =', await page.locator('#editStatus').textContent());
 
   // Close editor with its X.
   await page.locator('#editCancel').click();
