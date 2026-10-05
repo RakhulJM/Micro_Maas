@@ -402,6 +402,13 @@
       const editorPreviewDash =
         pedestrianConfig.render?.editor?.preview_dash || '7 5';
 
+      /*
+       * The complete editable pedestrian network is the normal white
+       * pedestrian layer. The blue layer is only an active highlight.
+       */
+      const basePedestrianCasingWeight =
+        Math.max(3.5, roadWidth.footway + 0.8);
+
       const walkingSpeedMetersPerSecond =
         Number(pedestrianConfig.routing?.walking_speed_mps) || 1.4;
       const snapToleranceMeters =
@@ -411,7 +418,7 @@
         pedestrianPathCasing = L.geoJSON(pedestrianPathData, {
           style: {
             color: '#ffffff',
-            weight: highlightCasingWeight,
+            weight: basePedestrianCasingWeight,
             opacity: 0.9,
             lineCap: 'round',
             lineJoin: 'round'
@@ -444,14 +451,27 @@
 
         createPedestrianLayers();
 
+        /*
+         * Keep the complete saved working network visible in white.
+         * The blue layer is added only when the network is actively
+         * highlighted for routing/editing.
+         */
+        pedestrianPathCasing.addTo(map);
+
         if (pedestrianPathsActive) {
-          pedestrianPathCasing.addTo(map);
           pedestrianPaths.addTo(map);
         }
 
       };
 
       createPedestrianLayers();
+
+      /*
+       * The final working pedestrian network is always visible as the
+       * normal white map network, including manually added paths loaded
+       * from pedestrian_paths_edits.geojson.
+       */
+      pedestrianPathCasing.addTo(map);
 
       const gateFeatureRing = (feature) =>
         feature?.geometry?.type === 'Polygon' &&
@@ -1601,12 +1621,8 @@
         pedestrianPathsActive = !pedestrianPathsActive;
 
         if (pedestrianPathsActive) {
-          pedestrianPathCasing?.addTo(map);
           pedestrianPaths?.addTo(map);
         } else {
-          if (pedestrianPathCasing && map.hasLayer(pedestrianPathCasing)) {
-            map.removeLayer(pedestrianPathCasing);
-          }
           if (pedestrianPaths && map.hasLayer(pedestrianPaths)) {
             map.removeLayer(pedestrianPaths);
           }
