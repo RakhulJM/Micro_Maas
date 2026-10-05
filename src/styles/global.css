@@ -619,6 +619,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .path-type-palette.is-open {
+  pointer-events: auto;
   display: block;
 }
 
