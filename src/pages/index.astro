@@ -256,7 +256,7 @@ import 'leaflet/dist/leaflet.css';
         fetch('/maps/export.geojson'),
         fetch('/maps/perimeter.geojson'),
         fetch('/maps/pedestrian_paths.geojson'),
-        fetch('/maps/pedestrian_paths_edits.geojson'),
+        fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
         fetch('/maps/pedestrian_path_config.json')
       ]);
 
@@ -375,6 +375,14 @@ import 'leaflet/dist/leaflet.css';
       drawingPreviewPane.style.zIndex = '650';
       drawingPreviewPane.style.pointerEvents = 'none';
 
+      /*
+       * Persisted custom paths must remain visible after reload even when
+       * the general pedestrian-network highlight is off.
+       */
+      const customPathPane = map.createPane('customPathPane');
+      customPathPane.style.zIndex = '620';
+      customPathPane.style.pointerEvents = 'none';
+
       const colors = {
         background: '#f1f3f5',
         land: '#eef0ee',
@@ -489,6 +497,8 @@ import 'leaflet/dist/leaflet.css';
 
       let pedestrianPathCasing = null;
       let pedestrianPaths = null;
+      let customPathCasing = null;
+      let customPaths = null;
       let editableHitLayer = null;
       let pedestrianPathsActive = false;
 
@@ -532,6 +542,41 @@ import 'leaflet/dist/leaflet.css';
           },
           interactive: false
         });
+
+        /*
+         * Custom paths are persisted editing results. Keep them visible on
+         * the normal map so a path does not appear to disappear after reload.
+         */
+        const customFeatures = {
+          type: 'FeatureCollection',
+          features: (pedestrianPathData.features || []).filter(
+            (feature) => feature?.properties?.source === 'custom'
+          )
+        };
+
+        customPathCasing = L.geoJSON(customFeatures, {
+          pane: 'customPathPane',
+          style: {
+            color: '#ffffff',
+            weight: 9,
+            opacity: 0.98,
+            lineCap: 'round',
+            lineJoin: 'round'
+          },
+          interactive: false
+        });
+
+        customPaths = L.geoJSON(customFeatures, {
+          pane: 'customPathPane',
+          style: {
+            color: '#0f4fd8',
+            weight: 5,
+            opacity: 1,
+            lineCap: 'round',
+            lineJoin: 'round'
+          },
+          interactive: false
+        });
       };
 
       const refreshPedestrianLayers = () => {
@@ -543,15 +588,31 @@ import 'leaflet/dist/leaflet.css';
           map.removeLayer(pedestrianPaths);
         }
 
+        if (customPathCasing && map.hasLayer(customPathCasing)) {
+          map.removeLayer(customPathCasing);
+        }
+
+        if (customPaths && map.hasLayer(customPaths)) {
+          map.removeLayer(customPaths);
+        }
+
         createPedestrianLayers();
 
         if (pedestrianPathsActive) {
           pedestrianPathCasing.addTo(map);
           pedestrianPaths.addTo(map);
         }
+
+        /*
+         * Persisted custom paths are always visible, including after reload.
+         */
+        customPathCasing.addTo(map);
+        customPaths.addTo(map);
       };
 
       createPedestrianLayers();
+      customPathCasing.addTo(map);
+      customPaths.addTo(map);
 
       let basePedestrianDebugLayer = null;
 
