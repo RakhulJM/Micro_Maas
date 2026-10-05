@@ -1910,6 +1910,7 @@
       let drawingMarkers = [];
       let drawingLine = null;
       let drawingLineCasing = null;
+      let drawingSnapMarker = null;
 
       let gateEditDirty = false;
       let selectedGate = null;
@@ -1991,10 +1992,19 @@
         if (editDelete) editDelete.hidden = !(pathEditing && pathDeletable);
       };
 
+      const clearDrawingSnap = () => {
+        if (drawingSnapMarker) {
+          map.removeLayer(drawingSnapMarker);
+        }
+
+        drawingSnapMarker = null;
+      };
+
       const clearDrawing = () => {
         drawingMarkers.forEach((marker) => map.removeLayer(marker));
         if (drawingLine) map.removeLayer(drawingLine);
         if (drawingLineCasing) map.removeLayer(drawingLineCasing);
+        clearDrawingSnap();
         drawingMarkers = [];
         drawingPoints = [];
         drawingLine = null;
@@ -2573,6 +2583,34 @@
         setEditActionVisibility({ drawing: true });
       };
 
+      const findNearestRoutingHub = (latlng) => {
+        let best = null;
+
+        for (const [nodeKey, coordinate] of coordinateByKey.entries()) {
+          if (String(nodeKey).startsWith('gate:')) continue;
+
+          const degree = (pedestrianGraph.get(nodeKey) || []).length;
+          if (degree < 3) continue;
+
+          const candidate = L.latLng(
+            Number(coordinate[1]),
+            Number(coordinate[0])
+          );
+          const distance = latlng.distanceTo(candidate);
+
+          if (!best || distance < best.distance) {
+            best = {
+              type: 'hub',
+              latlng: candidate,
+              distance,
+              nodeKey
+            };
+          }
+        }
+
+        return best;
+      };
+
       const findNearestPedestrianVertex = (latlng) => {
         let best = null;
         const seen = new Set();
@@ -2622,25 +2660,83 @@
         return best;
       };
 
-      const snapDrawingPoint = (point) => {
-        /*
-         * New Path snapping deliberately checks raw feature vertices first.
-         * This is independent of the routing graph, so every visible
-         * existing point is a valid snap target.
-         */
+      const findDrawingSnap = (point) => {
+        const gate = snapToPedestrianPath(point);
+
+        if (gate?.type === 'gate' && gate.distance <= snapToleranceMeters) {
+          return {
+            type: 'gate',
+            latlng: gate.latlng,
+            distance: gate.distance,
+            nodeKey: gate.nodeKey
+          };
+        }
+
+        const hub = findNearestRoutingHub(point);
+
+        if (hub && hub.distance <= snapToleranceMeters) {
+          return hub;
+        }
+
         const vertex = findNearestPedestrianVertex(point);
 
         if (vertex && vertex.distance <= snapToleranceMeters) {
-          return vertex.latlng;
+          return vertex;
         }
 
         const snapped = snapToPedestrianPath(point);
 
         if (!snapped || snapped.distance > snapToleranceMeters) {
-          return point;
+          return {
+            type: 'free',
+            latlng: point,
+            distance: snapped?.distance ?? Infinity,
+            nodeKey: null
+          };
         }
 
-        return snapped.latlng;
+        return {
+          type: snapped.type,
+          latlng: snapped.latlng,
+          distance: snapped.distance,
+          nodeKey: snapped.nodeKey || null
+        };
+      };
+
+      const updateDrawingSnapIndicator = (point) => {
+        if (!drawingModeActive) {
+          clearDrawingSnap();
+          return null;
+        }
+
+        const snap = findDrawingSnap(point);
+
+        if (snap?.type === 'free') {
+          clearDrawingSnap();
+          return snap;
+        }
+
+        if (!drawingSnapMarker) {
+          drawingSnapMarker = L.marker(snap.latlng, {
+            icon: L.divIcon({
+              className: 'drawing-snap-marker',
+              html: '<span></span>',
+              iconSize: [26, 26],
+              iconAnchor: [13, 13]
+            }),
+            interactive: false,
+            keyboard: false,
+            zIndexOffset: 1200
+          }).addTo(map);
+        } else {
+          drawingSnapMarker.setLatLng(snap.latlng);
+        }
+
+        return snap;
+      };
+
+      const snapDrawingPoint = (point) => {
+        return findDrawingSnap(point).latlng;
       };
 
       const finishCustomPath = () => {
@@ -3948,37 +4044,43 @@
 
         /*
          * One click = one vertex in the new path.
-         * When the click lands near an existing vertex, use that exact
-         * coordinate. It is still recorded as a vertex of the new path.
+         * Snapping uses live routing graph nodes first for gates/intersections,
+         * then original vertices, then the nearest path segment.
          */
         const clicked = L.latLng(event.latlng.lat, event.latlng.lng);
-        const vertexSnap = findNearestPedestrianVertex(clicked);
-        const pathSnap = snapToPedestrianPath(clicked);
-
-        let snap = null;
-        if (vertexSnap && vertexSnap.distance <= snapToleranceMeters) {
-          snap = vertexSnap;
-        } else if (pathSnap && pathSnap.distance <= snapToleranceMeters) {
-          snap = pathSnap;
-        }
-
-        const connected = Boolean(snap);
-        const point = snap?.latlng || clicked;
+        const snap = findDrawingSnap(clicked);
+        const connected = snap.type !== 'free';
+        const point = snap.latlng;
 
         drawingPoints.push(point);
         drawingMarkers.push(createEditPointMarker(point, drawingPoints.length));
         renderDrawingLine();
+        clearDrawingSnap();
 
         // Drawing mode owns the controls: no delete/select action can appear.
         setEditActionVisibility({ drawing: true });
 
+        const connectionText = {
+          gate: 'connected to gate',
+          hub: 'snapped to routing hub',
+          vertex: 'connected to existing point',
+          segment: 'connected to existing path'
+        }[snap.type];
+
         editStatus.textContent = drawingPoints.length +
           ' point' + (drawingPoints.length === 1 ? '' : 's') +
           (connected
-            ? snap.type === 'vertex'
-              ? ' · connected to existing point'
-              : ' · connected to existing path'
+            ? ' · ' + (connectionText || 'connected to routing network')
             : ' · Finish when ready');
+      });
+
+      map.on('mousemove', (event) => {
+        if (!editModeEnabled || !drawingModeActive || routeModeActive) {
+          clearDrawingSnap();
+          return;
+        }
+
+        updateDrawingSnapIndicator(event.latlng);
       });
 
       window.addEventListener('keydown', (event) => {
