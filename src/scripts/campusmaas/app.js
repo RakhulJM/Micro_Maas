@@ -2046,6 +2046,10 @@
       const deletePointCancel = document.getElementById('deletePointCancel');
       const deletePointMerge = document.getElementById('deletePointMerge');
       const deletePointDrop = document.getElementById('deletePointDrop');
+      const deletePathModal = document.getElementById('deletePathModal');
+      const deletePathCancel = document.getElementById('deletePathCancel');
+      const deletePathEntire = document.getElementById('deletePathEntire');
+      const deletePathSegment = document.getElementById('deletePathSegment');
 
       let pointEditorActive = false;
       let drawingModeActive = false;
@@ -2073,6 +2077,7 @@
       let defaultVertexMarkers = [];
       let editableVertexMarkers = [];
       let editablePathLines = new Map();
+      let editablePathSegmentHitLayers = new Map();
       let selectedPoint = null;
       let selectedPath = null;
 
@@ -2203,6 +2208,12 @@
         }
 
         editablePathLines.clear();
+
+        for (const layerGroup of editablePathSegmentHitLayers.values()) {
+          map.removeLayer(layerGroup);
+        }
+
+        editablePathSegmentHitLayers.clear();
         selectedPoint = null;
       };
 
@@ -2263,6 +2274,7 @@
 
       const closeEditTools = () => {
         showDeletePointModal(false);
+        closeDeletePathModal();
         pathTypePalette?.classList.remove('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'true');
         clearDrawing();
@@ -4098,7 +4110,7 @@
         });
       };
 
-      const selectPathForEdit = (feature) => {
+      const selectPathForEdit = (feature, segmentIndex = null) => {
         if (!editModeEnabled || !feature?.geometry) return;
 
         if (feature.geometry.type !== 'LineString') {
@@ -4109,11 +4121,21 @@
 
         selectedPath = {
           id: feature.id,
-          name: 'Pedestrian path'
+          name: 'Pedestrian path',
+          segmentIndex:
+            Number.isInteger(segmentIndex) &&
+            segmentIndex >= 0 &&
+            segmentIndex < feature.geometry.coordinates.length - 1
+              ? segmentIndex
+              : null
         };
         setActivePathType(feature.properties?.category || 'Pedestrian Path');
 
-        editStatus.textContent = 'Path selected · Delete path to remove';
+        editStatus.textContent =
+          selectedPath.segmentIndex === null
+            ? 'Path selected · Delete path to remove'
+            : 'Segment ' + (selectedPath.segmentIndex + 1) +
+              ' selected · Delete path to remove';
         showEditCard(true);
         setEditActionVisibility({
           pointEditor: pointEditorActive,
@@ -4123,6 +4145,24 @@
         });
 
         refreshEditableVertexSelection();
+      };
+
+      const showDeletePathModal = (visible = true) => {
+        deletePathModal?.classList.toggle('is-open', visible);
+        deletePathModal?.setAttribute('aria-hidden', String(!visible));
+
+        if (deletePathSegment) {
+          const canDeleteSegment = Number.isInteger(selectedPath?.segmentIndex);
+          deletePathSegment.disabled = !canDeleteSegment;
+          deletePathSegment.setAttribute(
+            'aria-disabled',
+            String(!canDeleteSegment)
+          );
+        }
+      };
+
+      const closeDeletePathModal = () => {
+        showDeletePathModal(false);
       };
 
       const deleteSelectedPath = () => {
@@ -4137,9 +4177,84 @@
         selectedPath = null;
         selectedPoint = null;
 
+        closeDeletePathModal();
         markPathEditsDirty();
         refreshAfterPathChange();
         editStatus.textContent = deletedName + ' deleted';
+        setEditActionVisibility({
+          pointEditor: pointEditorActive
+        });
+      };
+
+      const deleteSelectedPathSegment = () => {
+        if (!selectedPath?.id) return;
+
+        const targetId = String(selectedPath.id);
+        const segmentIndex = selectedPath.segmentIndex;
+        const feature = findEffectiveFeature(targetId);
+
+        if (
+          !feature ||
+          feature.geometry?.type !== 'LineString' ||
+          !Number.isInteger(segmentIndex) ||
+          segmentIndex < 0 ||
+          segmentIndex >= feature.geometry.coordinates.length - 1
+        ) {
+          closeDeletePathModal();
+          return;
+        }
+
+        const coordinates = feature.geometry.coordinates.map((point) => [
+          Number(point[0]),
+          Number(point[1])
+        ]);
+
+        closeDeletePathModal();
+
+        if (coordinates.length <= 2) {
+          pedestrianPathData.features = (pedestrianPathData.features || [])
+            .filter((item) => String(item.id) !== targetId);
+
+          editStatus.textContent = 'Selected segment deleted · path removed';
+        } else if (segmentIndex === 0) {
+          feature.geometry.coordinates = coordinates.slice(1);
+          editStatus.textContent = 'Selected segment deleted';
+        } else if (segmentIndex === coordinates.length - 2) {
+          feature.geometry.coordinates = coordinates.slice(0, -1);
+          editStatus.textContent = 'Selected segment deleted';
+        } else {
+          const leftCoordinates = coordinates.slice(0, segmentIndex + 1);
+          const rightCoordinates = coordinates.slice(segmentIndex + 1);
+          const category = pathTypeValues.includes(feature.properties?.category)
+            ? feature.properties.category
+            : 'Pedestrian Path';
+
+          pedestrianPathData.features = (pedestrianPathData.features || [])
+            .filter((item) => String(item.id) !== targetId);
+
+          const stamp = Date.now().toString(36);
+          const makeSplitFeature = (points, suffix) => ({
+            type: 'Feature',
+            id: targetId + '-' + suffix + '-' + stamp,
+            properties: { category },
+            geometry: {
+              type: 'LineString',
+              coordinates: points
+            }
+          });
+
+          pedestrianPathData.features.push(
+            makeSplitFeature(leftCoordinates, 'left'),
+            makeSplitFeature(rightCoordinates, 'right')
+          );
+
+          editStatus.textContent = 'Selected segment deleted · path split';
+        }
+
+        selectedPath = null;
+        selectedPoint = null;
+        markPathEditsDirty();
+        refreshAfterPathChange();
         setEditActionVisibility({
           pointEditor: pointEditorActive
         });
@@ -4152,25 +4267,54 @@
 
         editableHitLayer = null;
 
-        if (!editModeEnabled) return;
+        for (const layerGroup of editablePathSegmentHitLayers.values()) {
+          map.removeLayer(layerGroup);
+        }
+        editablePathSegmentHitLayers.clear();
 
-        editableHitLayer = L.geoJSON(pedestrianPathData, {
-          style: {
-            color: '#2563eb',
-            weight: 15,
-            opacity: 0
-          },
-          interactive: true,
-          onEachFeature: (feature, layer) => {
-            layer.on('click', (event) => {
+        if (!editModeEnabled || !pedestrianNetworkVisible) return;
+
+        /*
+         * One invisible hit target per point-to-point segment lets the editor
+         * remember exactly which segment was clicked.
+         */
+        for (const feature of pedestrianPathData.features || []) {
+          if (feature?.geometry?.type !== 'LineString') continue;
+
+          const featureId = String(feature.id);
+          const segmentLayers = L.layerGroup().addTo(map);
+
+          for (
+            let segmentIndex = 0;
+            segmentIndex < feature.geometry.coordinates.length - 1;
+            segmentIndex += 1
+          ) {
+            const [a, b] = feature.geometry.coordinates
+              .slice(segmentIndex, segmentIndex + 2)
+              .map(([lng, lat]) => [Number(lat), Number(lng)]);
+
+            const hitLine = L.polyline([a, b], {
+              color: '#2563eb',
+              weight: 18,
+              opacity: 0,
+              interactive: true,
+              lineCap: 'round',
+              lineJoin: 'round'
+            });
+
+            hitLine.on('click', (event) => {
               if (!editModeEnabled || drawingModeActive) return;
 
               event.originalEvent?.stopPropagation();
               event.originalEvent?.preventDefault();
-              selectPathForEdit(feature);
+              selectPathForEdit(feature, segmentIndex);
             });
+
+            hitLine.addTo(segmentLayers);
           }
-        }).addTo(map);
+
+          editablePathSegmentHitLayers.set(featureId, segmentLayers);
+        }
       };
 
       savePathEdits?.addEventListener('click', saveCurrentPathEdits);
@@ -4183,7 +4327,15 @@
       deletePointMerge?.addEventListener('click', () => deleteSelectedPoint('merge'));
       deletePointDrop?.addEventListener('click', () => deleteSelectedPoint('drop'));
       deletePointCancel?.addEventListener('click', () => showDeletePointModal(false));
-      editDelete?.addEventListener('click', deleteSelectedPath);
+
+      deletePathCancel?.addEventListener('click', closeDeletePathModal);
+      deletePathEntire?.addEventListener('click', deleteSelectedPath);
+      deletePathSegment?.addEventListener('click', deleteSelectedPathSegment);
+
+      editDelete?.addEventListener('click', () => {
+        if (!selectedPath?.id || drawingModeActive) return;
+        showDeletePathModal(true);
+      });
 
       editModeToggle?.addEventListener('change', () => {
         syncEditModeUi();
@@ -4317,16 +4469,24 @@
       });
 
       window.addEventListener('keydown', (event) => {
-        if (
-          editModeEnabled &&
-          pointEditorActive &&
-          !drawingModeActive &&
-          selectedPoint &&
-          (event.key === 'Delete' || event.key === 'Backspace') &&
-          !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)
-        ) {
+        const deleteKey =
+          event.key === 'Delete' || event.key === 'Backspace';
+        const typing =
+          ['INPUT', 'TEXTAREA', 'SELECT'].includes(
+            document.activeElement?.tagName
+          );
+
+        if (!editModeEnabled || drawingModeActive || !deleteKey || typing) return;
+
+        if (pointEditorActive && selectedPoint) {
           event.preventDefault();
           deleteSelectedPoint();
+          return;
+        }
+
+        if (pointEditorActive && selectedPath?.id) {
+          event.preventDefault();
+          showDeletePathModal(true);
         }
       });
       const devPanel = document.getElementById('devPanel');
@@ -4357,6 +4517,11 @@
 
         if (gateModeActive || gateCard?.classList.contains('is-open')) {
           closeGateTools();
+          return;
+        }
+
+        if (deletePathModal?.classList.contains('is-open')) {
+          closeDeletePathModal();
           return;
         }
 
