@@ -101,7 +101,7 @@
 
     import('leaflet').then(async ({ default: L }) => {
       const [campusResponse, perimeterResponse, pathEditResponse, pathConfigResponse, gatesResponse] = await Promise.all([
-        fetch('/maps/export.geojson'),
+        fetch('/maps/export_places.geojson'),
         fetch('/maps/perimeter.geojson'),
         fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
         fetch('/maps/pedestrian_path_config.json'),
@@ -109,7 +109,7 @@
       ]);
 
       if (!campusResponse.ok || !perimeterResponse.ok || !pathEditResponse.ok) {
-        throw new Error('Campus map or pedestrian path data could not be loaded.');
+        throw new Error('Campus places map or pedestrian path data could not be loaded.');
       }
 
       const [campusData, perimeterData, pedestrianPathData, gatesData] = await Promise.all([
