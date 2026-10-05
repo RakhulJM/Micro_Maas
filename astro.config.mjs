@@ -66,12 +66,46 @@ const pedestrianNetworkSavePlugin = () => ({
           const raw = Buffer.concat(chunks).toString('utf8');
           const payload = JSON.parse(raw);
 
-          if (
-            payload?.type !== 'FeatureCollection' ||
-            payload?.properties?.format !== 'campusmaas-pedestrian-network' ||
-            Number(payload?.properties?.version) < 3 ||
-            !Array.isArray(payload?.features)
-          ) {
+          const validPathCategories = new Set([
+            'Main Road',
+            'Road',
+            'Ground',
+            'Pedestrian Path'
+          ]);
+
+          const validRoot =
+            payload?.type === 'FeatureCollection' &&
+            Array.isArray(payload?.features) &&
+            Object.keys(payload).every((key) =>
+              key === 'type' || key === 'features'
+            );
+
+          const validFeatures = payload.features.every((feature) => {
+            const featureKeys = Object.keys(feature || {});
+            const propertyKeys = Object.keys(feature?.properties || {});
+
+            return (
+              feature?.type === 'Feature' &&
+              featureKeys.every((key) =>
+                key === 'type' || key === 'properties' || key === 'geometry'
+              ) &&
+              featureKeys.length === 3 &&
+              propertyKeys.length === 1 &&
+              propertyKeys[0] === 'category' &&
+              validPathCategories.has(feature.properties.category) &&
+              feature?.geometry?.type === 'LineString' &&
+              Array.isArray(feature.geometry.coordinates) &&
+              feature.geometry.coordinates.length >= 2 &&
+              feature.geometry.coordinates.every((coordinate) =>
+                Array.isArray(coordinate) &&
+                coordinate.length >= 2 &&
+                Number.isFinite(Number(coordinate[0])) &&
+                Number.isFinite(Number(coordinate[1]))
+              )
+            );
+          });
+
+          if (!validRoot || !validFeatures) {
             throw new Error('Invalid pedestrian network payload.');
           }
 

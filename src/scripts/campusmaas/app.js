@@ -100,23 +100,21 @@
     }, true);
 
     import('leaflet').then(async ({ default: L }) => {
-      const [campusResponse, perimeterResponse, pathResponse, pathEditResponse, pathConfigResponse, gatesResponse] = await Promise.all([
-        fetch('/maps/export.geojson'),
+      const [campusResponse, perimeterResponse, pathEditResponse, gatesResponse] = await Promise.all([
+        fetch('/maps/export_places.geojson'),
         fetch('/maps/perimeter.geojson'),
-        fetch('/maps/pedestrian_paths.geojson'),
         fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
-        fetch('/maps/pedestrian_path_config.json'),
         fetch('/maps/gates.geojson', { cache: 'no-store' })
       ]);
 
-      if (!campusResponse.ok || !perimeterResponse.ok || !pathResponse.ok) {
-        throw new Error('Campus map data could not be loaded.');
+      if (!campusResponse.ok || !perimeterResponse.ok || !pathEditResponse.ok) {
+        throw new Error('Campus places map or pedestrian path data could not be loaded.');
       }
 
       const [campusData, perimeterData, pedestrianPathData, gatesData] = await Promise.all([
         campusResponse.json(),
         perimeterResponse.json(),
-        pathResponse.json(),
+        pathEditResponse.json(),
         gatesResponse?.ok ? gatesResponse.json() : Promise.resolve({
           type: 'FeatureCollection',
           properties: {
@@ -128,39 +126,72 @@
         })
       ]);
 
-      const pedestrianConfig = pathConfigResponse.ok
-        ? await pathConfigResponse.json()
-        : {
-            version: 1,
-            routing: {
-              walking_speed_mps: 1.4,
-              snap_tolerance_m: 8
-            },
-            render: {
-              highlight: {
-                casing_weight: 7,
-                path_weight: 4
-              },
-              route: {
-                casing_weight: 9,
-                path_weight: 5
-              },
-              editor: {
-                preview_weight: 4,
-                preview_dash: '7 5'
-              }
-            }
-          };
+      /*
+       * Path rendering/routing defaults live in the application now.
+       * The only external path dataset is pedestrian_paths_edits.geojson.
+       */
+      const pedestrianConfig = {
+        version: 1,
+        routing: {
+          walking_speed_mps: 1.4,
+          snap_tolerance_m: 8
+        },
+        render: {
+          highlight: {
+            casing_weight: 7,
+            path_weight: 4
+          },
+          route: {
+            casing_weight: 9,
+            path_weight: 5
+          },
+          editor: {
+            preview_weight: 4,
+            preview_dash: '7 5'
+          }
+        }
+      };
 
-      const committedPathEdits = pathEditResponse.ok
-        ? await pathEditResponse.json()
-        : null;
+      const committedPathEdits = pedestrianPathData;
 
       const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 
-      const basePedestrianFeatures = cloneJson(
-        pedestrianPathData.features || []
-      );
+      const pathTypeColors = Object.freeze({
+        'Main Road': '#e85d04',
+        'Road': '#f2b134',
+        'Ground': '#4f9d69',
+        'Pedestrian Path': '#2563eb'
+      });
+
+      const pathTypeValues = Object.freeze(Object.keys(pathTypeColors));
+
+      const normalizePathCategory = (feature) => {
+        const current = String(feature?.properties?.category || '').trim();
+
+        if (pathTypeValues.includes(current)) {
+          return current;
+        }
+
+        const highway = String(feature?.properties?.highway || '').toLowerCase();
+
+        if (['motorway', 'trunk', 'primary', 'secondary', 'tertiary'].includes(highway)) {
+          return 'Main Road';
+        }
+
+        if (['residential', 'unclassified', 'service', 'living_street', 'road', 'track'].includes(highway)) {
+          return 'Road';
+        }
+
+        if (['path', 'footway', 'pedestrian', 'steps', 'custom'].includes(highway)) {
+          return 'Pedestrian Path';
+        }
+
+        return 'Pedestrian Path';
+      };
+
+      const pathTypeColor = (feature) =>
+        pathTypeColors[normalizePathCategory(feature)] ||
+        pathTypeColors['Pedestrian Path'];
 
       const normalizePedestrianFeatures = (features) =>
         (Array.isArray(features) ? features : []).map((feature, index) => {
@@ -171,30 +202,41 @@
             normalized.properties?.['@id'] ??
             'pedestrian-' + String(index + 1).padStart(3, '0')
           );
+          normalized.properties = {
+            category: normalizePathCategory(feature)
+          };
           return normalized;
         });
 
-      const hasCompletePedestrianEditFile =
+      const isCleanPedestrianEditFile =
         committedPathEdits?.type === 'FeatureCollection' &&
-        committedPathEdits?.properties?.format === 'campusmaas-pedestrian-network' &&
-        Number(committedPathEdits?.properties?.version) >= 3 &&
-        Array.isArray(committedPathEdits?.features);
+        Array.isArray(committedPathEdits?.features) &&
+        Object.keys(committedPathEdits).every((key) =>
+          key === 'type' || key === 'features'
+        ) &&
+        committedPathEdits.features.every((feature) =>
+          feature?.type === 'Feature' &&
+          feature?.geometry?.type === 'LineString' &&
+          Array.isArray(feature.geometry.coordinates) &&
+          feature.geometry.coordinates.length >= 2 &&
+          feature?.properties &&
+          Object.keys(feature.properties).length === 1 &&
+          pathTypeValues.includes(feature.properties.category) &&
+          Object.keys(feature).every((key) =>
+            key === 'type' || key === 'properties' || key === 'geometry'
+          )
+        );
+
+      if (!isCleanPedestrianEditFile) {
+        throw new Error('pedestrian_paths_edits.geojson is not in the required clean path format.');
+      }
 
       const pathEditState = {
         type: 'FeatureCollection',
-        properties: {
-          format: 'campusmaas-pedestrian-network',
-          version: 3,
-          base: 'pedestrian_paths.geojson',
-          description: 'Complete editable pedestrian network snapshot'
-        },
-        features: normalizePedestrianFeatures(
-          hasCompletePedestrianEditFile
-            ? committedPathEdits.features
-            : basePedestrianFeatures
-        )
+        features: normalizePedestrianFeatures(committedPathEdits.features)
       };
 
+      pedestrianPathData.type = pathEditState.type;
       pedestrianPathData.features = pathEditState.features;
 
       const normalizedGateFeatures =
@@ -265,14 +307,6 @@
       drawingPreviewPane.style.zIndex = '650';
       drawingPreviewPane.style.pointerEvents = 'none';
 
-      /*
-       * Persisted custom paths must remain visible after reload even when
-       * the general pedestrian-network highlight is off.
-       */
-      const customPathPane = map.createPane('customPathPane');
-      customPathPane.style.zIndex = '620';
-      customPathPane.style.pointerEvents = 'none';
-
       const gatePane = map.createPane('gatePane');
       gatePane.style.zIndex = '640';
 
@@ -310,11 +344,14 @@
         const kind = feature?.properties?.highway;
         const width = roadWidth[kind] || 3.5;
         const major = ['motorway', 'trunk', 'primary', 'secondary', 'tertiary'].includes(kind);
+        const mainExternalRoad =
+          feature?.id === 'way/129894647' ||
+          feature?.properties?.ref === 'MDR1137';
 
         return {
           color: casing
             ? colors.roadCasing
-            : (major ? colors.majorRoad : colors.road),
+            : (mainExternalRoad ? '#111827' : (major ? colors.majorRoad : colors.road)),
           weight: casing ? width + 2.2 : width,
           opacity: 0.96,
           lineCap: 'round',
@@ -390,11 +427,11 @@
 
       let pedestrianPathCasing = null;
       let pedestrianPaths = null;
-      let customPathCasing = null;
-      let customPaths = null;
       let gateLayer = null;
       let editableHitLayer = null;
       let pedestrianPathsActive = false;
+      let pedestrianNetworkVisible = true;
+      let gateLayerVisible = true;
 
       // Declared before the gate layer is created during map initialization.
       let editModeEnabled = false;
@@ -412,6 +449,13 @@
       const editorPreviewDash =
         pedestrianConfig.render?.editor?.preview_dash || '7 5';
 
+      /*
+       * The complete editable pedestrian network is the normal white
+       * pedestrian layer. The blue layer is only an active highlight.
+       */
+      const basePedestrianCasingWeight =
+        Math.max(3.5, roadWidth.footway + 0.8);
+
       const walkingSpeedMetersPerSecond =
         Number(pedestrianConfig.routing?.walking_speed_mps) || 1.4;
       const snapToleranceMeters =
@@ -421,7 +465,7 @@
         pedestrianPathCasing = L.geoJSON(pedestrianPathData, {
           style: {
             color: '#ffffff',
-            weight: highlightCasingWeight,
+            weight: basePedestrianCasingWeight,
             opacity: 0.9,
             lineCap: 'round',
             lineJoin: 'round'
@@ -430,54 +474,17 @@
         });
 
         pedestrianPaths = L.geoJSON(pedestrianPathData, {
-          style: {
-            color: '#2563eb',
+          style: (feature) => ({
+            color: pathTypeColor(feature),
             weight: highlightPathWeight,
             opacity: 1,
             lineCap: 'round',
             lineJoin: 'round'
-          },
+          }),
           interactive: false
         });
 
-        /*
-         * Custom paths are persisted editing results. Keep them visible on
-         * the normal map so a path does not appear to disappear after reload.
-         */
-        const customFeatures = {
-          type: 'FeatureCollection',
-          features: (pedestrianPathData.features || []).filter(
-            (feature) => feature?.properties?.source === 'custom'
-          )
-        };
 
-        /*
-         * Persisted custom paths use the same lightweight visual treatment
-         * as a normal footpath. They are data, not a selection/highlight.
-         */
-        customPathCasing = L.geoJSON(customFeatures, {
-          pane: 'customPathPane',
-          style: {
-            color: colors.roadCasing,
-            weight: roadWidth.footway + 2.2,
-            opacity: 0.96,
-            lineCap: 'round',
-            lineJoin: 'round'
-          },
-          interactive: false
-        });
-
-        customPaths = L.geoJSON(customFeatures, {
-          pane: 'customPathPane',
-          style: {
-            color: colors.road,
-            weight: roadWidth.footway,
-            opacity: 0.96,
-            lineCap: 'round',
-            lineJoin: 'round'
-          },
-          interactive: false
-        });
       };
 
       const refreshPedestrianLayers = () => {
@@ -489,31 +496,38 @@
           map.removeLayer(pedestrianPaths);
         }
 
-        if (customPathCasing && map.hasLayer(customPathCasing)) {
-          map.removeLayer(customPathCasing);
-        }
-
-        if (customPaths && map.hasLayer(customPaths)) {
-          map.removeLayer(customPaths);
-        }
-
         createPedestrianLayers();
 
+        /*
+         * Rebuild operations must respect the developer-controlled
+         * visibility state. A hidden path dataset must never be re-added by
+         * routing, editing, classification, or geometry refreshes.
+         */
+        if (!pedestrianNetworkVisible) {
+          clearDefaultVertices();
+          return;
+        }
+
+        pedestrianPathCasing.addTo(map);
+
         if (pedestrianPathsActive) {
-          pedestrianPathCasing.addTo(map);
           pedestrianPaths.addTo(map);
         }
 
-        /*
-         * Persisted custom paths are always visible, including after reload.
-         */
-        customPathCasing.addTo(map);
-        customPaths.addTo(map);
+        if (editModeEnabled && !drawingModeActive) {
+          buildDefaultVertexMarkers();
+        }
       };
 
       createPedestrianLayers();
-      customPathCasing.addTo(map);
-      customPaths.addTo(map);
+
+      /*
+       * The final working pedestrian network is visible by default, but its
+       * developer visibility switch remains authoritative after initialization.
+       */
+      if (pedestrianNetworkVisible) {
+        pedestrianPathCasing.addTo(map);
+      }
 
       const gateFeatureRing = (feature) =>
         feature?.geometry?.type === 'Polygon' &&
@@ -562,11 +576,16 @@
         }
 
         createGateLayer();
-        gateLayer?.addTo(map);
+
+        if (gateLayerVisible) {
+          gateLayer?.addTo(map);
+        }
       };
 
       createGateLayer();
-      gateLayer.addTo(map);
+      if (gateLayerVisible) {
+        gateLayer.addTo(map);
+      }
 
       let basePedestrianDebugLayer = null;
 
@@ -577,7 +596,7 @@
 
         basePedestrianDebugLayer = L.geoJSON({
           type: 'FeatureCollection',
-          features: cloneJson(basePedestrianFeatures)
+          features: cloneJson(pedestrianPathData.features || [])
         }, {
           style: {
             color: '#64748b',
@@ -1472,6 +1491,8 @@
         interactive: false
       }).addTo(map);
 
+      let perimeterEnabled = true;
+
       // Keep the 1 km view as the normal zoom-out floor.
       // All zooming uses the standard map interactions and +/- controls.
       const perimeterZoom = 18;
@@ -1482,6 +1503,8 @@
       map.setView(center, perimeterZoom, { animate: false });
 
       function constrainToPerimeter() {
+        if (!perimeterEnabled) return;
+
         const current = map.getCenter();
         const distance = center.distanceTo(current);
 
@@ -1509,7 +1532,7 @@
 
       // Do not snap zoom back to the 1 km minimum after an intentional override.
       map.on('zoomend', () => {
-        if (map.getZoom() >= perimeterZoom) {
+        if (perimeterEnabled && map.getZoom() >= perimeterZoom) {
           constrainToPerimeter();
         }
 
@@ -1571,9 +1594,142 @@
       ];
 
       const layerRegistry = new Map([
-        ['campus.geojson', campusLayers],
+        ['export_places.geojson', campusLayers],
+        ['pedestrian_paths_edits.geojson', []],
+        ['gates.geojson', []],
         ['perimeter.geojson', [perimeterMask]]
       ]);
+
+      const activeMapFiles = [
+        'export_places.geojson',
+        'pedestrian_paths_edits.geojson',
+        'gates.geojson',
+        'perimeter.geojson'
+      ];
+
+      const setPedestrianNetworkVisibility = (enabled) => {
+        pedestrianNetworkVisible = Boolean(enabled);
+        const layers = [pedestrianPathCasing, pedestrianPaths].filter(Boolean);
+
+        for (const layer of layers) {
+          if (pedestrianNetworkVisible) {
+            if (!map.hasLayer(layer)) layer.addTo(map);
+          } else if (map.hasLayer(layer)) {
+            map.removeLayer(layer);
+          }
+        }
+
+        if (!pedestrianNetworkVisible) {
+          pedestrianPathsActive = false;
+          const pathToggle = document.getElementById('pathToggle');
+          pathToggle?.classList.remove('is-active');
+          pathToggle?.setAttribute('aria-pressed', 'false');
+
+          clearDefaultVertices();
+          clearEditableVertices();
+          clearDrawingSnap();
+
+          if (routeModeActive) {
+            routeModeActive = false;
+            const routeToggle = document.getElementById('routeToggle');
+            routeToggle?.classList.remove('is-active');
+            routeToggle?.setAttribute('aria-pressed', 'false');
+            clearRouteTest(false);
+          }
+        } else if (editModeEnabled && !drawingModeActive) {
+          buildDefaultVertexMarkers();
+        }
+      };
+
+      const setGateVisibility = (enabled) => {
+        gateLayerVisible = Boolean(enabled);
+
+        if (!gateLayer) return;
+
+        if (gateLayerVisible) {
+          if (!map.hasLayer(gateLayer)) gateLayer.addTo(map);
+        } else if (map.hasLayer(gateLayer)) {
+          map.removeLayer(gateLayer);
+          clearGateHandles();
+          selectedGate = null;
+        }
+      };
+
+      const setPerimeterVisibility = (enabled) => {
+        perimeterEnabled = Boolean(enabled);
+
+        if (perimeterEnabled) {
+          if (!map.hasLayer(perimeterMask)) perimeterMask.addTo(map);
+          map.setMaxBounds(circleBounds);
+          constrainToPerimeter();
+        } else {
+          if (map.hasLayer(perimeterMask)) map.removeLayer(perimeterMask);
+          map.setMaxBounds(null);
+          map.options.maxBounds = null;
+        }
+      };
+
+      /*
+       * Layer toggles change Leaflet's layer DOM without recreating the map.
+       * Re-measure labels after the layer operation so building names keep
+       * the same clean size/width as they have after a fresh page load.
+       */
+      const refreshMapPresentation = () => {
+        requestAnimationFrame(() => {
+          map.invalidateSize({ pan: false, debounceMoveend: true });
+
+          requestAnimationFrame(() => {
+            updateBuildingLabels();
+          });
+        });
+      };
+
+      const setLayerVisibility = async (name, enabled) => {
+        if (name === 'pedestrian_paths_edits.geojson') {
+          setPedestrianNetworkVisibility(enabled);
+          refreshMapPresentation();
+          return;
+        }
+
+        if (name === 'gates.geojson') {
+          setGateVisibility(enabled);
+          refreshMapPresentation();
+          return;
+        }
+
+        if (name === 'perimeter.geojson') {
+          setPerimeterVisibility(enabled);
+          refreshMapPresentation();
+          return;
+        }
+
+        if (!layerRegistry.has(name)) {
+          if (!enabled) {
+            refreshMapPresentation();
+            return;
+          }
+
+          try {
+            await renderGenericMapFile(name);
+          } catch {
+            refreshMapPresentation();
+            return;
+          }
+
+          refreshMapPresentation();
+          return;
+        }
+
+        for (const layer of layerRegistry.get(name) || []) {
+          if (enabled) {
+            if (!map.hasLayer(layer)) layer.addTo(map);
+          } else if (map.hasLayer(layer)) {
+            map.removeLayer(layer);
+          }
+        }
+
+        refreshMapPresentation();
+      };
 
       const renderGenericMapFile = (name) => {
         const url = '/maps/' + encodeURIComponent(name);
@@ -1594,65 +1750,41 @@
           });
       };
 
-      const setLayerVisibility = async (name, enabled) => {
-        if (!layerRegistry.has(name)) {
-          if (!enabled) return;
-          try {
-            await renderGenericMapFile(name);
-          } catch {
-            return;
-          }
-        }
-
-        for (const layer of layerRegistry.get(name) || []) {
-          if (enabled) {
-            if (!map.hasLayer(layer)) layer.addTo(map);
-          } else if (map.hasLayer(layer)) {
-            map.removeLayer(layer);
-          }
-        }
-      };
-
       const manifestResponse = await fetch('/maps/manifest.json');
 
-      if (manifestResponse.ok) {
-        const manifest = await manifestResponse.json();
-        const files = Array.isArray(manifest.files) ? manifest.files : [];
-        const list = document.getElementById('mapFileList');
-        const count = document.getElementById('mapFileCount');
+      const files = activeMapFiles;
+      const list = document.getElementById('mapFileList');
+      const count = document.getElementById('mapFileCount');
 
-        if (count) count.textContent = String(files.length);
+      if (count) count.textContent = String(files.length);
 
-        if (list) {
-          list.innerHTML = '';
+      if (list) {
+        list.innerHTML = '';
 
-          for (const name of files) {
-            const row = document.createElement('label');
-            row.className = 'map-file-row';
+        for (const name of files) {
+          const row = document.createElement('label');
+          row.className = 'map-file-row';
 
-            const info = document.createElement('span');
-            const title = document.createElement('strong');
-            const path = document.createElement('small');
+          const info = document.createElement('span');
+          const title = document.createElement('strong');
+          const path = document.createElement('small');
 
-            title.textContent = name;
-            path.textContent = 'maps/' + name;
+          title.textContent = name;
+          path.textContent = 'maps/' + name;
 
-            info.append(title, path);
+          info.append(title, path);
 
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.checked =
-              name === 'campus.geojson' ||
-              name === 'perimeter.geojson';
-            checkbox.setAttribute('data-map-file', name);
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = true;
+          checkbox.setAttribute('data-map-file', name);
 
-            row.append(info, checkbox);
-            list.appendChild(row);
+          row.append(info, checkbox);
+          list.appendChild(row);
 
-            checkbox.addEventListener('change', () => {
-              void setLayerVisibility(name, checkbox.checked);
-            });
-          }
+          checkbox.addEventListener('change', () => {
+            void setLayerVisibility(name, checkbox.checked);
+          });
         }
       }
 
@@ -1660,18 +1792,22 @@
       const showBasePedestrianToggle = document.getElementById('showBasePedestrianToggle');
 
       pathToggle?.addEventListener('click', () => {
+        if (!pedestrianNetworkVisible) {
+          pedestrianPathsActive = false;
+          pathToggle.classList.remove('is-active');
+          pathToggle.setAttribute('aria-pressed', 'false');
+          return;
+        }
+
         pedestrianPathsActive = !pedestrianPathsActive;
 
         if (pedestrianPathsActive) {
-          pedestrianPathCasing?.addTo(map);
+          if (pedestrianPathCasing && !map.hasLayer(pedestrianPathCasing)) {
+            pedestrianPathCasing.addTo(map);
+          }
           pedestrianPaths?.addTo(map);
-        } else {
-          if (pedestrianPathCasing && map.hasLayer(pedestrianPathCasing)) {
-            map.removeLayer(pedestrianPathCasing);
-          }
-          if (pedestrianPaths && map.hasLayer(pedestrianPaths)) {
-            map.removeLayer(pedestrianPaths);
-          }
+        } else if (pedestrianPaths && map.hasLayer(pedestrianPaths)) {
+          map.removeLayer(pedestrianPaths);
         }
 
         pathToggle.classList.toggle('is-active', pedestrianPathsActive);
@@ -1749,6 +1885,13 @@
         }).addTo(map);
 
       routeToggle?.addEventListener('click', () => {
+        if (!pedestrianNetworkVisible) {
+          routeModeActive = false;
+          routeToggle.classList.remove('is-active');
+          routeToggle.setAttribute('aria-pressed', 'false');
+          return;
+        }
+
         routeModeActive = !routeModeActive;
 
         routeToggle.classList.toggle('is-active', routeModeActive);
@@ -1874,6 +2017,7 @@
       const editToggle = document.getElementById('editToggle');
       const editCard = document.getElementById('editCard');
       const editStatus = document.getElementById('editStatus');
+      const pathTypePalette = document.getElementById('pathTypePalette');
       const editNewPath = document.getElementById('editNewPath');
       const editUndo = document.getElementById('editUndo');
       const editFinish = document.getElementById('editFinish');
@@ -1902,6 +2046,10 @@
       const deletePointCancel = document.getElementById('deletePointCancel');
       const deletePointMerge = document.getElementById('deletePointMerge');
       const deletePointDrop = document.getElementById('deletePointDrop');
+      const deletePathModal = document.getElementById('deletePathModal');
+      const deletePathCancel = document.getElementById('deletePathCancel');
+      const deletePathEntire = document.getElementById('deletePathEntire');
+      const deletePathSegment = document.getElementById('deletePathSegment');
 
       let pointEditorActive = false;
       let drawingModeActive = false;
@@ -1929,6 +2077,7 @@
       let defaultVertexMarkers = [];
       let editableVertexMarkers = [];
       let editablePathLines = new Map();
+      let editablePathSegmentHitLayers = new Map();
       let selectedPoint = null;
       let selectedPath = null;
 
@@ -2019,6 +2168,13 @@
       const buildDefaultVertexMarkers = () => {
         clearDefaultVertices();
 
+        /*
+         * These dots are editor affordances, not part of the map dataset.
+         * They must never remain visible while the pedestrian layer is off
+         * or while Edit Mode is off.
+         */
+        if (!editModeEnabled || !pedestrianNetworkVisible) return;
+
         for (const feature of pedestrianPathData.features || []) {
           if (feature?.geometry?.type !== 'LineString') continue;
 
@@ -2052,7 +2208,64 @@
         }
 
         editablePathLines.clear();
+
+        for (const layerGroup of editablePathSegmentHitLayers.values()) {
+          map.removeLayer(layerGroup);
+        }
+
+        editablePathSegmentHitLayers.clear();
         selectedPoint = null;
+      };
+
+      let activePathType = 'Pedestrian Path';
+
+      const syncPathTypePalette = () => {
+        if (!pathTypePalette) return;
+
+        pathTypePalette
+          .querySelectorAll('[data-path-type]')
+          .forEach((option) => {
+            const selected =
+              option.getAttribute('data-path-type') === activePathType;
+
+            option.classList.toggle('is-selected', selected);
+            option.setAttribute('aria-pressed', String(selected));
+          });
+      };
+
+      const setActivePathType = (category) => {
+        if (!pathTypeValues.includes(category)) return;
+        activePathType = category;
+        syncPathTypePalette();
+      };
+
+      const applyPathType = (category) => {
+        if (!pathTypeValues.includes(category)) return;
+
+        setActivePathType(category);
+
+        if (!selectedPath || drawingModeActive) {
+          if (drawingModeActive) {
+            editStatus.textContent =
+              'New path type: ' + category;
+          }
+          return;
+        }
+
+        const feature = findEffectiveFeature(selectedPath.id);
+        if (!feature) return;
+
+        feature.properties = {
+          category
+        };
+
+        markPathEditsDirty();
+        refreshPedestrianLayers();
+        refreshEditableVertexSelection();
+
+        editStatus.textContent =
+          'Path type: ' + category;
+        showEditCard(true);
       };
 
       const clearSelectedPath = () => {
@@ -2061,6 +2274,9 @@
 
       const closeEditTools = () => {
         showDeletePointModal(false);
+        closeDeletePathModal();
+        pathTypePalette?.classList.remove('is-open');
+        pathTypePalette?.setAttribute('aria-hidden', 'true');
         clearDrawing();
         clearEditableVertices();
         clearSelectedPath();
@@ -2142,13 +2358,18 @@
 
       const buildPathEditPayload = () => ({
         type: 'FeatureCollection',
-        properties: {
-          format: 'campusmaas-pedestrian-network',
-          version: 3,
-          base: 'pedestrian_paths.geojson',
-          description: 'Complete editable pedestrian network snapshot'
-        },
-        features: cloneJson(pedestrianPathData.features || [])
+        features: (pedestrianPathData.features || []).map((feature) => ({
+          type: 'Feature',
+          properties: {
+            category: pathTypeValues.includes(feature?.properties?.category)
+              ? feature.properties.category
+              : 'Pedestrian Path'
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: cloneJson(feature?.geometry?.coordinates || [])
+          }
+        }))
       });
 
       const saveCurrentPathEdits = async () => {
@@ -2253,8 +2474,6 @@
           ])
         };
 
-        const isCustom = feature.properties?.source === 'custom';
-
         feature.geometry = geometry;
         markPathEditsDirty();
 
@@ -2354,9 +2573,11 @@
           const isSelected =
             selectedPath &&
             String(selectedPath.id) === String(featureId);
+          const feature = findEffectiveFeature(featureId);
+          const color = pathTypeColor(feature);
 
           line.setStyle({
-            color: isSelected ? '#0f4fd8' : '#2563eb',
+            color,
             weight: isSelected ? 6 : 4,
             opacity: isSelected ? 1 : 0.72,
             dashArray: isSelected ? null : '6 5',
@@ -2365,6 +2586,20 @@
           });
         }
       };
+
+      pathTypePalette
+        ?.querySelectorAll('[data-path-type]')
+        .forEach((option) => {
+          option.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const category = option.getAttribute('data-path-type');
+            applyPathType(category);
+          });
+        });
+
+      syncPathTypePalette();
 
       const selectEditablePoint = (featureId, vertexIndex) => {
         // Existing points are only targets while drawing; they must never
@@ -2381,9 +2616,9 @@
 
         selectedPath = {
           id: feature.id,
-          isCustom: feature.properties?.source === 'custom',
-          name: feature.properties?.name || 'Pedestrian path'
+          name: 'Pedestrian path'
         };
+        setActivePathType(feature.properties?.category || 'Pedestrian Path');
 
         editStatus.textContent =
           'Point ' + (vertexIndex + 1) + ' selected · drag, delete point, or delete path';
@@ -2452,7 +2687,7 @@
            * LineString connecting them, with the selected path emphasized.
            */
           const previewLine = L.polyline(coordinates, {
-            color: '#2563eb',
+            color: pathTypeColor(feature),
             weight: 4,
             opacity: 0.72,
             dashArray: '6 5',
@@ -2540,6 +2775,9 @@
         pointEditorActive = true;
         drawingModeActive = false;
 
+        pathTypePalette?.classList.add('is-open');
+        pathTypePalette?.setAttribute('aria-hidden', 'false');
+
         pedestrianPathsActive = true;
         pedestrianPathCasing?.addTo(map);
         pedestrianPaths?.addTo(map);
@@ -2571,6 +2809,9 @@
 
         pointEditorActive = false;
         drawingModeActive = true;
+
+        pathTypePalette?.classList.add('is-open');
+        pathTypePalette?.setAttribute('aria-hidden', 'false');
 
         pedestrianPathsActive = true;
         pedestrianPathCasing?.addTo(map);
@@ -2760,9 +3001,7 @@
           type: 'Feature',
           id: customId,
           properties: {
-            highway: 'custom',
-            name: 'Custom pedestrian path',
-            source: 'custom'
+            category: activePathType
           },
           geometry
         });
@@ -3821,8 +4060,9 @@
           type: 'Feature',
           id: String(feature.id) + '-' + suffix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
           properties: {
-            ...sourceProperties,
-            source: sourceProperties.source || 'edited'
+            category: pathTypeValues.includes(sourceProperties.category)
+              ? sourceProperties.category
+              : 'Pedestrian Path'
           },
           geometry: {
             type: 'LineString',
@@ -3870,7 +4110,7 @@
         });
       };
 
-      const selectPathForEdit = (feature) => {
+      const selectPathForEdit = (feature, segmentIndex = null) => {
         if (!editModeEnabled || !feature?.geometry) return;
 
         if (feature.geometry.type !== 'LineString') {
@@ -3881,11 +4121,21 @@
 
         selectedPath = {
           id: feature.id,
-          isCustom: feature.properties?.source === 'custom',
-          name: feature.properties?.name || 'Pedestrian path'
+          name: 'Pedestrian path',
+          segmentIndex:
+            Number.isInteger(segmentIndex) &&
+            segmentIndex >= 0 &&
+            segmentIndex < feature.geometry.coordinates.length - 1
+              ? segmentIndex
+              : null
         };
+        setActivePathType(feature.properties?.category || 'Pedestrian Path');
 
-        editStatus.textContent = 'Path selected · Delete path to remove';
+        editStatus.textContent =
+          selectedPath.segmentIndex === null
+            ? 'Path selected · Delete path to remove'
+            : 'Segment ' + (selectedPath.segmentIndex + 1) +
+              ' selected · Delete path to remove';
         showEditCard(true);
         setEditActionVisibility({
           pointEditor: pointEditorActive,
@@ -3895,6 +4145,24 @@
         });
 
         refreshEditableVertexSelection();
+      };
+
+      const showDeletePathModal = (visible = true) => {
+        deletePathModal?.classList.toggle('is-open', visible);
+        deletePathModal?.setAttribute('aria-hidden', String(!visible));
+
+        if (deletePathSegment) {
+          const canDeleteSegment = Number.isInteger(selectedPath?.segmentIndex);
+          deletePathSegment.disabled = !canDeleteSegment;
+          deletePathSegment.setAttribute(
+            'aria-disabled',
+            String(!canDeleteSegment)
+          );
+        }
+      };
+
+      const closeDeletePathModal = () => {
+        showDeletePathModal(false);
       };
 
       const deleteSelectedPath = () => {
@@ -3909,9 +4177,84 @@
         selectedPath = null;
         selectedPoint = null;
 
+        closeDeletePathModal();
         markPathEditsDirty();
         refreshAfterPathChange();
         editStatus.textContent = deletedName + ' deleted';
+        setEditActionVisibility({
+          pointEditor: pointEditorActive
+        });
+      };
+
+      const deleteSelectedPathSegment = () => {
+        if (!selectedPath?.id) return;
+
+        const targetId = String(selectedPath.id);
+        const segmentIndex = selectedPath.segmentIndex;
+        const feature = findEffectiveFeature(targetId);
+
+        if (
+          !feature ||
+          feature.geometry?.type !== 'LineString' ||
+          !Number.isInteger(segmentIndex) ||
+          segmentIndex < 0 ||
+          segmentIndex >= feature.geometry.coordinates.length - 1
+        ) {
+          closeDeletePathModal();
+          return;
+        }
+
+        const coordinates = feature.geometry.coordinates.map((point) => [
+          Number(point[0]),
+          Number(point[1])
+        ]);
+
+        closeDeletePathModal();
+
+        if (coordinates.length <= 2) {
+          pedestrianPathData.features = (pedestrianPathData.features || [])
+            .filter((item) => String(item.id) !== targetId);
+
+          editStatus.textContent = 'Selected segment deleted · path removed';
+        } else if (segmentIndex === 0) {
+          feature.geometry.coordinates = coordinates.slice(1);
+          editStatus.textContent = 'Selected segment deleted';
+        } else if (segmentIndex === coordinates.length - 2) {
+          feature.geometry.coordinates = coordinates.slice(0, -1);
+          editStatus.textContent = 'Selected segment deleted';
+        } else {
+          const leftCoordinates = coordinates.slice(0, segmentIndex + 1);
+          const rightCoordinates = coordinates.slice(segmentIndex + 1);
+          const category = pathTypeValues.includes(feature.properties?.category)
+            ? feature.properties.category
+            : 'Pedestrian Path';
+
+          pedestrianPathData.features = (pedestrianPathData.features || [])
+            .filter((item) => String(item.id) !== targetId);
+
+          const stamp = Date.now().toString(36);
+          const makeSplitFeature = (points, suffix) => ({
+            type: 'Feature',
+            id: targetId + '-' + suffix + '-' + stamp,
+            properties: { category },
+            geometry: {
+              type: 'LineString',
+              coordinates: points
+            }
+          });
+
+          pedestrianPathData.features.push(
+            makeSplitFeature(leftCoordinates, 'left'),
+            makeSplitFeature(rightCoordinates, 'right')
+          );
+
+          editStatus.textContent = 'Selected segment deleted · path split';
+        }
+
+        selectedPath = null;
+        selectedPoint = null;
+        markPathEditsDirty();
+        refreshAfterPathChange();
         setEditActionVisibility({
           pointEditor: pointEditorActive
         });
@@ -3924,25 +4267,54 @@
 
         editableHitLayer = null;
 
-        if (!editModeEnabled) return;
+        for (const layerGroup of editablePathSegmentHitLayers.values()) {
+          map.removeLayer(layerGroup);
+        }
+        editablePathSegmentHitLayers.clear();
 
-        editableHitLayer = L.geoJSON(pedestrianPathData, {
-          style: {
-            color: '#2563eb',
-            weight: 15,
-            opacity: 0
-          },
-          interactive: true,
-          onEachFeature: (feature, layer) => {
-            layer.on('click', (event) => {
+        if (!editModeEnabled || !pedestrianNetworkVisible) return;
+
+        /*
+         * One invisible hit target per point-to-point segment lets the editor
+         * remember exactly which segment was clicked.
+         */
+        for (const feature of pedestrianPathData.features || []) {
+          if (feature?.geometry?.type !== 'LineString') continue;
+
+          const featureId = String(feature.id);
+          const segmentLayers = L.layerGroup().addTo(map);
+
+          for (
+            let segmentIndex = 0;
+            segmentIndex < feature.geometry.coordinates.length - 1;
+            segmentIndex += 1
+          ) {
+            const [a, b] = feature.geometry.coordinates
+              .slice(segmentIndex, segmentIndex + 2)
+              .map(([lng, lat]) => [Number(lat), Number(lng)]);
+
+            const hitLine = L.polyline([a, b], {
+              color: '#2563eb',
+              weight: 18,
+              opacity: 0,
+              interactive: true,
+              lineCap: 'round',
+              lineJoin: 'round'
+            });
+
+            hitLine.on('click', (event) => {
               if (!editModeEnabled || drawingModeActive) return;
 
               event.originalEvent?.stopPropagation();
               event.originalEvent?.preventDefault();
-              selectPathForEdit(feature);
+              selectPathForEdit(feature, segmentIndex);
             });
+
+            hitLine.addTo(segmentLayers);
           }
-        }).addTo(map);
+
+          editablePathSegmentHitLayers.set(featureId, segmentLayers);
+        }
       };
 
       savePathEdits?.addEventListener('click', saveCurrentPathEdits);
@@ -3955,16 +4327,31 @@
       deletePointMerge?.addEventListener('click', () => deleteSelectedPoint('merge'));
       deletePointDrop?.addEventListener('click', () => deleteSelectedPoint('drop'));
       deletePointCancel?.addEventListener('click', () => showDeletePointModal(false));
-      editDelete?.addEventListener('click', deleteSelectedPath);
+
+      deletePathCancel?.addEventListener('click', closeDeletePathModal);
+      deletePathEntire?.addEventListener('click', deleteSelectedPath);
+      deletePathSegment?.addEventListener('click', deleteSelectedPathSegment);
+
+      editDelete?.addEventListener('click', () => {
+        if (!selectedPath?.id || drawingModeActive) return;
+        showDeletePathModal(true);
+      });
 
       editModeToggle?.addEventListener('change', () => {
         syncEditModeUi();
         closeDeveloperOverlay();
 
         if (editModeEnabled) {
-          pedestrianPathsActive = true;
-          pedestrianPathCasing?.addTo(map);
-          pedestrianPaths?.addTo(map);
+          pedestrianPathsActive = pedestrianNetworkVisible;
+
+          if (pedestrianNetworkVisible) {
+            pedestrianPathCasing?.addTo(map);
+            pedestrianPaths?.addTo(map);
+            buildDefaultVertexMarkers();
+          } else {
+            clearDefaultVertices();
+          }
+
           refreshGateLayer();
           buildEditableHitLayer();
         } else {
@@ -4023,9 +4410,7 @@
       });
 
       if (pathEditFileStatus) {
-        pathEditFileStatus.textContent = hasCompletePedestrianEditFile
-          ? 'Loaded'
-          : 'Base fallback';
+        pathEditFileStatus.textContent = 'Loaded';
       }
 
       if (gateEditFileStatus) {
@@ -4084,16 +4469,24 @@
       });
 
       window.addEventListener('keydown', (event) => {
-        if (
-          editModeEnabled &&
-          pointEditorActive &&
-          !drawingModeActive &&
-          selectedPoint &&
-          (event.key === 'Delete' || event.key === 'Backspace') &&
-          !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)
-        ) {
+        const deleteKey =
+          event.key === 'Delete' || event.key === 'Backspace';
+        const typing =
+          ['INPUT', 'TEXTAREA', 'SELECT'].includes(
+            document.activeElement?.tagName
+          );
+
+        if (!editModeEnabled || drawingModeActive || !deleteKey || typing) return;
+
+        if (pointEditorActive && selectedPoint) {
           event.preventDefault();
           deleteSelectedPoint();
+          return;
+        }
+
+        if (pointEditorActive && selectedPath?.id) {
+          event.preventDefault();
+          showDeletePathModal(true);
         }
       });
       const devPanel = document.getElementById('devPanel');
@@ -4124,6 +4517,11 @@
 
         if (gateModeActive || gateCard?.classList.contains('is-open')) {
           closeGateTools();
+          return;
+        }
+
+        if (deletePathModal?.classList.contains('is-open')) {
+          closeDeletePathModal();
           return;
         }
 

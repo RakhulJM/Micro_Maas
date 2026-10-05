@@ -21,6 +21,10 @@ function collectFiles(directory, relativeDirectory = '') {
       : entry.name;
 
     if (entry.isDirectory()) {
+      if (relativePath === 'legacy' || relativePath.startsWith('legacy/')) {
+        continue;
+      }
+
       collectFiles(absolutePath, relativePath);
       continue;
     }
@@ -42,10 +46,7 @@ for (const relativePath of files) {
   fs.copyFileSync(source, destination);
 }
 
-const hiddenFromManifest = new Set([
-  'pedestrian_paths_edits.geojson',
-  'pedestrian_path_config.json'
-]);
+const hiddenFromManifest = new Set();
 
 const manifest = {
   files: files.filter(

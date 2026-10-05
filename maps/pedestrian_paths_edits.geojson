@@ -1,17 +1,10 @@
 {
   "type": "FeatureCollection",
-  "properties": {
-    "format": "campusmaas-pedestrian-network",
-    "version": 3,
-    "base": "pedestrian_paths.geojson",
-    "description": "Complete editable pedestrian network snapshot"
-  },
   "features": [
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/51324463",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -37,14 +30,12 @@
             11.2691615
           ]
         ]
-      },
-      "id": "way/51324463"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/51324464",
-        "highway": "residential"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -98,14 +89,12 @@
             11.2685213
           ]
         ]
-      },
-      "id": "way/51324464"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/51324466",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -183,200 +172,12 @@
             11.2723247
           ]
         ]
-      },
-      "id": "way/51324466"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/51324468",
-        "highway": "service"
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            77.6046753,
-            11.2715073
-          ],
-          [
-            77.6048019,
-            11.2716189
-          ],
-          [
-            77.6049293,
-            11.2716735
-          ],
-          [
-            77.6053502,
-            11.2716652
-          ],
-          [
-            77.6053959,
-            11.2716645
-          ],
-          [
-            77.6056913,
-            11.2716585
-          ],
-          [
-            77.6058533,
-            11.2716553
-          ],
-          [
-            77.6069319,
-            11.2716872
-          ],
-          [
-            77.607023,
-            11.2715142
-          ],
-          [
-            77.6071094,
-            11.2713868
-          ],
-          [
-            77.6073097,
-            11.2713321
-          ],
-          [
-            77.6075871,
-            11.2713085
-          ],
-          [
-            77.6081199,
-            11.271273
-          ],
-          [
-            77.6083277,
-            11.2712604
-          ],
-          [
-            77.6086638,
-            11.27124
-          ],
-          [
-            77.6087206,
-            11.2712366
-          ],
-          [
-            77.6087844,
-            11.2711319
-          ],
-          [
-            77.6087418,
-            11.2706946
-          ],
-          [
-            77.6087343,
-            11.2706176
-          ],
-          [
-            77.608666,
-            11.2705493
-          ],
-          [
-            77.6082018,
-            11.2705994
-          ],
-          [
-            77.607824,
-            11.2706358
-          ],
-          [
-            77.6076602,
-            11.2707541
-          ],
-          [
-            77.6075646,
-            11.2708542
-          ],
-          [
-            77.6075509,
-            11.2710454
-          ],
-          [
-            77.60756,
-            11.2711865
-          ],
-          [
-            77.6075871,
-            11.2713085
-          ]
-        ]
-      },
-      "id": "way/51324468"
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "@id": "way/51324469",
-        "highway": "service"
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            77.6069319,
-            11.2716872
-          ],
-          [
-            77.6068773,
-            11.2717827
-          ],
-          [
-            77.6069684,
-            11.2723972
-          ],
-          [
-            77.6070685,
-            11.2727067
-          ],
-          [
-            77.607114,
-            11.2728796
-          ],
-          [
-            77.6072323,
-            11.2729615
-          ],
-          [
-            77.6072414,
-            11.2730799
-          ],
-          [
-            77.6067978,
-            11.2731046
-          ],
-          [
-            77.6065751,
-            11.2731213
-          ],
-          [
-            77.6059879,
-            11.2731829
-          ],
-          [
-            77.6057743,
-            11.2732155
-          ],
-          [
-            77.6054472,
-            11.2732655
-          ],
-          [
-            77.6052057,
-            11.2733024
-          ]
-        ]
-      },
-      "id": "way/51324469"
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "@id": "way/51324470",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -410,14 +211,12 @@
             11.274254
           ]
         ]
-      },
-      "id": "way/51324470"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/51324471",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -519,14 +318,12 @@
             11.2720695
           ]
         ]
-      },
-      "id": "way/51324471"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/51762484",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -548,51 +345,12 @@
             11.2716585
           ]
         ]
-      },
-      "id": "way/51762484"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/51762485",
-        "highway": "service"
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            77.6049293,
-            11.2716735
-          ],
-          [
-            77.6048804,
-            11.2716954
-          ],
-          [
-            77.6048408,
-            11.2717443
-          ],
-          [
-            77.6048268,
-            11.2717909
-          ],
-          [
-            77.6048175,
-            11.2718632
-          ],
-          [
-            77.6048045,
-            11.2719887
-          ]
-        ]
-      },
-      "id": "way/51762485"
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "@id": "way/207711664",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -762,14 +520,12 @@
             11.2795376
           ]
         ]
-      },
-      "id": "way/207711664"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/207711669",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -835,14 +591,12 @@
             11.2784325
           ]
         ]
-      },
-      "id": "way/207711669"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/207711809",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -872,14 +626,12 @@
             11.2720431
           ]
         ]
-      },
-      "id": "way/207711809"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1079675428",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1037,14 +789,12 @@
             11.2750079
           ]
         ]
-      },
-      "id": "way/1079675428"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1140772229",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1086,14 +836,12 @@
             11.2753374
           ]
         ]
-      },
-      "id": "way/1140772229"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1140772230",
-        "highway": "path"
+        "category": "Pedestrian Path"
       },
       "geometry": {
         "type": "LineString",
@@ -1111,56 +859,12 @@
             11.2720695
           ]
         ]
-      },
-      "id": "way/1140772230"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1140772231",
-        "highway": "service"
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            77.60701,
-            11.2739957
-          ],
-          [
-            77.606982,
-            11.27384
-          ]
-        ]
-      },
-      "id": "way/1140772231"
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "@id": "way/1140772232",
-        "highway": "service"
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            77.6069993,
-            11.2737164
-          ],
-          [
-            77.606982,
-            11.27384
-          ]
-        ]
-      },
-      "id": "way/1140772232"
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "@id": "way/1140772233",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1174,14 +878,12 @@
             11.2739778
           ]
         ]
-      },
-      "id": "way/1140772233"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1140772234",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1195,14 +897,12 @@
             11.2740148
           ]
         ]
-      },
-      "id": "way/1140772234"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1323870005",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1216,14 +916,12 @@
             11.2694493
           ]
         ]
-      },
-      "id": "way/1323870005"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1323870007",
-        "highway": "footway"
+        "category": "Pedestrian Path"
       },
       "geometry": {
         "type": "LineString",
@@ -1237,14 +935,12 @@
             11.2712873
           ]
         ]
-      },
-      "id": "way/1323870007"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1323870008",
-        "highway": "footway"
+        "category": "Pedestrian Path"
       },
       "geometry": {
         "type": "LineString",
@@ -1258,14 +954,12 @@
             11.2712788
           ]
         ]
-      },
-      "id": "way/1323870008"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761746",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1319,14 +1013,12 @@
             11.272455
           ]
         ]
-      },
-      "id": "way/1341761746"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761747",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1408,14 +1100,12 @@
             11.2674437
           ]
         ]
-      },
-      "id": "way/1341761747"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761748",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1465,14 +1155,12 @@
             11.2712366
           ]
         ]
-      },
-      "id": "way/1341761748"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761749",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1506,14 +1194,12 @@
             11.2703374
           ]
         ]
-      },
-      "id": "way/1341761749"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761750",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1535,14 +1221,12 @@
             11.2701924
           ]
         ]
-      },
-      "id": "way/1341761750"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761751",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1572,14 +1256,12 @@
             11.2717685
           ]
         ]
-      },
-      "id": "way/1341761751"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761752",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1605,14 +1287,12 @@
             11.2713085
           ]
         ]
-      },
-      "id": "way/1341761752"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761753",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1630,14 +1310,12 @@
             11.2704825
           ]
         ]
-      },
-      "id": "way/1341761753"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761754",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1655,14 +1333,12 @@
             11.2709111
           ]
         ]
-      },
-      "id": "way/1341761754"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761755",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1744,14 +1420,12 @@
             11.2715108
           ]
         ]
-      },
-      "id": "way/1341761755"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761756",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1781,14 +1455,12 @@
             11.2758913
           ]
         ]
-      },
-      "id": "way/1341761756"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761757",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1806,14 +1478,12 @@
             11.2757497
           ]
         ]
-      },
-      "id": "way/1341761757"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761758",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1839,14 +1509,12 @@
             11.2781837
           ]
         ]
-      },
-      "id": "way/1341761758"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761759",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1904,14 +1572,12 @@
             11.2774673
           ]
         ]
-      },
-      "id": "way/1341761759"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761760",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -1993,14 +1659,12 @@
             11.2775784
           ]
         ]
-      },
-      "id": "way/1341761760"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341761761",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2054,14 +1718,12 @@
             11.285292
           ]
         ]
-      },
-      "id": "way/1341761761"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974525",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2119,14 +1781,12 @@
             11.2800128
           ]
         ]
-      },
-      "id": "way/1341974525"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974526",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2156,14 +1816,12 @@
             11.2802884
           ]
         ]
-      },
-      "id": "way/1341974526"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974527",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2181,14 +1839,12 @@
             11.2781177
           ]
         ]
-      },
-      "id": "way/1341974527"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974528",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2210,14 +1866,12 @@
             11.2786305
           ]
         ]
-      },
-      "id": "way/1341974528"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974529",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2231,14 +1885,12 @@
             11.2820668
           ]
         ]
-      },
-      "id": "way/1341974529"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974530",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2316,14 +1968,12 @@
             11.2788139
           ]
         ]
-      },
-      "id": "way/1341974530"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974531",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2337,14 +1987,12 @@
             11.2783185
           ]
         ]
-      },
-      "id": "way/1341974531"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974532",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2378,14 +2026,12 @@
             11.2751255
           ]
         ]
-      },
-      "id": "way/1341974532"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974533",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2415,14 +2061,12 @@
             11.2749763
           ]
         ]
-      },
-      "id": "way/1341974533"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974534",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2436,14 +2080,12 @@
             11.2739576
           ]
         ]
-      },
-      "id": "way/1341974534"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974535",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2457,14 +2099,12 @@
             11.2739834
           ]
         ]
-      },
-      "id": "way/1341974535"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974536",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2506,14 +2146,12 @@
             11.2739242
           ]
         ]
-      },
-      "id": "way/1341974536"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974537",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2555,14 +2193,12 @@
             11.274548
           ]
         ]
-      },
-      "id": "way/1341974537"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974538",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2604,14 +2240,12 @@
             11.2705625
           ]
         ]
-      },
-      "id": "way/1341974538"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974539",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2625,14 +2259,12 @@
             11.270829
           ]
         ]
-      },
-      "id": "way/1341974539"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974540",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2658,14 +2290,12 @@
             11.2719675
           ]
         ]
-      },
-      "id": "way/1341974540"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974541",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2687,14 +2317,12 @@
             11.2719231
           ]
         ]
-      },
-      "id": "way/1341974541"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974542",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2736,14 +2364,12 @@
             11.2700682
           ]
         ]
-      },
-      "id": "way/1341974542"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974543",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2769,14 +2395,12 @@
             11.2709235
           ]
         ]
-      },
-      "id": "way/1341974543"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974544",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2798,14 +2422,12 @@
             11.2709339
           ]
         ]
-      },
-      "id": "way/1341974544"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974545",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2827,14 +2449,12 @@
             11.2692528
           ]
         ]
-      },
-      "id": "way/1341974545"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974546",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2864,14 +2484,12 @@
             11.2675978
           ]
         ]
-      },
-      "id": "way/1341974546"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974547",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2913,14 +2531,12 @@
             11.2672486
           ]
         ]
-      },
-      "id": "way/1341974547"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974548",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -2970,14 +2586,12 @@
             11.2688631
           ]
         ]
-      },
-      "id": "way/1341974548"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974549",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3011,14 +2625,12 @@
             11.2685188
           ]
         ]
-      },
-      "id": "way/1341974549"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974550",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3056,14 +2668,12 @@
             11.2614845
           ]
         ]
-      },
-      "id": "way/1341974550"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974551",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3085,14 +2695,12 @@
             11.2615558
           ]
         ]
-      },
-      "id": "way/1341974551"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974552",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3126,14 +2734,12 @@
             11.2641996
           ]
         ]
-      },
-      "id": "way/1341974552"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974553",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3183,14 +2789,12 @@
             11.2638415
           ]
         ]
-      },
-      "id": "way/1341974553"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974554",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3212,14 +2816,12 @@
             11.2631903
           ]
         ]
-      },
-      "id": "way/1341974554"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974555",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3241,14 +2843,12 @@
             11.2674
           ]
         ]
-      },
-      "id": "way/1341974555"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974556",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3270,14 +2870,12 @@
             11.2642824
           ]
         ]
-      },
-      "id": "way/1341974556"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974557",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3311,14 +2909,12 @@
             11.2653981
           ]
         ]
-      },
-      "id": "way/1341974557"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974558",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3336,14 +2932,12 @@
             11.264025
           ]
         ]
-      },
-      "id": "way/1341974558"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974559",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3369,14 +2963,12 @@
             11.2653579
           ]
         ]
-      },
-      "id": "way/1341974559"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974560",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3422,14 +3014,12 @@
             11.2700678
           ]
         ]
-      },
-      "id": "way/1341974560"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974561",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3479,14 +3069,12 @@
             11.2657478
           ]
         ]
-      },
-      "id": "way/1341974561"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974562",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3500,14 +3088,12 @@
             11.2642425
           ]
         ]
-      },
-      "id": "way/1341974562"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974563",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3529,14 +3115,12 @@
             11.2640987
           ]
         ]
-      },
-      "id": "way/1341974563"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974564",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3586,14 +3170,12 @@
             11.2640259
           ]
         ]
-      },
-      "id": "way/1341974564"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974565",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3615,14 +3197,12 @@
             11.2615661
           ]
         ]
-      },
-      "id": "way/1341974565"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974658",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3664,14 +3244,12 @@
             11.2771931
           ]
         ]
-      },
-      "id": "way/1341974658"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974661",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3689,14 +3267,12 @@
             11.2755487
           ]
         ]
-      },
-      "id": "way/1341974661"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974663",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3730,14 +3306,12 @@
             11.2753898
           ]
         ]
-      },
-      "id": "way/1341974663"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974664",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3755,14 +3329,12 @@
             11.27495
           ]
         ]
-      },
-      "id": "way/1341974664"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1341974665",
-        "highway": "unclassified"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3780,73 +3352,12 @@
             11.2757064
           ]
         ]
-      },
-      "id": "way/1341974665"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1512013980",
-        "highway": "service"
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            77.6059879,
-            11.2731829
-          ],
-          [
-            77.6061553,
-            11.2733058
-          ],
-          [
-            77.606239,
-            11.2733809
-          ],
-          [
-            77.6063762,
-            11.2736335
-          ],
-          [
-            77.6064222,
-            11.2738991
-          ],
-          [
-            77.6065269,
-            11.2739765
-          ],
-          [
-            77.6066816,
-            11.2740038
-          ],
-          [
-            77.6067996,
-            11.2739323
-          ],
-          [
-            77.6068318,
-            11.2739128
-          ],
-          [
-            77.606982,
-            11.27384
-          ],
-          [
-            77.6073082,
-            11.273921
-          ]
-        ]
-      },
-      "id": "way/1512013980"
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "@id": "way/1530550181",
-        "highway": "service",
-        "name": "Convention center",
-        "surface": "unpaved"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3888,16 +3399,12 @@
             11.2728379
           ]
         ]
-      },
-      "id": "way/1530550181"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1530751411",
-        "highway": "service",
-        "name": "MBA Block",
-        "surface": "paving_stones"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3911,16 +3418,12 @@
             11.2741714
           ]
         ]
-      },
-      "id": "way/1530751411"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1530751412",
-        "highway": "service",
-        "name": "Food court",
-        "surface": "paved"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3938,16 +3441,12 @@
             11.2728519
           ]
         ]
-      },
-      "id": "way/1530751412"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1530751436",
-        "highway": "footway",
-        "name": "MBA Block",
-        "surface": "paving_stones"
+        "category": "Pedestrian Path"
       },
       "geometry": {
         "type": "LineString",
@@ -3965,15 +3464,12 @@
             11.275656
           ]
         ]
-      },
-      "id": "way/1530751436"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1530751437",
-        "highway": "service",
-        "name": "MBA Block"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -3991,61 +3487,12 @@
             11.2749232
           ]
         ]
-      },
-      "id": "way/1530751437"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1530886779",
-        "highway": "service",
-        "name": "ECE Block"
-      },
-      "geometry": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            77.6057743,
-            11.2732155
-          ],
-          [
-            77.6057604,
-            11.2728274
-          ],
-          [
-            77.6057095,
-            11.2727918
-          ],
-          [
-            77.6055786,
-            11.272749
-          ],
-          [
-            77.6052622,
-            11.2727169
-          ],
-          [
-            77.6051931,
-            11.2726206
-          ],
-          [
-            77.6051834,
-            11.2725546
-          ],
-          [
-            77.6051474,
-            11.2723688
-          ]
-        ]
-      },
-      "id": "way/1530886779"
-    },
-    {
-      "type": "Feature",
-      "properties": {
-        "@id": "way/1530886781",
-        "highway": "service",
-        "name": "MAHARAJA AUDITORIUM"
+        "category": "Pedestrian Path"
       },
       "geometry": {
         "type": "LineString",
@@ -4067,14 +3514,12 @@
             11.2725298
           ]
         ]
-      },
-      "id": "way/1530886781"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1530886782",
-        "highway": "service"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -4088,16 +3533,12 @@
             11.2728834
           ]
         ]
-      },
-      "id": "way/1530886782"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1531147950",
-        "highway": "service",
-        "name": "Convention center",
-        "surface": "unpaved"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -4123,15 +3564,225 @@
             11.2732655
           ]
         ]
-      },
-      "id": "way/1531147950"
+      }
     },
     {
       "type": "Feature",
       "properties": {
-        "@id": "way/1547752799",
-        "highway": "footway",
-        "surface": "paved"
+        "category": "Pedestrian Path"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6056913,
+            11.2716585
+          ],
+          [
+            77.6056999,
+            11.2719934
+          ],
+          [
+            77.6057455,
+            11.2725327
+          ],
+          [
+            77.6057531,
+            11.2727062
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Main Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6045149,
+            11.2709094
+          ],
+          [
+            77.6051256,
+            11.273187
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Main Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6052057,
+            11.2733024
+          ],
+          [
+            77.6051256,
+            11.273187
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Main Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6052057,
+            11.2733024
+          ],
+          [
+            77.6058372,
+            11.274254
+          ],
+          [
+            77.6062803,
+            11.2748166
+          ],
+          [
+            77.6065255,
+            11.2750398
+          ],
+          [
+            77.6084197,
+            11.2767456
+          ],
+          [
+            77.6092849,
+            11.277542
+          ],
+          [
+            77.6096253,
+            11.2778632
+          ],
+          [
+            77.6101309,
+            11.2783841
+          ],
+          [
+            77.6104049,
+            11.2787179
+          ],
+          [
+            77.6104919,
+            11.2788247
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6049194,
+            11.2716751
+          ],
+          [
+            77.6053502,
+            11.2716652
+          ],
+          [
+            77.6053959,
+            11.2716645
+          ],
+          [
+            77.6056913,
+            11.2716585
+          ],
+          [
+            77.6058533,
+            11.2716553
+          ],
+          [
+            77.6061063,
+            11.2716856
+          ],
+          [
+            77.6064925,
+            11.2716804
+          ],
+          [
+            77.6069324,
+            11.2716843
+          ],
+          [
+            77.6073039,
+            11.2716528
+          ],
+          [
+            77.6072797,
+            11.27132
+          ],
+          [
+            77.6075871,
+            11.2713085
+          ],
+          [
+            77.6087206,
+            11.2712366
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6049194,
+            11.2716751
+          ],
+          [
+            77.6046883,
+            11.271556
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6049194,
+            11.2716751
+          ],
+          [
+            77.604769,
+            11.2718571
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
@@ -4141,75 +3792,371 @@
             11.2723688
           ],
           [
-            77.6051367,
-            11.272251
+            77.6050991,
+            11.2720671
           ],
           [
-            77.605165,
-            11.2721445
+            77.6050964,
+            11.2718172
           ],
           [
-            77.6051375,
-            11.2720318
-          ],
-          [
-            77.60514,
-            11.2719657
-          ],
-          [
-            77.6051275,
-            11.27188
-          ],
-          [
-            77.6051375,
-            11.2717893
-          ],
-          [
-            77.6052024,
-            11.2717379
-          ],
-          [
-            77.6052549,
-            11.2717453
-          ],
-          [
-            77.6053073,
-            11.2717404
-          ],
-          [
-            77.6053502,
-            11.2716652
+            77.6050966,
+            11.271671
           ]
         ]
-      },
-      "id": "way/1547752799"
+      }
     },
     {
       "type": "Feature",
-      "id": "custom-1791182442722",
       "properties": {
-        "highway": "custom",
-        "name": "Custom pedestrian path",
-        "source": "custom"
+        "category": "Road"
       },
       "geometry": {
         "type": "LineString",
         "coordinates": [
           [
-            77.6049293,
-            11.2716735
+            77.6052057,
+            11.2733024
           ],
           [
-            77.6048019,
-            11.2716189
+            77.6054472,
+            11.2732655
           ],
           [
-            77.6046753,
-            11.2715073
+            77.6057743,
+            11.2732155
           ],
           [
-            77.6045149,
-            11.2709094
+            77.6059879,
+            11.2731829
+          ],
+          [
+            77.6064295,
+            11.2730745
+          ],
+          [
+            77.6068687,
+            11.273001
+          ],
+          [
+            77.6072323,
+            11.2729615
+          ],
+          [
+            77.6072414,
+            11.2730799
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Pedestrian Path"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6064295,
+            11.2730745
+          ],
+          [
+            77.6064402,
+            11.2732876
+          ],
+          [
+            77.6064388,
+            11.2734152
+          ],
+          [
+            77.6064469,
+            11.2735164
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6063762,
+            11.2736335
+          ],
+          [
+            77.6064469,
+            11.2735164
+          ],
+          [
+            77.6065783,
+            11.2735704
+          ],
+          [
+            77.6066776,
+            11.2736493
+          ],
+          [
+            77.6067701,
+            11.2737111
+          ],
+          [
+            77.6067822,
+            11.2737913
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6067822,
+            11.2737913
+          ],
+          [
+            77.6067942,
+            11.2739478
+          ],
+          [
+            77.6066816,
+            11.2740038
+          ],
+          [
+            77.6064134,
+            11.273865
+          ],
+          [
+            77.6063762,
+            11.2736335
+          ],
+          [
+            77.606235,
+            11.2733376
+          ],
+          [
+            77.6061,
+            11.2731554
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6067942,
+            11.2739478
+          ],
+          [
+            77.6067942,
+            11.2739478
+          ],
+          [
+            77.6073082,
+            11.273921
+          ],
+          [
+            77.6072945,
+            11.2736822
+          ],
+          [
+            77.6067701,
+            11.2737111
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6072945,
+            11.2736822
+          ],
+          [
+            77.6074433,
+            11.2734375
+          ],
+          [
+            77.6074994,
+            11.2731324
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Pedestrian Path"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6062888,
+            11.272226
+          ],
+          [
+            77.6063034,
+            11.2726537
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6063034,
+            11.2726537
+          ],
+          [
+            77.6063234,
+            11.2731005
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Pedestrian Path"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6059749,
+            11.2726598
+          ],
+          [
+            77.6063034,
+            11.2726537
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Pedestrian Path"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6051474,
+            11.2723688
+          ],
+          [
+            77.6051594,
+            11.2725761
+          ],
+          [
+            77.6051675,
+            11.272722
+          ],
+          [
+            77.6054746,
+            11.2726918
+          ],
+          [
+            77.6056221,
+            11.2726694
+          ],
+          [
+            77.6057531,
+            11.2727062
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6053278,
+            11.2732837
+          ],
+          [
+            77.6052573,
+            11.2729562
+          ],
+          [
+            77.605716,
+            11.272872
+          ],
+          [
+            77.6063101,
+            11.2728026
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6057095,
+            11.2727918
+          ],
+          [
+            77.605716,
+            11.272872
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "category": "Road"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            77.6057095,
+            11.2727918
+          ],
+          [
+            77.6050441,
+            11.2728829
           ]
         ]
       }
