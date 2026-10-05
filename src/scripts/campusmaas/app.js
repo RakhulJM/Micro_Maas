@@ -601,6 +601,7 @@
       let pedestrianSegments = [];
       let pedestrianGraph = new Map();
       let coordinateByKey = new Map();
+      let gateRoutingNodes = new Map();
 
       const graphKey = (coordinate) =>
         Number(coordinate[0]).toFixed(7) + ',' +
@@ -773,6 +774,7 @@
         pedestrianSegments = [];
         pedestrianGraph = new Map();
         coordinateByKey = new Map();
+        gateRoutingNodes = new Map();
 
         const rawSegments = [];
 
@@ -816,10 +818,6 @@
             const first = rawSegments[firstIndex];
             const second = rawSegments[secondIndex];
 
-            /*
-             * Adjacent segments from the same line already share an explicit
-             * coordinate node, so they do not need another topology split.
-             */
             if (
               first.featureId === second.featureId &&
               first.lineIndex === second.lineIndex &&
@@ -863,17 +861,145 @@
             addGraphEdge(aKey, bKey, distance);
             coordinateByKey.set(aKey, a);
             coordinateByKey.set(bKey, b);
+
+            pedestrianSegments.push({
+              a,
+              b,
+              aKey,
+              bKey,
+              distance,
+              featureId: segment.featureId,
+              lineIndex: segment.lineIndex,
+              segmentIndex: segment.segmentIndex
+            });
+          }
+        }
+
+        /*
+         * Gates are routing access nodes. They do not alter pedestrian
+         * geometry; they connect their access point to the nearest graph edge.
+         */
+        const projectPointToGraphEdge = (point, a, b) => {
+          const refLat = Number(point[1]) * Math.PI / 180;
+          const scaleX = 111320 * Math.cos(refLat);
+          const scaleY = 111320;
+
+          const px = Number(point[0]) * scaleX;
+          const py = Number(point[1]) * scaleY;
+          const ax = Number(a[0]) * scaleX;
+          const ay = Number(a[1]) * scaleY;
+          const bx = Number(b[0]) * scaleX;
+          const by = Number(b[1]) * scaleY;
+
+          const dx = bx - ax;
+          const dy = by - ay;
+          const lengthSquared = dx * dx + dy * dy;
+
+          if (lengthSquared === 0) {
+            return {
+              fraction: 0,
+              distance: Math.hypot(px - ax, py - ay),
+              alongA: 0,
+              alongB: 0
+            };
           }
 
-          pedestrianSegments.push({
-            a: segment.a,
-            b: segment.b,
-            aKey: graphKey(segment.a),
-            bKey: graphKey(segment.b),
-            distance: segment.distance,
-            featureId: segment.featureId,
-            lineIndex: segment.lineIndex,
-            segmentIndex: segment.segmentIndex
+          const fraction = Math.max(
+            0,
+            Math.min(
+              1,
+              ((px - ax) * dx + (py - ay) * dy) / lengthSquared
+            )
+          );
+
+          const nearestX = ax + dx * fraction;
+          const nearestY = ay + dy * fraction;
+          const edgeLength = Math.hypot(dx, dy);
+
+          return {
+            fraction,
+            distance: Math.hypot(px - nearestX, py - nearestY),
+            alongA: edgeLength * fraction,
+            alongB: edgeLength * (1 - fraction)
+          };
+        };
+
+        for (const gate of gateFeatureData.features || []) {
+          const accessPoint =
+            gate?.properties?.access_point ||
+            gate?.properties?.center;
+
+          if (
+            !Array.isArray(accessPoint) ||
+            accessPoint.length < 2
+          ) {
+            continue;
+          }
+
+          const gateNodeKey = 'gate:' + String(gate.id);
+          let best = null;
+          const seenEdges = new Set();
+
+          for (const [aKey, edges] of pedestrianGraph.entries()) {
+            const a = coordinateByKey.get(aKey);
+            if (!a) continue;
+
+            for (const edge of edges) {
+              const bKey = edge.node;
+              const b = coordinateByKey.get(bKey);
+              if (!b) continue;
+
+              const edgeId = [aKey, bKey].sort().join('|');
+              if (seenEdges.has(edgeId)) continue;
+              seenEdges.add(edgeId);
+
+              const projection = projectPointToGraphEdge(
+                accessPoint,
+                a,
+                b
+              );
+
+              if (!best || projection.distance < best.distance) {
+                best = {
+                  aKey,
+                  bKey,
+                  projection
+                };
+              }
+            }
+          }
+
+          if (
+            !best ||
+            best.projection.distance > snapToleranceMeters
+          ) {
+            continue;
+          }
+
+          pedestrianGraph.set(gateNodeKey, []);
+          coordinateByKey.set(gateNodeKey, [
+            Number(accessPoint[0]),
+            Number(accessPoint[1])
+          ]);
+
+          const connectorToA =
+            best.projection.distance + best.projection.alongA;
+          const connectorToB =
+            best.projection.distance + best.projection.alongB;
+
+          addGraphEdge(gateNodeKey, best.aKey, connectorToA);
+          addGraphEdge(gateNodeKey, best.bKey, connectorToB);
+
+          gateRoutingNodes.set(String(gate.id), {
+            gateId: String(gate.id),
+            nodeKey: gateNodeKey,
+            coordinate: [
+              Number(accessPoint[0]),
+              Number(accessPoint[1])
+            ],
+            connectorDistance: best.projection.distance,
+            segmentAKey: best.aKey,
+            segmentBKey: best.bKey
           });
         }
       };
@@ -919,14 +1045,41 @@
       };
 
       const snapToPedestrianPath = (latlng) => {
+        let bestGate = null;
+
+        for (const gate of gateFeatureData.features || []) {
+          const gateNode = gateRoutingNodes.get(String(gate.id));
+          if (!gateNode) continue;
+
+          const candidateLatLng = L.latLng(
+            Number(gateNode.coordinate[1]),
+            Number(gateNode.coordinate[0])
+          );
+
+          const distance = latlng.distanceTo(candidateLatLng);
+
+          if (
+            distance <= snapToleranceMeters &&
+            (!bestGate || distance < bestGate.distance)
+          ) {
+            bestGate = {
+              type: 'gate',
+              gateId: String(gate.id),
+              nodeKey: gateNode.nodeKey,
+              coordinate: gateNode.coordinate,
+              latlng: candidateLatLng,
+              distance
+            };
+          }
+        }
+
+        if (bestGate) {
+          return bestGate;
+        }
+
         let bestVertex = null;
         let bestSegment = null;
 
-        /*
-         * Existing vertices have priority over segment projection. This makes
-         * clicking an existing point mean "connect this new path here",
-         * rather than creating a nearly-identical point beside it.
-         */
         const seenVertices = new Set();
 
         for (const segment of pedestrianSegments) {
@@ -994,8 +1147,6 @@
       };
 
       const routeBetweenSnaps = (startSnap, endSnap) => {
-        const startKey = 'snap:start';
-        const endKey = 'snap:end';
         const graph = new Map();
 
         for (const [key, edges] of pedestrianGraph.entries()) {
@@ -1003,6 +1154,10 @@
         }
 
         const connectSnap = (snapKey, snap) => {
+          if (snap.type === 'gate') {
+            return snap.nodeKey;
+          }
+
           graph.set(snapKey, []);
 
           const { segment, fraction } = snap;
@@ -1015,30 +1170,49 @@
           );
 
           if (graph.has(segment.aKey)) {
-            graph.get(segment.aKey).push({ node: snapKey, distance: aDistance });
+            graph.get(segment.aKey).push({
+              node: snapKey,
+              distance: aDistance
+            });
           }
 
           if (graph.has(segment.bKey)) {
-            graph.get(segment.bKey).push({ node: snapKey, distance: bDistance });
+            graph.get(segment.bKey).push({
+              node: snapKey,
+              distance: bDistance
+            });
           }
+
+          return snapKey;
         };
 
-        connectSnap(startKey, startSnap);
-        connectSnap(endKey, endSnap);
+        const startKey = connectSnap('snap:start', startSnap);
+        const endKey = connectSnap('snap:end', endSnap);
 
-        const sameSegment =
-          startSnap.segment.aKey === endSnap.segment.aKey &&
-          startSnap.segment.bKey === endSnap.segment.bKey ||
-          startSnap.segment.aKey === endSnap.segment.bKey &&
-          startSnap.segment.bKey === endSnap.segment.aKey;
+        if (
+          startSnap.type !== 'gate' &&
+          endSnap.type !== 'gate'
+        ) {
+          const sameSegment =
+            startSnap.segment.aKey === endSnap.segment.aKey &&
+            startSnap.segment.bKey === endSnap.segment.bKey ||
+            startSnap.segment.aKey === endSnap.segment.bKey &&
+            startSnap.segment.bKey === endSnap.segment.aKey;
 
-        if (sameSegment) {
-          const directDistance =
-            Math.abs(startSnap.fraction - endSnap.fraction) *
-            startSnap.segment.distance;
+          if (sameSegment) {
+            const directDistance =
+              Math.abs(startSnap.fraction - endSnap.fraction) *
+              startSnap.segment.distance;
 
-          graph.get(startKey).push({ node: endKey, distance: directDistance });
-          graph.get(endKey).push({ node: startKey, distance: directDistance });
+            graph.get(startKey).push({
+              node: endKey,
+              distance: directDistance
+            });
+            graph.get(endKey).push({
+              node: startKey,
+              distance: directDistance
+            });
+          }
         }
 
         class MinHeap {
@@ -1162,8 +1336,13 @@
           .map((key) => coordinateByKey.get(key))
           .filter(Boolean);
 
-        routeCoordinates.unshift(startSnap.coordinate);
-        routeCoordinates.push(endSnap.coordinate);
+        if (startSnap.type !== 'gate') {
+          routeCoordinates.unshift(startSnap.coordinate);
+        }
+
+        if (endSnap.type !== 'gate') {
+          routeCoordinates.push(endSnap.coordinate);
+        }
 
         return {
           coordinates: routeCoordinates,
@@ -1731,6 +1910,7 @@
       let drawingMarkers = [];
       let drawingLine = null;
       let drawingLineCasing = null;
+      let drawingSnapMarker = null;
 
       let gateEditDirty = false;
       let selectedGate = null;
@@ -1812,10 +1992,19 @@
         if (editDelete) editDelete.hidden = !(pathEditing && pathDeletable);
       };
 
+      const clearDrawingSnap = () => {
+        if (drawingSnapMarker) {
+          map.removeLayer(drawingSnapMarker);
+        }
+
+        drawingSnapMarker = null;
+      };
+
       const clearDrawing = () => {
         drawingMarkers.forEach((marker) => map.removeLayer(marker));
         if (drawingLine) map.removeLayer(drawingLine);
         if (drawingLineCasing) map.removeLayer(drawingLineCasing);
+        clearDrawingSnap();
         drawingMarkers = [];
         drawingPoints = [];
         drawingLine = null;
@@ -2394,6 +2583,34 @@
         setEditActionVisibility({ drawing: true });
       };
 
+      const findNearestRoutingHub = (latlng) => {
+        let best = null;
+
+        for (const [nodeKey, coordinate] of coordinateByKey.entries()) {
+          if (String(nodeKey).startsWith('gate:')) continue;
+
+          const degree = (pedestrianGraph.get(nodeKey) || []).length;
+          if (degree < 3) continue;
+
+          const candidate = L.latLng(
+            Number(coordinate[1]),
+            Number(coordinate[0])
+          );
+          const distance = latlng.distanceTo(candidate);
+
+          if (!best || distance < best.distance) {
+            best = {
+              type: 'hub',
+              latlng: candidate,
+              distance,
+              nodeKey
+            };
+          }
+        }
+
+        return best;
+      };
+
       const findNearestPedestrianVertex = (latlng) => {
         let best = null;
         const seen = new Set();
@@ -2443,25 +2660,83 @@
         return best;
       };
 
-      const snapDrawingPoint = (point) => {
-        /*
-         * New Path snapping deliberately checks raw feature vertices first.
-         * This is independent of the routing graph, so every visible
-         * existing point is a valid snap target.
-         */
+      const findDrawingSnap = (point) => {
+        const gate = snapToPedestrianPath(point);
+
+        if (gate?.type === 'gate' && gate.distance <= snapToleranceMeters) {
+          return {
+            type: 'gate',
+            latlng: gate.latlng,
+            distance: gate.distance,
+            nodeKey: gate.nodeKey
+          };
+        }
+
+        const hub = findNearestRoutingHub(point);
+
+        if (hub && hub.distance <= snapToleranceMeters) {
+          return hub;
+        }
+
         const vertex = findNearestPedestrianVertex(point);
 
         if (vertex && vertex.distance <= snapToleranceMeters) {
-          return vertex.latlng;
+          return vertex;
         }
 
         const snapped = snapToPedestrianPath(point);
 
         if (!snapped || snapped.distance > snapToleranceMeters) {
-          return point;
+          return {
+            type: 'free',
+            latlng: point,
+            distance: snapped?.distance ?? Infinity,
+            nodeKey: null
+          };
         }
 
-        return snapped.latlng;
+        return {
+          type: snapped.type,
+          latlng: snapped.latlng,
+          distance: snapped.distance,
+          nodeKey: snapped.nodeKey || null
+        };
+      };
+
+      const updateDrawingSnapIndicator = (point) => {
+        if (!drawingModeActive) {
+          clearDrawingSnap();
+          return null;
+        }
+
+        const snap = findDrawingSnap(point);
+
+        if (snap?.type === 'free') {
+          clearDrawingSnap();
+          return snap;
+        }
+
+        if (!drawingSnapMarker) {
+          drawingSnapMarker = L.marker(snap.latlng, {
+            icon: L.divIcon({
+              className: 'drawing-snap-marker',
+              html: '<span></span>',
+              iconSize: [26, 26],
+              iconAnchor: [13, 13]
+            }),
+            interactive: false,
+            keyboard: false,
+            zIndexOffset: 1200
+          }).addTo(map);
+        } else {
+          drawingSnapMarker.setLatLng(snap.latlng);
+        }
+
+        return snap;
+      };
+
+      const snapDrawingPoint = (point) => {
+        return findDrawingSnap(point).latlng;
       };
 
       const finishCustomPath = () => {
@@ -2866,7 +3141,10 @@
             refreshGateLayerGeometry(currentFeature);
           });
 
-          marker.on('dragend', () => refreshGateHandles());
+          marker.on('dragend', () => {
+            rebuildPedestrianRouting();
+            refreshGateHandles();
+          });
           gateHandleMarkers.push(marker);
         });
 
@@ -3139,6 +3417,7 @@
         gateDelete.hidden = false;
 
         refreshGateHandles();
+        rebuildPedestrianRouting();
       };
 
       const cancelGateName = () => {
@@ -3291,6 +3570,7 @@
          */
         refreshGateLayerGeometry(feature);
         refreshGateHandles();
+        rebuildPedestrianRouting();
 
         gateStatus.textContent =
           (feature.properties?.name || 'Unnamed Gate') +
@@ -3310,6 +3590,7 @@
         clearGateHandles();
         markGateEditsDirty();
         refreshGateLayer();
+        rebuildPedestrianRouting();
         gateStatus.textContent = deletedName + ' deleted';
         gateRename.hidden = true;
         gateRotateLeft.hidden = true;
@@ -3486,6 +3767,7 @@
         }
 
         refreshGateHandles();
+        rebuildPedestrianRouting();
       };
 
       gateContainer.addEventListener('pointerdown', beginCenterGatePointer, true);
@@ -3762,37 +4044,43 @@
 
         /*
          * One click = one vertex in the new path.
-         * When the click lands near an existing vertex, use that exact
-         * coordinate. It is still recorded as a vertex of the new path.
+         * Snapping uses live routing graph nodes first for gates/intersections,
+         * then original vertices, then the nearest path segment.
          */
         const clicked = L.latLng(event.latlng.lat, event.latlng.lng);
-        const vertexSnap = findNearestPedestrianVertex(clicked);
-        const pathSnap = snapToPedestrianPath(clicked);
-
-        let snap = null;
-        if (vertexSnap && vertexSnap.distance <= snapToleranceMeters) {
-          snap = vertexSnap;
-        } else if (pathSnap && pathSnap.distance <= snapToleranceMeters) {
-          snap = pathSnap;
-        }
-
-        const connected = Boolean(snap);
-        const point = snap?.latlng || clicked;
+        const snap = findDrawingSnap(clicked);
+        const connected = snap.type !== 'free';
+        const point = snap.latlng;
 
         drawingPoints.push(point);
         drawingMarkers.push(createEditPointMarker(point, drawingPoints.length));
         renderDrawingLine();
+        clearDrawingSnap();
 
         // Drawing mode owns the controls: no delete/select action can appear.
         setEditActionVisibility({ drawing: true });
 
+        const connectionText = {
+          gate: 'connected to gate',
+          hub: 'snapped to routing hub',
+          vertex: 'connected to existing point',
+          segment: 'connected to existing path'
+        }[snap.type];
+
         editStatus.textContent = drawingPoints.length +
           ' point' + (drawingPoints.length === 1 ? '' : 's') +
           (connected
-            ? snap.type === 'vertex'
-              ? ' · connected to existing point'
-              : ' · connected to existing path'
+            ? ' · ' + (connectionText || 'connected to routing network')
             : ' · Finish when ready');
+      });
+
+      map.on('mousemove', (event) => {
+        if (!editModeEnabled || !drawingModeActive || routeModeActive) {
+          clearDrawingSnap();
+          return;
+        }
+
+        updateDrawingSnapIndicator(event.latlng);
       });
 
       window.addEventListener('keydown', (event) => {
