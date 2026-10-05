@@ -2884,8 +2884,11 @@
           event.originalEvent?.stopPropagation();
         });
 
+        let centerDragMapWasEnabled = true;
+
         centerMarker.on('dragstart', (event) => {
           event.originalEvent?.stopPropagation();
+          centerDragMapWasEnabled = map.dragging.enabled();
           map.dragging.disable();
         });
 
@@ -2914,7 +2917,11 @@
 
         centerMarker.on('dragend', (event) => {
           event.originalEvent?.stopPropagation();
-          map.dragging.enable();
+
+          if (centerDragMapWasEnabled) {
+            map.dragging.enable();
+          }
+
           refreshGateHandles();
         });
         gateHandleMarkers.push(centerMarker);
@@ -3056,6 +3063,13 @@
 
         gateFeatureData.features.push(feature);
         selectedGate = feature;
+
+        // Creation is complete. Keep the selected gate in edit state so the
+        // five handles and rotation controls are immediately usable.
+        gateModeActive = false;
+        gateToggle?.classList.remove('is-active');
+        gateToggle?.setAttribute('aria-pressed', 'false');
+
         markGateEditsDirty();
         refreshGateLayer();
 
@@ -3193,7 +3207,7 @@
       };
 
       const rotateSelectedGate = (deltaDegrees) => {
-        if (!editModeEnabled || !selectedGate || gateModeActive) return;
+        if (!editModeEnabled || !selectedGate) return;
 
         const feature = gateFeatureData.features.find(
           (item) => String(item.id) === String(selectedGate.id)
