@@ -129,9 +129,9 @@ import 'leaflet/dist/leaflet.css';
       </div>
       <div class="edit-actions">
         <button type="button" class="edit-action edit-action-primary" id="gateNew">New gate</button>
-        <button type="button" class="edit-action" id="gateEdit" hidden>Edit shape</button>
         <button type="button" class="edit-action" id="gateRename" hidden>Rename</button>
-        <button type="button" class="edit-action" id="gateRotate" hidden>Rotate</button>
+        <button type="button" class="edit-action" id="gateRotateLeft" hidden>−1°</button>
+        <button type="button" class="edit-action" id="gateRotateRight" hidden>+1°</button>
         <button type="button" class="edit-action edit-delete-action" id="gateDelete" hidden>Delete gate</button>
       </div>
     </section>
@@ -1968,9 +1968,9 @@ import 'leaflet/dist/leaflet.css';
       const gateStatus = document.getElementById('gateStatus');
       const gateCancel = document.getElementById('gateCancel');
       const gateNew = document.getElementById('gateNew');
-      const gateEdit = document.getElementById('gateEdit');
       const gateRename = document.getElementById('gateRename');
-      const gateRotate = document.getElementById('gateRotate');
+      const gateRotateLeft = document.getElementById('gateRotateLeft');
+      const gateRotateRight = document.getElementById('gateRotateRight');
       const gateDelete = document.getElementById('gateDelete');
       const gateNameModal = document.getElementById('gateNameModal');
       const gateNameInput = document.getElementById('gateNameInput');
