@@ -1894,7 +1894,7 @@ import 'leaflet/dist/leaflet.css';
           pointEditor: true,
           pointSelected: true,
           pathEditing: Boolean(selectedPath),
-          pathDeletable: Boolean(selectedPath?.isCustom)
+          pathDeletable: Boolean(selectedPath)
         });
 
         refreshEditableVertexSelection();
@@ -2281,12 +2281,9 @@ import 'leaflet/dist/leaflet.css';
       });
 
       editFinish?.addEventListener('click', finishCustomPath);
-      editCancel?.addEventListener('click', () => {
-        if (drawingModeActive) {
-          startPointEditorMode();
-          return;
-        }
-
+      editCancel?.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         closeEditTools();
       });
 
@@ -2343,8 +2340,15 @@ import 'leaflet/dist/leaflet.css';
       };
 
       window.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
+        if (event.key !== 'Escape') return;
+
+        if (devPanel?.classList.contains('is-open')) {
           closeDevPanel();
+          return;
+        }
+
+        if (editCard?.classList.contains('is-open')) {
+          closeEditTools();
         }
       });
 
