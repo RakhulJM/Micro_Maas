@@ -367,6 +367,14 @@ import 'leaflet/dist/leaflet.css';
         maxBoundsViscosity: 1
       }).setView(center, 18);
 
+      /*
+       * Keep the live path being drawn above the existing pedestrian network.
+       * This prevents the preview line from disappearing behind the map layers.
+       */
+      const drawingPreviewPane = map.createPane('drawingPreviewPane');
+      drawingPreviewPane.style.zIndex = '470';
+      drawingPreviewPane.style.pointerEvents = 'none';
+
       const colors = {
         background: '#f1f3f5',
         land: '#eef0ee',
@@ -1636,6 +1644,7 @@ import 'leaflet/dist/leaflet.css';
       let drawingPoints = [];
       let drawingMarkers = [];
       let drawingLine = null;
+      let drawingLineCasing = null;
 
       let defaultVertexMarkers = [];
       let editableVertexMarkers = [];
@@ -1674,9 +1683,11 @@ import 'leaflet/dist/leaflet.css';
       const clearDrawing = () => {
         drawingMarkers.forEach((marker) => map.removeLayer(marker));
         if (drawingLine) map.removeLayer(drawingLine);
+        if (drawingLineCasing) map.removeLayer(drawingLineCasing);
         drawingMarkers = [];
         drawingPoints = [];
         drawingLine = null;
+        drawingLineCasing = null;
       };
 
       const clearDefaultVertices = () => {
@@ -1756,18 +1767,39 @@ import 'leaflet/dist/leaflet.css';
 
       const renderDrawingLine = () => {
         if (drawingLine) map.removeLayer(drawingLine);
+        if (drawingLineCasing) map.removeLayer(drawingLineCasing);
 
-        drawingLine = drawingPoints.length >= 2
-          ? L.polyline(drawingPoints, {
-              color: '#0f4fd8',
-              weight: editorPreviewWeight,
-              opacity: 1,
-              dashArray: editorPreviewDash,
-              lineCap: 'round',
-              lineJoin: 'round',
-              interactive: false
-            }).addTo(map)
-          : null;
+        if (drawingPoints.length < 2) {
+          drawingLine = null;
+          drawingLineCasing = null;
+          return;
+        }
+
+        /*
+         * Draw a strong live path between the selected points.  The casing
+         * keeps it readable over the existing map network, while the solid
+         * blue center makes it obvious that this is the path currently being
+         * created.
+         */
+        drawingLineCasing = L.polyline(drawingPoints, {
+          pane: 'drawingPreviewPane',
+          color: '#ffffff',
+          weight: Math.max(editorPreviewWeight + 4, 8),
+          opacity: 0.98,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false
+        }).addTo(map);
+
+        drawingLine = L.polyline(drawingPoints, {
+          pane: 'drawingPreviewPane',
+          color: '#0f4fd8',
+          weight: Math.max(editorPreviewWeight + 1, 5),
+          opacity: 1,
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false
+        }).addTo(map);
       };
 
       const markPathEditsDirty = () => {
