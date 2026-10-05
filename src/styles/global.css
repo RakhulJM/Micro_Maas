@@ -1236,3 +1236,335 @@ a { color: inherit; text-decoration: none; }
 }
 
 .route-point-marker span b { transform: rotate(45deg); display: block; font: inherit; }
+
+/* =========================================================
+   CampusMaaS reference palette — color only
+   Layout, sizing, behavior, and structure intentionally unchanged.
+   ========================================================= */
+
+:root {
+  color: #eef6ff;
+  background: #06111f;
+}
+
+body {
+  background: #06111f;
+  color: #eef6ff;
+}
+
+.brand,
+.ghost-btn,
+.profile,
+.map-switch,
+.map-controls button,
+.path-toggle,
+.route-toggle,
+.gate-toggle,
+.gate-card,
+.gate-name-dialog,
+.delete-point-dialog,
+.delete-point-option,
+.edit-card,
+.route-card,
+.route-card-close {
+  border-color: rgba(83, 168, 255, .18);
+  background: rgba(10, 26, 43, .94);
+  color: #edf6ff;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .28);
+}
+
+.brand:hover,
+.ghost-btn:hover,
+.map-switch:hover,
+.map-controls button:hover,
+.path-toggle:hover,
+.route-toggle:hover,
+.gate-toggle:hover,
+.delete-point-option:hover,
+.route-card-close:hover {
+  background: #12283f;
+}
+
+.brand {
+  color: #eef6ff;
+}
+
+.brand-mark {
+  background: linear-gradient(135deg, #1688ff, #24c7ff);
+  color: #ffffff;
+  box-shadow: 0 5px 16px rgba(23, 139, 255, .28);
+}
+
+.ghost-btn,
+.profile,
+.map-switch,
+.map-controls button,
+.path-toggle,
+.route-toggle,
+.gate-toggle {
+  color: #dcecff;
+}
+
+.map-switch-track {
+  background: #197cff;
+  box-shadow: inset 0 0 0 1px rgba(59, 160, 255, .24);
+}
+
+.map-switch-terrain .map-switch-track {
+  background: #1c3958;
+}
+
+.map-switch-thumb {
+  background: #f7fbff;
+}
+
+.path-toggle.is-active,
+.route-toggle.is-active,
+.gate-toggle.is-active,
+.edit-toggle.is-active {
+  border-color: rgba(56, 164, 255, .5);
+  background: linear-gradient(135deg, #177cf2, #1fa9ff);
+  color: #ffffff;
+  box-shadow: 0 8px 22px rgba(17, 124, 242, .28);
+}
+
+.gate-handle-marker span,
+.edit-point-marker span,
+.edit-vertex-marker span {
+  background: #1687ff;
+}
+
+.gate-handle-move span {
+  background: #1fc2ff;
+}
+
+.gate-name-modal,
+.delete-point-modal,
+.dev-panel {
+  background: rgba(3, 11, 20, .62);
+}
+
+.gate-name-dialog,
+.delete-point-dialog {
+  color: #eaf3ff;
+}
+
+.gate-name-field span,
+.delete-point-option span {
+  color: #8fa5bc;
+}
+
+.gate-name-field input {
+  border-color: rgba(83, 168, 255, .2);
+  background: #0b1d31;
+  color: #edf6ff;
+}
+
+.gate-name-field input::placeholder {
+  color: #6f849b;
+}
+
+.gate-name-field input:focus {
+  border-color: rgba(52, 160, 255, .62);
+  box-shadow: 0 0 0 3px rgba(36, 145, 255, .12);
+}
+
+.gate-name-actions button,
+.edit-action,
+.edit-mode-setting input,
+.route-card-close {
+  color: #dcecff;
+  background: #0d2137;
+  border-color: rgba(83, 168, 255, .16);
+}
+
+.delete-point-option {
+  background: #0c2034;
+  color: #edf6ff;
+}
+
+.delete-point-option:hover {
+  border-color: rgba(49, 156, 255, .46);
+  background: #102943;
+}
+
+.edit-card-kicker,
+.route-card-kicker {
+  color: #27bfff;
+}
+
+.edit-card-top strong,
+.route-card-top strong,
+.route-result strong,
+.edit-action {
+  color: #eaf4ff;
+}
+
+.edit-action-primary,
+.edit-save-action {
+  border-color: rgba(39, 174, 255, .34);
+  background: rgba(31, 136, 242, .14);
+  color: #59c9ff;
+}
+
+.edit-delete-action {
+  border-color: rgba(255, 92, 98, .24);
+  color: #ff7b7f;
+  background: rgba(108, 25, 34, .26);
+}
+
+.edit-delete-action:hover {
+  background: rgba(140, 32, 43, .38);
+}
+
+.edit-mode-setting strong {
+  color: #dfeeff;
+}
+
+.edit-mode-setting small,
+.route-result span {
+  color: #8096ad;
+}
+
+.edit-mode-setting input {
+  background: #10263e;
+  border-color: rgba(148, 163, 184, .2);
+}
+
+.edit-mode-setting input::after {
+  background: #71869b;
+}
+
+.edit-mode-setting input:checked {
+  border-color: rgba(59, 161, 255, .58);
+  background: #197cf5;
+}
+
+.route-card {
+  background: rgba(9, 24, 40, .96);
+  border-color: rgba(83, 168, 255, .2);
+}
+
+.route-card-close {
+  background: #10253b;
+  color: #a9bed3;
+}
+
+.route-result {
+  border-top-color: rgba(126, 166, 207, .14);
+}
+
+.map-note {
+  background: rgba(8, 23, 38, .82);
+  color: #91a7bc;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .22);
+}
+
+.leaflet-tooltip {
+  background: #0b1e32;
+  color: #eaf3ff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+}
+
+.leaflet-tooltip-top::before {
+  border-top-color: #0b1e32;
+}
+
+.dev-panel-shell {
+  border-color: rgba(78, 158, 238, .24);
+  background: rgba(6, 18, 32, .97);
+  color: #edf6ff;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .48);
+}
+
+.dev-panel-header {
+  border-bottom-color: rgba(116, 160, 205, .12);
+}
+
+.dev-panel-kicker {
+  color: #2ebcff;
+}
+
+.dev-panel-close {
+  border-color: rgba(88, 157, 217, .18);
+  background: #0d2238;
+  color: #bdd0e4;
+}
+
+.dev-card {
+  border-color: rgba(98, 155, 208, .12);
+  background: rgba(10, 28, 47, .82);
+}
+
+.dev-card-title > span {
+  background: rgba(31, 139, 255, .14);
+  color: #69b7ff;
+}
+
+.map-file-row {
+  border-color: rgba(114, 158, 203, .1);
+  background: rgba(255, 255, 255, .025);
+}
+
+.map-file-row:hover {
+  background: rgba(45, 146, 255, .08);
+}
+
+.map-file-row strong {
+  color: #e1ebf8;
+}
+
+.map-file-row small,
+.zoom-setting span {
+  color: #7188a1;
+}
+
+.zoom-setting {
+  border-bottom-color: rgba(115, 158, 200, .1);
+}
+
+.zoom-setting strong {
+  color: #deebfa;
+}
+
+.dev-action {
+  border-color: rgba(45, 151, 255, .28);
+  background: rgba(29, 119, 226, .14);
+  color: #7fc6ff;
+}
+
+.dev-action:hover {
+  background: rgba(35, 132, 239, .22);
+}
+
+.dev-panel-hint {
+  color: #60758c;
+}
+
+.edit-toggle {
+  border-color: rgba(83, 168, 255, .18);
+  background: rgba(10, 26, 43, .94);
+  color: #dcecff;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .28);
+}
+
+.edit-toggle:hover {
+  background: #12283f;
+}
+
+.route-point-start span {
+  background: #16c784;
+}
+
+.route-point-end span {
+  background: #ff5b63;
+}
+
+.building-label span {
+  color: #586a7d;
+  text-shadow:
+    0 1px 0 rgba(255,255,255,.98),
+    1px 0 0 rgba(255,255,255,.98),
+    -1px 0 0 rgba(255,255,255,.98),
+    0 -1px 0 rgba(255,255,255,.98);
+}
