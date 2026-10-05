@@ -207,32 +207,104 @@
           )
           .join('|');
 
-      const basePedestrianGeometryKeys = new Set();
+      const toLocalMeters = (coordinate) => {
+        const scaleX =
+          111320 * Math.cos(
+            Number(center.lat) * Math.PI / 180
+          );
+        const scaleY = 111320;
+
+        return {
+          x: Number(coordinate[0]) * scaleX,
+          y: Number(coordinate[1]) * scaleY
+        };
+      };
+
+      const localSegmentDistance = (first, second) => {
+        const a = toLocalMeters(first[0]);
+        const b = toLocalMeters(first[1]);
+        const c = toLocalMeters(second[0]);
+        const d = toLocalMeters(second[1]);
+
+        const pointSegmentDistance = (point, start, end) => {
+          const dx = end.x - start.x;
+          const dy = end.y - start.y;
+          const lengthSquared = dx * dx + dy * dy;
+
+          if (lengthSquared === 0) {
+            return Math.hypot(point.x - start.x, point.y - start.y);
+          }
+
+          const fraction = Math.max(
+            0,
+            Math.min(
+              1,
+              ((point.x - start.x) * dx + (point.y - start.y) * dy) /
+                lengthSquared
+            )
+          );
+
+          return Math.hypot(
+            point.x - (start.x + fraction * dx),
+            point.y - (start.y + fraction * dy)
+          );
+        };
+
+        return Math.min(
+          pointSegmentDistance(a, c, d),
+          pointSegmentDistance(b, c, d),
+          pointSegmentDistance(c, a, b),
+          pointSegmentDistance(d, a, b)
+        );
+      };
+
+      const localSegmentAngleDifference = (first, second) => {
+        const a = toLocalMeters(first[0]);
+        const b = toLocalMeters(first[1]);
+        const c = toLocalMeters(second[0]);
+        const d = toLocalMeters(second[1]);
+
+        const firstAngle = Math.atan2(
+          b.y - a.y,
+          b.x - a.x
+        );
+        const secondAngle = Math.atan2(
+          d.y - c.y,
+          d.x - c.x
+        );
+
+        let difference =
+          Math.abs((firstAngle - secondAngle) * 180 / Math.PI) % 180;
+
+        if (difference > 90) {
+          difference = 180 - difference;
+        }
+
+        return difference;
+      };
+
+      const basePedestrianSegments = [];
 
       for (const feature of basePedestrianFeatures) {
         const geometry = feature?.geometry;
         if (!geometry) continue;
 
-        if (geometry.type === 'LineString') {
-          const key = pedestrianGeometryKey(geometry.coordinates || []);
-          if (key) {
-            basePedestrianGeometryKeys.add(key);
-            basePedestrianGeometryKeys.add(
-              pedestrianGeometryKey([...(geometry.coordinates || [])].reverse())
-            );
-          }
-          continue;
-        }
+        const lines = geometry.type === 'LineString'
+          ? [geometry.coordinates]
+          : geometry.type === 'MultiLineString'
+            ? geometry.coordinates
+            : [];
 
-        if (geometry.type === 'MultiLineString') {
-          for (const line of geometry.coordinates || []) {
-            const key = pedestrianGeometryKey(line || []);
-            if (!key) continue;
+        for (const line of lines) {
+          if (!Array.isArray(line) || line.length < 2) continue;
 
-            basePedestrianGeometryKeys.add(key);
-            basePedestrianGeometryKeys.add(
-              pedestrianGeometryKey([...(line || [])].reverse())
-            );
+          for (let index = 0; index < line.length - 1; index += 1) {
+            const a = line[index];
+            const b = line[index + 1];
+
+            if (!Array.isArray(a) || !Array.isArray(b)) continue;
+
+            basePedestrianSegments.push([a, b]);
           }
         }
       }
@@ -241,18 +313,69 @@
         const geometry = feature?.geometry;
         if (!geometry) return false;
 
-        if (geometry.type === 'LineString') {
-          return basePedestrianGeometryKeys.has(
-            pedestrianGeometryKey(geometry.coordinates || [])
-          );
-        }
+        const lines = geometry.type === 'LineString'
+          ? [geometry.coordinates]
+          : geometry.type === 'MultiLineString'
+            ? geometry.coordinates
+            : [];
 
-        if (geometry.type === 'MultiLineString') {
-          return (geometry.coordinates || []).some((line) =>
-            basePedestrianGeometryKeys.has(
-              pedestrianGeometryKey(line || [])
-            )
-          );
+        for (const line of lines) {
+          if (!Array.isArray(line) || line.length < 2) continue;
+
+          let matchedLength = 0;
+
+          for (let index = 0; index < line.length - 1; index += 1) {
+            const campusSegment = [line[index], line[index + 1]];
+            const campusLength =
+              L.latLng(
+                Number(line[index][1]),
+                Number(line[index][0])
+              ).distanceTo(
+                L.latLng(
+                  Number(line[index + 1][1]),
+                  Number(line[index + 1][0])
+                )
+              );
+
+            let matched = false;
+
+            for (const pedestrianSegment of basePedestrianSegments) {
+              const distance = localSegmentDistance(
+                campusSegment,
+                pedestrianSegment
+              );
+
+              if (distance > 3) continue;
+
+              /*
+               * Ignore simple perpendicular road crossings. A backed road
+               * should run along the pedestrian geometry, not merely cross it.
+               */
+              const angle = localSegmentAngleDifference(
+                campusSegment,
+                pedestrianSegment
+              );
+
+              if (angle <= 30) {
+                matched = true;
+                break;
+              }
+            }
+
+            if (matched) {
+              matchedLength += campusLength;
+            }
+          }
+
+          /*
+           * A campus road is considered the backing geometry when at least
+           * 4 m of its line follows the pedestrian network. This catches
+           * differently segmented/split OSM ways while avoiding unrelated
+           * roads that only touch the network at an intersection.
+           */
+          if (matchedLength >= 4) {
+            return true;
+          }
         }
 
         return false;
