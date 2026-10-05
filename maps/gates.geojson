@@ -1,0 +1,9 @@
+{
+  "type": "FeatureCollection",
+  "properties": {
+    "format": "campusmaas-gates",
+    "version": 1,
+    "description": "Campus entry and access gate geometry"
+  },
+  "features": []
+}
