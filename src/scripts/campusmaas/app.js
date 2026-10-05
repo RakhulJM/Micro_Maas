@@ -100,23 +100,22 @@
     }, true);
 
     import('leaflet').then(async ({ default: L }) => {
-      const [campusResponse, perimeterResponse, pathResponse, pathEditResponse, pathConfigResponse, gatesResponse] = await Promise.all([
+      const [campusResponse, perimeterResponse, pathEditResponse, pathConfigResponse, gatesResponse] = await Promise.all([
         fetch('/maps/export.geojson'),
         fetch('/maps/perimeter.geojson'),
-        fetch('/maps/pedestrian_paths.geojson'),
         fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
         fetch('/maps/pedestrian_path_config.json'),
         fetch('/maps/gates.geojson', { cache: 'no-store' })
       ]);
 
-      if (!campusResponse.ok || !perimeterResponse.ok || !pathResponse.ok) {
-        throw new Error('Campus map data could not be loaded.');
+      if (!campusResponse.ok || !perimeterResponse.ok || !pathEditResponse.ok) {
+        throw new Error('Campus map or pedestrian path data could not be loaded.');
       }
 
       const [campusData, perimeterData, pedestrianPathData, gatesData] = await Promise.all([
         campusResponse.json(),
         perimeterResponse.json(),
-        pathResponse.json(),
+        pathEditResponse.json(),
         gatesResponse?.ok ? gatesResponse.json() : Promise.resolve({
           type: 'FeatureCollection',
           properties: {
@@ -152,9 +151,7 @@
             }
           };
 
-      const committedPathEdits = pathEditResponse.ok
-        ? await pathEditResponse.json()
-        : null;
+      const committedPathEdits = pedestrianPathData;
 
       const cloneJson = (value) => JSON.parse(JSON.stringify(value));
 
@@ -195,192 +192,6 @@
         pathTypeColors[normalizePathCategory(feature)] ||
         pathTypeColors['Pedestrian Path'];
 
-      const basePedestrianFeatures = cloneJson(
-        pedestrianPathData.features || []
-      );
-
-      const pedestrianGeometryKey = (coordinates) =>
-        coordinates
-          .map((coordinate) =>
-            Number(coordinate[0]).toFixed(7) + ',' +
-            Number(coordinate[1]).toFixed(7)
-          )
-          .join('|');
-
-      const toLocalMeters = (coordinate) => {
-        const scaleX =
-          111320 * Math.cos(
-            Number(center.lat) * Math.PI / 180
-          );
-        const scaleY = 111320;
-
-        return {
-          x: Number(coordinate[0]) * scaleX,
-          y: Number(coordinate[1]) * scaleY
-        };
-      };
-
-      const localSegmentDistance = (first, second) => {
-        const a = toLocalMeters(first[0]);
-        const b = toLocalMeters(first[1]);
-        const c = toLocalMeters(second[0]);
-        const d = toLocalMeters(second[1]);
-
-        const pointSegmentDistance = (point, start, end) => {
-          const dx = end.x - start.x;
-          const dy = end.y - start.y;
-          const lengthSquared = dx * dx + dy * dy;
-
-          if (lengthSquared === 0) {
-            return Math.hypot(point.x - start.x, point.y - start.y);
-          }
-
-          const fraction = Math.max(
-            0,
-            Math.min(
-              1,
-              ((point.x - start.x) * dx + (point.y - start.y) * dy) /
-                lengthSquared
-            )
-          );
-
-          return Math.hypot(
-            point.x - (start.x + fraction * dx),
-            point.y - (start.y + fraction * dy)
-          );
-        };
-
-        return Math.min(
-          pointSegmentDistance(a, c, d),
-          pointSegmentDistance(b, c, d),
-          pointSegmentDistance(c, a, b),
-          pointSegmentDistance(d, a, b)
-        );
-      };
-
-      const localSegmentAngleDifference = (first, second) => {
-        const a = toLocalMeters(first[0]);
-        const b = toLocalMeters(first[1]);
-        const c = toLocalMeters(second[0]);
-        const d = toLocalMeters(second[1]);
-
-        const firstAngle = Math.atan2(
-          b.y - a.y,
-          b.x - a.x
-        );
-        const secondAngle = Math.atan2(
-          d.y - c.y,
-          d.x - c.x
-        );
-
-        let difference =
-          Math.abs((firstAngle - secondAngle) * 180 / Math.PI) % 180;
-
-        if (difference > 90) {
-          difference = 180 - difference;
-        }
-
-        return difference;
-      };
-
-      const basePedestrianSegments = [];
-
-      for (const feature of basePedestrianFeatures) {
-        const geometry = feature?.geometry;
-        if (!geometry) continue;
-
-        const lines = geometry.type === 'LineString'
-          ? [geometry.coordinates]
-          : geometry.type === 'MultiLineString'
-            ? geometry.coordinates
-            : [];
-
-        for (const line of lines) {
-          if (!Array.isArray(line) || line.length < 2) continue;
-
-          for (let index = 0; index < line.length - 1; index += 1) {
-            const a = line[index];
-            const b = line[index + 1];
-
-            if (!Array.isArray(a) || !Array.isArray(b)) continue;
-
-            basePedestrianSegments.push([a, b]);
-          }
-        }
-      }
-
-      const campusFeatureUsesPedestrianGeometry = (feature) => {
-        const geometry = feature?.geometry;
-        if (!geometry) return false;
-
-        const lines = geometry.type === 'LineString'
-          ? [geometry.coordinates]
-          : geometry.type === 'MultiLineString'
-            ? geometry.coordinates
-            : [];
-
-        for (const line of lines) {
-          if (!Array.isArray(line) || line.length < 2) continue;
-
-          let matchedLength = 0;
-
-          for (let index = 0; index < line.length - 1; index += 1) {
-            const campusSegment = [line[index], line[index + 1]];
-            const campusLength =
-              L.latLng(
-                Number(line[index][1]),
-                Number(line[index][0])
-              ).distanceTo(
-                L.latLng(
-                  Number(line[index + 1][1]),
-                  Number(line[index + 1][0])
-                )
-              );
-
-            let matched = false;
-
-            for (const pedestrianSegment of basePedestrianSegments) {
-              const distance = localSegmentDistance(
-                campusSegment,
-                pedestrianSegment
-              );
-
-              if (distance > 3) continue;
-
-              /*
-               * Ignore simple perpendicular road crossings. A backed road
-               * should run along the pedestrian geometry, not merely cross it.
-               */
-              const angle = localSegmentAngleDifference(
-                campusSegment,
-                pedestrianSegment
-              );
-
-              if (angle <= 30) {
-                matched = true;
-                break;
-              }
-            }
-
-            if (matched) {
-              matchedLength += campusLength;
-            }
-          }
-
-          /*
-           * A campus road is considered the backing geometry when at least
-           * 4 m of its line follows the pedestrian network. This catches
-           * differently segmented/split OSM ways while avoiding unrelated
-           * roads that only touch the network at an intersection.
-           */
-          if (matchedLength >= 4) {
-            return true;
-          }
-        }
-
-        return false;
-      };
-
       const normalizePedestrianFeatures = (features) =>
         (Array.isArray(features) ? features : []).map((feature, index) => {
           const normalized = cloneJson(feature);
@@ -415,15 +226,16 @@
           )
         );
 
+      if (!isCleanPedestrianEditFile) {
+        throw new Error('pedestrian_paths_edits.geojson is not in the required clean path format.');
+      }
+
       const pathEditState = {
         type: 'FeatureCollection',
-        features: normalizePedestrianFeatures(
-          isCleanPedestrianEditFile
-            ? committedPathEdits.features
-            : basePedestrianFeatures
-        )
+        features: normalizePedestrianFeatures(committedPathEdits.features)
       };
 
+      pedestrianPathData.type = pathEditState.type;
       pedestrianPathData.features = pathEditState.features;
 
       const normalizedGateFeatures =
@@ -605,32 +417,6 @@
         interactive: false
       });
 
-      const setPedestrianBackedRoadVisibility = (hide) => {
-        const applyVisibility = (layer, casing) => {
-          layer.eachLayer((child) => {
-            const feature = child?.feature;
-            if (!child?.setStyle || feature?.geometry?.type !== 'LineString') {
-              return;
-            }
-
-            if (campusFeatureUsesPedestrianGeometry(feature)) {
-              child.setStyle({
-                opacity: hide ? 0 : 0.96
-              });
-              return;
-            }
-
-            child.setStyle({
-              ...roadStyle(feature, casing),
-              opacity: 0.96
-            });
-          });
-        };
-
-        applyVisibility(roadCasing, true);
-        applyVisibility(roads, false);
-      };
-
       baseLayer.addTo(map);
       roadCasing.addTo(map);
       roads.addTo(map);
@@ -790,7 +576,7 @@
 
         basePedestrianDebugLayer = L.geoJSON({
           type: 'FeatureCollection',
-          features: cloneJson(basePedestrianFeatures)
+          features: cloneJson(pedestrianPathData.features || [])
         }, {
           style: {
             color: '#64748b',
@@ -2324,7 +2110,6 @@
         showDeletePointModal(false);
         pathTypePalette?.classList.remove('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'true');
-        setPedestrianBackedRoadVisibility(false);
         clearDrawing();
         clearEditableVertices();
         clearSelectedPath();
@@ -2826,8 +2611,6 @@
         pathTypePalette?.classList.add('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'false');
 
-        setPedestrianBackedRoadVisibility(true);
-
         pedestrianPathsActive = true;
         pedestrianPathCasing?.addTo(map);
         pedestrianPaths?.addTo(map);
@@ -2862,8 +2645,6 @@
 
         pathTypePalette?.classList.add('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'false');
-
-        setPedestrianBackedRoadVisibility(true);
 
         pedestrianPathsActive = true;
         pedestrianPathCasing?.addTo(map);
@@ -4315,9 +4096,7 @@
       });
 
       if (pathEditFileStatus) {
-        pathEditFileStatus.textContent = isCleanPedestrianEditFile
-          ? 'Loaded'
-          : 'Base fallback';
+        pathEditFileStatus.textContent = 'Loaded';
       }
 
       if (gateEditFileStatus) {
