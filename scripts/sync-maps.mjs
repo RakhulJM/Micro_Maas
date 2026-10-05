@@ -46,9 +46,7 @@ for (const relativePath of files) {
   fs.copyFileSync(source, destination);
 }
 
-const hiddenFromManifest = new Set([
-  'pedestrian_paths_edits.geojson'
-]);
+const hiddenFromManifest = new Set();
 
 const manifest = {
   files: files.filter(
