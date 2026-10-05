@@ -129,7 +129,9 @@ import 'leaflet/dist/leaflet.css';
       </div>
       <div class="edit-actions">
         <button type="button" class="edit-action edit-action-primary" id="gateNew">New gate</button>
+        <button type="button" class="edit-action" id="gateEdit" hidden>Edit shape</button>
         <button type="button" class="edit-action" id="gateRename" hidden>Rename</button>
+        <button type="button" class="edit-action" id="gateRotate" hidden>Rotate</button>
         <button type="button" class="edit-action edit-delete-action" id="gateDelete" hidden>Delete gate</button>
       </div>
     </section>
@@ -1918,7 +1920,9 @@ import 'leaflet/dist/leaflet.css';
       const gateStatus = document.getElementById('gateStatus');
       const gateCancel = document.getElementById('gateCancel');
       const gateNew = document.getElementById('gateNew');
+      const gateEdit = document.getElementById('gateEdit');
       const gateRename = document.getElementById('gateRename');
+      const gateRotate = document.getElementById('gateRotate');
       const gateDelete = document.getElementById('gateDelete');
       const gateNameModal = document.getElementById('gateNameModal');
       const gateNameInput = document.getElementById('gateNameInput');
@@ -1940,6 +1944,7 @@ import 'leaflet/dist/leaflet.css';
 
       let gateEditDirty = false;
       let selectedGate = null;
+      let gateShapeEditActive = false;
       let gatePreview = null;
       let gatePointerId = null;
       let gatePointerStart = null;
@@ -2745,7 +2750,7 @@ import 'leaflet/dist/leaflet.css';
       };
 
       const refreshGateHandles = () => {
-        if (!selectedGate) {
+        if (!selectedGate || !gateShapeEditActive || !editModeEnabled) {
           clearGateHandles();
           return;
         }
@@ -2881,13 +2886,17 @@ import 'leaflet/dist/leaflet.css';
         if (!editModeEnabled || gateModeActive || !feature) return;
 
         selectedGate = feature;
+        gateShapeEditActive = false;
         showGateCard(true);
         gateStatus.textContent =
-          (feature.properties?.name || 'Unnamed Gate') + ' · resize or move';
+          (feature.properties?.name || 'Unnamed Gate') + ' · selected';
         gateNew.hidden = false;
+        gateEdit.hidden = false;
+        gateEdit.textContent = 'Edit shape';
         gateRename.hidden = false;
+        gateRotate.hidden = true;
         gateDelete.hidden = false;
-        refreshGateHandles();
+        clearGateHandles();
       };
 
       const updateGatePreview = (bounds) => {
@@ -2920,13 +2929,16 @@ import 'leaflet/dist/leaflet.css';
         clearGatePreview();
         clearGateHandles();
         selectedGate = null;
+        gateShapeEditActive = false;
         gateModeActive = true;
 
         gateToggle?.classList.add('is-active');
         gateToggle?.setAttribute('aria-pressed', 'true');
         gateStatus.textContent = 'Drag on the map to create a rectangular gate';
         gateNew.hidden = false;
+        gateEdit.hidden = true;
         gateRename.hidden = true;
+        gateRotate.hidden = true;
         gateDelete.hidden = true;
         showGateCard(true);
       };
@@ -2945,6 +2957,7 @@ import 'leaflet/dist/leaflet.css';
         clearGatePreview();
         clearGateHandles();
         selectedGate = null;
+        gateShapeEditActive = false;
         gateModeActive = false;
         gateToggle?.classList.remove('is-active');
         gateToggle?.setAttribute('aria-pressed', 'false');
@@ -2995,10 +3008,15 @@ import 'leaflet/dist/leaflet.css';
         refreshGateLayer();
         refreshGateHandles();
 
-        gateStatus.textContent = name + ' · resize or move';
+        gateShapeEditActive = false;
+        gateStatus.textContent = name + ' · created';
         gateNew.hidden = false;
+        gateEdit.hidden = false;
+        gateEdit.textContent = 'Edit shape';
         gateRename.hidden = false;
+        gateRotate.hidden = true;
         gateDelete.hidden = false;
+        clearGateHandles();
       };
 
       const cancelGateName = () => {
@@ -3028,7 +3046,7 @@ import 'leaflet/dist/leaflet.css';
             };
             markGateEditsDirty();
             selectedGate = feature;
-            gateStatus.textContent = name + ' · resize or move';
+            gateStatus.textContent = name + (gateShapeEditActive ? ' · editing shape' : ' · selected');
           }
         } else if (pendingGateBounds) {
           createGateFromBounds(pendingGateBounds, name);
@@ -3124,6 +3142,58 @@ import 'leaflet/dist/leaflet.css';
         showGateNameModal(true, 'create');
       };
 
+      const toggleGateShapeEdit = () => {
+        if (!editModeEnabled || !selectedGate || gateModeActive) return;
+
+        gateShapeEditActive = !gateShapeEditActive;
+        gateEdit.textContent = gateShapeEditActive ? 'Done' : 'Edit shape';
+        gateRotate.hidden = !gateShapeEditActive;
+
+        gateStatus.textContent = gateShapeEditActive
+          ? (selectedGate.properties?.name || 'Unnamed Gate') + ' · resize or move'
+          : (selectedGate.properties?.name || 'Unnamed Gate') + ' · selected';
+
+        refreshGateHandles();
+      };
+
+      const rotateSelectedGate = () => {
+        if (!editModeEnabled || !selectedGate || !gateShapeEditActive) return;
+
+        const feature = gateFeatureData.features.find(
+          (item) => String(item.id) === String(selectedGate.id)
+        );
+        const bounds = gateBoundsForFeature(feature);
+        if (!feature || !bounds) return;
+
+        const center = bounds.getCenter();
+        const width = bounds.getEast() - bounds.getWest();
+        const height = bounds.getNorth() - bounds.getSouth();
+
+        /*
+         * Rotate by 90 degrees. Since the initial gate is rectangular and
+         * axis-aligned, a quarter-turn keeps it rectangular while swapping
+         * its width and height. This also keeps the existing corner handles
+         * compatible with the rotated result.
+         */
+        const nextBounds = L.latLngBounds(
+          [
+            center.lat - (width / 2),
+            center.lng - (height / 2)
+          ],
+          [
+            center.lat + (width / 2),
+            center.lng + (height / 2)
+          ]
+        );
+
+        updateGateFeatureGeometry(feature, nextBounds);
+        refreshGateLayer();
+        refreshGateHandles();
+
+        gateStatus.textContent =
+          (feature.properties?.name || 'Unnamed Gate') + ' · rotated 90°';
+      };
+
       const deleteSelectedGate = () => {
         if (!selectedGate) return;
 
@@ -3134,11 +3204,14 @@ import 'leaflet/dist/leaflet.css';
         );
 
         selectedGate = null;
+        gateShapeEditActive = false;
         clearGateHandles();
         markGateEditsDirty();
         refreshGateLayer();
         gateStatus.textContent = deletedName + ' deleted';
+        gateEdit.hidden = true;
         gateRename.hidden = true;
+        gateRotate.hidden = true;
         gateDelete.hidden = true;
       };
 
@@ -3175,6 +3248,10 @@ import 'leaflet/dist/leaflet.css';
       gateNew?.addEventListener('click', () => {
         startGateMode();
       });
+
+      gateEdit?.addEventListener('click', toggleGateShapeEdit);
+
+      gateRotate?.addEventListener('click', rotateSelectedGate);
 
       gateRename?.addEventListener('click', () => {
         if (!selectedGate) return;
