@@ -1912,6 +1912,21 @@ import 'leaflet/dist/leaflet.css';
 
           item.marker.setIcon(createEditableVertexIcon(isSelected));
         }
+
+        for (const [featureId, line] of editablePathLines.entries()) {
+          const isSelected =
+            selectedPath &&
+            String(selectedPath.id) === String(featureId);
+
+          line.setStyle({
+            color: isSelected ? '#0f4fd8' : '#2563eb',
+            weight: isSelected ? 6 : 4,
+            opacity: isSelected ? 1 : 0.72,
+            dashArray: isSelected ? null : '6 5',
+            lineCap: 'round',
+            lineJoin: 'round'
+          });
+        }
       };
 
       const selectEditablePoint = (featureId, vertexIndex) => {
@@ -1990,11 +2005,16 @@ import 'leaflet/dist/leaflet.css';
             L.latLng(Number(lat), Number(lng))
           );
 
+          /*
+           * Keep the complete path geometry visible while editing.
+           * Vertices alone are not enough: the editor must show the actual
+           * LineString connecting them, with the selected path emphasized.
+           */
           const previewLine = L.polyline(coordinates, {
-            color: '#0f4fd8',
-            weight: 3,
+            color: '#2563eb',
+            weight: 4,
             opacity: 0.72,
-            dashArray: '3 5',
+            dashArray: '6 5',
             lineCap: 'round',
             lineJoin: 'round',
             interactive: false
@@ -2217,6 +2237,8 @@ import 'leaflet/dist/leaflet.css';
           pathDeletable: true,
           pointSelected: Boolean(selectedPoint)
         });
+
+        refreshEditableVertexSelection();
       };
 
       const deleteSelectedPath = () => {
