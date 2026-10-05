@@ -219,7 +219,7 @@ import 'leaflet/dist/leaflet.css';
             <label class="edit-mode-setting">
               <span>
                 <strong>Edit mode</strong>
-                <small>Enable pedestrian path editing tools</small>
+                <small>Enable campus map editing tools</small>
               </span>
               <input type="checkbox" id="editModeToggle" />
             </label>
@@ -274,6 +274,37 @@ import 'leaflet/dist/leaflet.css';
       const open = panel.classList.toggle('is-open');
       panel.setAttribute('aria-hidden', String(!open));
     }, true);
+
+    /*
+     * Edit Mode visibility is handled at document level as well as inside the
+     * map controller. The developer switch must immediately show/hide both
+     * editor tools even if the Leaflet/data initialization is still running.
+     */
+    const syncEditorToolVisibility = () => {
+      const editModeToggle = document.getElementById('editModeToggle');
+      const editToggle = document.getElementById('editToggle');
+      const gateToggle = document.getElementById('gateToggle');
+      const visible = Boolean(editModeToggle?.checked);
+
+      for (const button of [editToggle, gateToggle]) {
+        if (!button) continue;
+
+        button.classList.toggle('is-visible', visible);
+        button.setAttribute('aria-hidden', String(!visible));
+        button.disabled = !visible;
+        button.tabIndex = visible ? 0 : -1;
+        button.style.display = visible ? 'grid' : 'none';
+      }
+    };
+
+    const editModeCheckbox = document.getElementById('editModeToggle');
+    editModeCheckbox?.addEventListener('change', syncEditorToolVisibility);
+    editModeCheckbox?.addEventListener('input', syncEditorToolVisibility);
+    editModeCheckbox?.addEventListener('click', () => {
+      requestAnimationFrame(syncEditorToolVisibility);
+    });
+
+    syncEditorToolVisibility();
 
     // Use document-level click handling for modal close controls so their
     // behavior remains reliable above Leaflet's DOM event layers.
@@ -1982,6 +2013,12 @@ import 'leaflet/dist/leaflet.css';
         editModeEnabled = enabled;
         showEditIcon(enabled);
         showGateIcon(enabled);
+
+        /*
+         * Keep the DOM-level visibility state synchronized with the map
+         * controller state.
+         */
+        syncEditorToolVisibility();
       };
 
       const showEditCard = (visible) => {
