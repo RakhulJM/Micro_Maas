@@ -430,6 +430,7 @@
       let gateLayer = null;
       let editableHitLayer = null;
       let pedestrianPathsActive = false;
+      let pedestrianNetworkVisible = true;
 
       // Declared before the gate layer is created during map initialization.
       let editModeEnabled = false;
@@ -1592,6 +1593,7 @@
       ];
 
       const setPedestrianNetworkVisibility = (enabled) => {
+        pedestrianNetworkVisible = Boolean(enabled);
         const layers = [pedestrianPathCasing, pedestrianPaths].filter(Boolean);
 
         for (const layer of layers) {
@@ -1728,6 +1730,13 @@
       const showBasePedestrianToggle = document.getElementById('showBasePedestrianToggle');
 
       pathToggle?.addEventListener('click', () => {
+        if (!pedestrianNetworkVisible) {
+          pedestrianPathsActive = false;
+          pathToggle.classList.remove('is-active');
+          pathToggle.setAttribute('aria-pressed', 'false');
+          return;
+        }
+
         pedestrianPathsActive = !pedestrianPathsActive;
 
         if (pedestrianPathsActive) {
