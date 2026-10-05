@@ -180,11 +180,11 @@
           return 'Main Road';
         }
 
-        if (['residential', 'unclassified', 'service', 'living_street', 'road', 'track', 'custom'].includes(highway)) {
+        if (['residential', 'unclassified', 'service', 'living_street', 'road', 'track'].includes(highway)) {
           return 'Road';
         }
 
-        if (['path', 'footway', 'pedestrian', 'steps'].includes(highway)) {
+        if (['path', 'footway', 'pedestrian', 'steps', 'custom'].includes(highway)) {
           return 'Pedestrian Path';
         }
 
