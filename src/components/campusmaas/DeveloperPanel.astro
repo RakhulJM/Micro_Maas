@@ -21,3 +21,56 @@
           <div class="map-file-empty">Loading map files…</div>
         </div>
       </section>
+
+      <section class="dev-card">
+        <div class="dev-card-title">
+          <strong>Zoom settings</strong>
+        </div>
+
+        <div class="zoom-setting">
+          <span>Normal zoom-out limit</span>
+          <strong>18</strong>
+        </div>
+
+        <div class="zoom-setting">
+          <span>Maximum zoom</span>
+          <strong>25</strong>
+        </div>
+
+        <label class="edit-mode-setting">
+          <span>
+            <strong>Edit mode</strong>
+            <small>Enable campus map editing tools</small>
+          </span>
+          <input type="checkbox" id="editModeToggle" />
+        </label>
+
+        <div class="zoom-setting">
+          <span>Pedestrian edit file</span>
+          <strong id="pathEditFileStatus">Loaded</strong>
+        </div>
+
+        <button type="button" class="dev-action" id="savePathEdits">Save pedestrian GeoJSON</button>
+
+        <div class="zoom-setting">
+          <span>Gate edit file</span>
+          <strong id="gateEditFileStatus">Loaded</strong>
+        </div>
+
+        <button type="button" class="dev-action" id="saveGateEdits">Save gates GeoJSON</button>
+
+        <label class="edit-mode-setting">
+          <span>
+            <strong>Show original network</strong>
+            <small>Developer comparison only</small>
+          </span>
+          <input type="checkbox" id="showBasePedestrianToggle" />
+        </label>
+
+        <button type="button" class="dev-action" id="resetMapView">Reset map view</button>
+      </section>
+    </div>
+
+    <div class="dev-panel-hint">Ctrl + Shift + U</div>
+  </div>
+</section>
