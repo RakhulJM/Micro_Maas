@@ -195,6 +195,40 @@ import 'leaflet/dist/leaflet.css';
       panel.setAttribute('aria-hidden', String(!open));
     }, true);
 
+    // Use document-level click handling for modal close controls so their
+    // behavior remains reliable above Leaflet's DOM event layers.
+    document.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+
+      const developerClose = target.closest('#devPanelClose');
+      if (developerClose) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const panel = document.getElementById('devPanel');
+        panel?.classList.remove('is-open');
+        panel?.setAttribute('aria-hidden', 'true');
+        return;
+      }
+
+      const editorClose = target.closest('#editCancel');
+      if (editorClose) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const closeEditor = window.__campusMaaSCloseEditTools;
+        if (typeof closeEditor === 'function') {
+          closeEditor();
+          return;
+        }
+
+        const card = document.getElementById('editCard');
+        card?.classList.remove('is-open');
+        card?.setAttribute('aria-hidden', 'true');
+      }
+    }, true);
+
     import('leaflet').then(async ({ default: L }) => {
       const [campusResponse, perimeterResponse, pathResponse, pathEditResponse, pathConfigResponse] = await Promise.all([
         fetch('/maps/export.geojson'),
@@ -1679,6 +1713,8 @@ import 'leaflet/dist/leaflet.css';
         setEditActionVisibility();
       };
 
+      window.__campusMaaSCloseEditTools = closeEditTools;
+
       const createEditPointMarker = (latlng, number) =>
         L.marker(latlng, {
           icon: L.divIcon({
@@ -2357,11 +2393,6 @@ import 'leaflet/dist/leaflet.css';
       });
 
       const devPanelClose = document.getElementById('devPanelClose');
-
-      devPanelClose?.addEventListener('click', (event) => {
-        event.stopPropagation();
-        closeDevPanel();
-      });
 
       devPanel?.addEventListener('click', (event) => {
         if (event.target === devPanel) {
