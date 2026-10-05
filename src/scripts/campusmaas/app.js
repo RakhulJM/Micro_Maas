@@ -2871,23 +2871,51 @@
          */
         const centerMarker = L.marker(model.center, {
           icon: gateHandleIcon('move'),
-          draggable: true,
+          draggable: false,
           zIndexOffset: 1801,
-          keyboard: false
+          keyboard: false,
+          bubblingMouseEvents: false
         }).addTo(map);
 
-        centerMarker.dragging?.enable();
+        const centerElement = centerMarker.getElement();
 
+        if (centerElement) {
+          centerElement.style.touchAction = 'none';
+          centerElement.style.userSelect = 'none';
+        }
+
+        let centerPointerId = null;
+        let centerPointerStart = null;
+        let centerDragStartModel = null;
         let centerDragMapWasEnabled = true;
 
-        centerMarker.on('dragstart', (event) => {
-          event.originalEvent?.stopPropagation();
-          centerDragMapWasEnabled = map.dragging.enabled();
-          map.dragging.disable();
-        });
+        const finishCenterDrag = (event) => {
+          if (centerPointerId === null) return;
+          if (event?.pointerId !== undefined && event.pointerId !== centerPointerId) return;
 
-        centerMarker.on('drag', (event) => {
-          event.originalEvent?.stopPropagation();
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
+
+          try {
+            centerElement?.releasePointerCapture?.(centerPointerId);
+          } catch {
+            // Pointer capture may already be released.
+          }
+
+          centerPointerId = null;
+          centerPointerStart = null;
+          centerDragStartModel = null;
+
+          if (centerDragMapWasEnabled) {
+            map.dragging.enable();
+          }
+
+          refreshGateHandles();
+        };
+
+        const handleCenterPointerDown = (event) => {
+          if (centerPointerId !== null) return;
+          if (event.button !== undefined && event.button !== 0) return;
 
           const feature = gateFeatureData.features.find(
             (item) => String(item.id) === String(selectedGate.id)
@@ -2896,28 +2924,59 @@
           const currentModel = gateModelForFeature(feature);
           if (!feature || !currentModel) return;
 
-          /*
-           * The center point is the move handle. Dragging it moves the
-           * complete gate while preserving width, height and rotation.
-           */
+          event.preventDefault();
+          event.stopPropagation();
+
+          centerPointerId = event.pointerId ?? 1;
+          centerPointerStart = map.mouseEventToLatLng(event);
+          centerDragStartModel = currentModel;
+          centerDragMapWasEnabled = map.dragging.enabled();
+
+          map.dragging.disable();
+          centerElement?.setPointerCapture?.(centerPointerId);
+        };
+
+        const handleCenterPointerMove = (event) => {
+          if (centerPointerId === null || event.pointerId !== centerPointerId) return;
+          if (!centerDragStartModel || !centerPointerStart) return;
+
+          event.preventDefault();
+          event.stopPropagation();
+
+          const currentPointer = map.mouseEventToLatLng(event);
+          const delta = gateLatLngToLocal(
+            centerPointerStart,
+            currentPointer
+          );
+
+          const nextCenter = gateLocalToLatLng(
+            centerDragStartModel.center,
+            delta.x,
+            delta.y
+          );
+
+          const feature = gateFeatureData.features.find(
+            (item) => String(item.id) === String(selectedGate.id)
+          );
+
+          if (!feature) return;
+
           updateGateFeatureGeometry(feature, {
-            ...currentModel,
-            center: centerMarker.getLatLng()
+            ...centerDragStartModel,
+            center: nextCenter
           });
 
           selectedGate = feature;
           refreshGateLayerGeometry(feature);
-        });
 
-        centerMarker.on('dragend', (event) => {
-          event.originalEvent?.stopPropagation();
+          centerMarker.setLatLng(nextCenter);
+        };
 
-          if (centerDragMapWasEnabled) {
-            map.dragging.enable();
-          }
+        centerElement?.addEventListener('pointerdown', handleCenterPointerDown, { passive: false });
+        centerElement?.addEventListener('pointermove', handleCenterPointerMove, { passive: false });
+        centerElement?.addEventListener('pointerup', finishCenterDrag, { passive: false });
+        centerElement?.addEventListener('pointercancel', finishCenterDrag, { passive: false });
 
-          refreshGateHandles();
-        });
         gateHandleMarkers.push(centerMarker);
       };
 
