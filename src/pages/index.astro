@@ -604,6 +604,9 @@ import 'leaflet/dist/leaflet.css';
       let editableHitLayer = null;
       let pedestrianPathsActive = false;
 
+      // Declared before the gate layer is created during map initialization.
+      let editModeEnabled = false;
+
       const highlightCasingWeight =
         Number(pedestrianConfig.render?.highlight?.casing_weight) || 7;
       const highlightPathWeight =
@@ -748,7 +751,7 @@ import 'leaflet/dist/leaflet.css';
             fillColor: '#ffffff',
             fillOpacity: 0.18
           },
-          interactive: editModeEnabled,
+          interactive: true,
           onEachFeature: (feature, layer) => {
             layer.on('click', (event) => {
               if (!editModeEnabled || gateModeActive) return;
@@ -1927,7 +1930,6 @@ import 'leaflet/dist/leaflet.css';
       const deletePointMerge = document.getElementById('deletePointMerge');
       const deletePointDrop = document.getElementById('deletePointDrop');
 
-      let editModeEnabled = false;
       let pointEditorActive = false;
       let drawingModeActive = false;
       let gateModeActive = false;
