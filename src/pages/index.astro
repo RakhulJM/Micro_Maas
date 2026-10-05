@@ -1885,16 +1885,22 @@ import 'leaflet/dist/leaflet.css';
         };
 
         const feature = findEffectiveFeature(featureId);
-        const name = feature?.properties?.name || 'Pedestrian path';
+        if (!feature) return;
+
+        selectedPath = {
+          id: feature.id,
+          isCustom: feature.properties?.source === 'custom',
+          name: feature.properties?.name || 'Pedestrian path'
+        };
 
         editStatus.textContent =
-          'Point ' + (vertexIndex + 1) + ' selected · drag or Delete';
+          'Point ' + (vertexIndex + 1) + ' selected · drag, delete point, or delete path';
         showEditCard(true);
         setEditActionVisibility({
           pointEditor: true,
           pointSelected: true,
-          pathEditing: Boolean(selectedPath),
-          pathDeletable: Boolean(selectedPath)
+          pathEditing: true,
+          pathDeletable: true
         });
 
         refreshEditableVertexSelection();
