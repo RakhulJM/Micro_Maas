@@ -372,7 +372,7 @@ import 'leaflet/dist/leaflet.css';
        * This prevents the preview line from disappearing behind the map layers.
        */
       const drawingPreviewPane = map.createPane('drawingPreviewPane');
-      drawingPreviewPane.style.zIndex = '470';
+      drawingPreviewPane.style.zIndex = '650';
       drawingPreviewPane.style.pointerEvents = 'none';
 
       const colors = {
@@ -1749,6 +1749,11 @@ import 'leaflet/dist/leaflet.css';
         editToggle?.setAttribute('aria-pressed', 'false');
         showEditCard(false);
         setEditActionVisibility();
+
+        // Restore the invisible path hit layer after leaving draw mode.
+        if (editModeEnabled) {
+          buildEditableHitLayer();
+        }
       };
 
       window.__campusMaaSCloseEditTools = closeEditTools;
@@ -1791,6 +1796,9 @@ import 'leaflet/dist/leaflet.css';
           interactive: false
         }).addTo(map);
 
+        drawingLine.bringToFront();
+        drawingLineCasing.bringToFront();
+
         drawingLine = L.polyline(drawingPoints, {
           pane: 'drawingPreviewPane',
           color: '#0f4fd8',
@@ -1800,6 +1808,9 @@ import 'leaflet/dist/leaflet.css';
           lineJoin: 'round',
           interactive: false
         }).addTo(map);
+
+        drawingLine.bringToFront();
+        drawingLineCasing.bringToFront();
       };
 
       const markPathEditsDirty = () => {
@@ -2177,6 +2188,11 @@ import 'leaflet/dist/leaflet.css';
         clearEditableVertices();
         clearSelectedPath();
         clearDrawing();
+
+        if (editableHitLayer && map.hasLayer(editableHitLayer)) {
+          map.removeLayer(editableHitLayer);
+        }
+        editableHitLayer = null;
 
         pointEditorActive = false;
         drawingModeActive = true;
