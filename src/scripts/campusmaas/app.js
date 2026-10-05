@@ -1475,6 +1475,8 @@
         interactive: false
       }).addTo(map);
 
+      let perimeterEnabled = true;
+
       // Keep the 1 km view as the normal zoom-out floor.
       // All zooming uses the standard map interactions and +/- controls.
       const perimeterZoom = 18;
@@ -1485,6 +1487,8 @@
       map.setView(center, perimeterZoom, { animate: false });
 
       function constrainToPerimeter() {
+        if (!perimeterEnabled) return;
+
         const current = map.getCenter();
         const distance = center.distanceTo(current);
 
@@ -1512,7 +1516,7 @@
 
       // Do not snap zoom back to the 1 km minimum after an intentional override.
       map.on('zoomend', () => {
-        if (map.getZoom() >= perimeterZoom) {
+        if (perimeterEnabled && map.getZoom() >= perimeterZoom) {
           constrainToPerimeter();
         }
 
@@ -1575,8 +1579,93 @@
 
       const layerRegistry = new Map([
         ['export_places.geojson', campusLayers],
+        ['pedestrian_paths_edits.geojson', []],
+        ['gates.geojson', []],
         ['perimeter.geojson', [perimeterMask]]
       ]);
+
+      const activeMapFiles = [
+        'export_places.geojson',
+        'pedestrian_paths_edits.geojson',
+        'gates.geojson',
+        'perimeter.geojson'
+      ];
+
+      const setPedestrianNetworkVisibility = (enabled) => {
+        const layers = [pedestrianPathCasing, pedestrianPaths].filter(Boolean);
+
+        for (const layer of layers) {
+          if (enabled) {
+            if (!map.hasLayer(layer)) layer.addTo(map);
+          } else if (map.hasLayer(layer)) {
+            map.removeLayer(layer);
+          }
+        }
+
+        if (!enabled && pedestrianPathsActive) {
+          pedestrianPathsActive = false;
+          const pathToggle = document.getElementById('pathToggle');
+          pathToggle?.classList.remove('is-active');
+          pathToggle?.setAttribute('aria-pressed', 'false');
+        }
+      };
+
+      const setGateVisibility = (enabled) => {
+        if (!gateLayer) return;
+
+        if (enabled) {
+          if (!map.hasLayer(gateLayer)) gateLayer.addTo(map);
+        } else if (map.hasLayer(gateLayer)) {
+          map.removeLayer(gateLayer);
+        }
+      };
+
+      const setPerimeterVisibility = (enabled) => {
+        perimeterEnabled = Boolean(enabled);
+
+        if (perimeterEnabled) {
+          if (!map.hasLayer(perimeterMask)) perimeterMask.addTo(map);
+          map.setMaxBounds(circleBounds);
+          constrainToPerimeter();
+        } else {
+          if (map.hasLayer(perimeterMask)) map.removeLayer(perimeterMask);
+          map.setMaxBounds(null);
+        }
+      };
+
+      const setLayerVisibility = async (name, enabled) => {
+        if (name === 'pedestrian_paths_edits.geojson') {
+          setPedestrianNetworkVisibility(enabled);
+          return;
+        }
+
+        if (name === 'gates.geojson') {
+          setGateVisibility(enabled);
+          return;
+        }
+
+        if (name === 'perimeter.geojson') {
+          setPerimeterVisibility(enabled);
+          return;
+        }
+
+        if (!layerRegistry.has(name)) {
+          if (!enabled) return;
+          try {
+            await renderGenericMapFile(name);
+          } catch {
+            return;
+          }
+        }
+
+        for (const layer of layerRegistry.get(name) || []) {
+          if (enabled) {
+            if (!map.hasLayer(layer)) layer.addTo(map);
+          } else if (map.hasLayer(layer)) {
+            map.removeLayer(layer);
+          }
+        }
+      };
 
       const renderGenericMapFile = (name) => {
         const url = '/maps/' + encodeURIComponent(name);
@@ -1597,65 +1686,41 @@
           });
       };
 
-      const setLayerVisibility = async (name, enabled) => {
-        if (!layerRegistry.has(name)) {
-          if (!enabled) return;
-          try {
-            await renderGenericMapFile(name);
-          } catch {
-            return;
-          }
-        }
-
-        for (const layer of layerRegistry.get(name) || []) {
-          if (enabled) {
-            if (!map.hasLayer(layer)) layer.addTo(map);
-          } else if (map.hasLayer(layer)) {
-            map.removeLayer(layer);
-          }
-        }
-      };
-
       const manifestResponse = await fetch('/maps/manifest.json');
 
-      if (manifestResponse.ok) {
-        const manifest = await manifestResponse.json();
-        const files = Array.isArray(manifest.files) ? manifest.files : [];
-        const list = document.getElementById('mapFileList');
-        const count = document.getElementById('mapFileCount');
+      const files = activeMapFiles;
+      const list = document.getElementById('mapFileList');
+      const count = document.getElementById('mapFileCount');
 
-        if (count) count.textContent = String(files.length);
+      if (count) count.textContent = String(files.length);
 
-        if (list) {
-          list.innerHTML = '';
+      if (list) {
+        list.innerHTML = '';
 
-          for (const name of files) {
-            const row = document.createElement('label');
-            row.className = 'map-file-row';
+        for (const name of files) {
+          const row = document.createElement('label');
+          row.className = 'map-file-row';
 
-            const info = document.createElement('span');
-            const title = document.createElement('strong');
-            const path = document.createElement('small');
+          const info = document.createElement('span');
+          const title = document.createElement('strong');
+          const path = document.createElement('small');
 
-            title.textContent = name;
-            path.textContent = 'maps/' + name;
+          title.textContent = name;
+          path.textContent = 'maps/' + name;
 
-            info.append(title, path);
+          info.append(title, path);
 
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.checked =
-              name === 'export_places.geojson' ||
-              name === 'perimeter.geojson';
-            checkbox.setAttribute('data-map-file', name);
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = true;
+          checkbox.setAttribute('data-map-file', name);
 
-            row.append(info, checkbox);
-            list.appendChild(row);
+          row.append(info, checkbox);
+          list.appendChild(row);
 
-            checkbox.addEventListener('change', () => {
-              void setLayerVisibility(name, checkbox.checked);
-            });
-          }
+          checkbox.addEventListener('change', () => {
+            void setLayerVisibility(name, checkbox.checked);
+          });
         }
       }
 
@@ -1666,11 +1731,12 @@
         pedestrianPathsActive = !pedestrianPathsActive;
 
         if (pedestrianPathsActive) {
-          pedestrianPaths?.addTo(map);
-        } else {
-          if (pedestrianPaths && map.hasLayer(pedestrianPaths)) {
-            map.removeLayer(pedestrianPaths);
+          if (pedestrianPathCasing && !map.hasLayer(pedestrianPathCasing)) {
+            pedestrianPathCasing.addTo(map);
           }
+          pedestrianPaths?.addTo(map);
+        } else if (pedestrianPaths && map.hasLayer(pedestrianPaths)) {
+          map.removeLayer(pedestrianPaths);
         }
 
         pathToggle.classList.toggle('is-active', pedestrianPathsActive);
