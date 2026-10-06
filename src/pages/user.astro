@@ -137,29 +137,123 @@ const findBuildingCenter = (places, nameFragment) => {
   return bounds.isValid() ? bounds.getCenter() : null;
 };
 
-const routeSummary = (pathData, startLatLng, endLatLng) => {
+const nearestPointOnPath = (pathData, latlng) => {
+  let best = null;
+
+  const referenceLat = latlng.lat * Math.PI / 180;
+  const metersPerLat = 111320;
+  const metersPerLng = 111320 * Math.cos(referenceLat);
+
+  const project = (coordinate) => ({
+    x: (Number(coordinate[0]) - latlng.lng) * metersPerLng,
+    y: (Number(coordinate[1]) - latlng.lat) * metersPerLat
+  });
+
+  const unproject = (point) =>
+    L.latLng(
+      latlng.lat + point.y / metersPerLat,
+      latlng.lng + point.x / metersPerLng
+    );
+
+  for (const feature of pathData?.features || []) {
+    if (feature?.geometry?.type !== 'LineString') continue;
+
+    const coordinates = feature.geometry.coordinates;
+
+    for (let index = 0; index < coordinates.length - 1; index += 1) {
+      const a = coordinates[index];
+      const b = coordinates[index + 1];
+      const pa = project(a);
+      const pb = project(b);
+      const dx = pb.x - pa.x;
+      const dy = pb.y - pa.y;
+      const lengthSquared = dx * dx + dy * dy;
+
+      const t = lengthSquared > 0
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              -(pa.x * dx + pa.y * dy) / lengthSquared
+            )
+          )
+        : 0;
+
+      const snapped = {
+        x: pa.x + dx * t,
+        y: pa.y + dy * t
+      };
+
+      const distance = Math.hypot(snapped.x, snapped.y);
+
+      if (!best || distance < best.distance) {
+        best = {
+          point: unproject(snapped),
+          distance,
+          featureIndex: pathData.features.indexOf(feature),
+          segmentIndex: index,
+          segmentT: t,
+          a,
+          b
+        };
+      }
+    }
+  }
+
+  return best;
+};
+
+const routeSummary = (pathData, clickedStart, clickedEnd) => {
+  const startSnap = nearestPointOnPath(pathData, clickedStart);
+  const endSnap = nearestPointOnPath(pathData, clickedEnd);
+
+  if (!startSnap || !endSnap) return null;
+
   const graph = new Map();
   const coordinates = new Map();
+  const edgeMeta = new Map();
 
   const graphKey = (coordinate) =>
     Number(coordinate[0]).toFixed(7) + ',' +
     Number(coordinate[1]).toFixed(7);
 
-  const addEdge = (a, b, distance) => {
+  const addNode = (key, coordinate) => {
+    if (!graph.has(key)) graph.set(key, []);
+    coordinates.set(key, coordinate);
+  };
+
+  const addEdge = (a, b, distance, meta = null) => {
     const aKey = graphKey(a);
     const bKey = graphKey(b);
 
-    if (!graph.has(aKey)) graph.set(aKey, []);
-    if (!graph.has(bKey)) graph.set(bKey, []);
+    addNode(aKey, a);
+    addNode(bKey, b);
 
-    graph.get(aKey).push({ node: bKey, distance });
-    graph.get(bKey).push({ node: aKey, distance });
+    graph.get(aKey).push({
+      node: bKey,
+      distance,
+      meta
+    });
 
-    coordinates.set(aKey, a);
-    coordinates.set(bKey, b);
+    graph.get(bKey).push({
+      node: aKey,
+      distance,
+      meta
+    });
+
+    if (meta) {
+      edgeMeta.set(aKey + '|' + bKey, meta);
+      edgeMeta.set(bKey + '|' + aKey, meta);
+    }
   };
 
-  for (const feature of pathData?.features || []) {
+  for (
+    let featureIndex = 0;
+    featureIndex < (pathData?.features || []).length;
+    featureIndex += 1
+  ) {
+    const feature = pathData.features[featureIndex];
+
     if (feature?.geometry?.type !== 'LineString') continue;
 
     const points = feature.geometry.coordinates;
@@ -169,94 +263,182 @@ const routeSummary = (pathData, startLatLng, endLatLng) => {
       const b = points[index + 1];
       const distance = distanceMeters(a, b);
 
-      if (distance > 0) addEdge(a, b, distance);
+      if (distance > 0) {
+        addEdge(a, b, distance, {
+          featureIndex,
+          segmentIndex: index
+        });
+      }
     }
   }
 
-  const nearestNode = (latlng) => {
-    let best = null;
+  const addSnappedNode = (label, snap) => {
+    const key =
+      '__snap_' +
+      label +
+      '_' +
+      snap.featureIndex +
+      '_' +
+      snap.segmentIndex;
 
-    for (const [key, coordinate] of coordinates.entries()) {
-      const distance = latlng.distanceTo(
-        L.latLng(Number(coordinate[1]), Number(coordinate[0]))
+    addNode(key, [
+      snap.point.lng,
+      snap.point.lat
+    ]);
+
+    const aDistance =
+      distanceMeters(
+        [snap.point.lng, snap.point.lat],
+        snap.a
       );
 
-      if (!best || distance < best.distance) {
-        best = { key, coordinate, distance };
-      }
-    }
+    const bDistance =
+      distanceMeters(
+        [snap.point.lng, snap.point.lat],
+        snap.b
+      );
 
-    return best;
+    addEdge(
+      [snap.point.lng, snap.point.lat],
+      snap.a,
+      aDistance,
+      {
+        featureIndex: snap.featureIndex,
+        segmentIndex: snap.segmentIndex
+      }
+    );
+
+    addEdge(
+      [snap.point.lng, snap.point.lat],
+      snap.b,
+      bDistance,
+      {
+        featureIndex: snap.featureIndex,
+        segmentIndex: snap.segmentIndex
+      }
+    );
+
+    return key;
   };
 
-  const start = nearestNode(startLatLng);
-  const end = nearestNode(endLatLng);
+  const startKey = addSnappedNode('start', startSnap);
+  const endKey = addSnappedNode('end', endSnap);
 
-  if (!start || !end) return null;
+  /*
+   * When both points lie on the same source segment, add the direct walk
+   * along that segment. This avoids an unnecessary detour through a junction
+   * and keeps the route human-like.
+   */
+  if (
+    startSnap.featureIndex === endSnap.featureIndex &&
+    startSnap.segmentIndex === endSnap.segmentIndex
+  ) {
+    const directDistance = startSnap.point.distanceTo(endSnap.point);
 
-  if (start.key === end.key) {
-    return {
-      coordinates: [
-        [startLatLng.lng, startLatLng.lat],
-        [endLatLng.lng, endLatLng.lat]
-      ],
-      distance: start.distance + end.distance,
-      walkingSpeedMps: 1.4
-    };
+    if (directDistance > 0) {
+      graph.get(startKey).push({
+        node: endKey,
+        distance: directDistance,
+        meta: {
+          featureIndex: startSnap.featureIndex,
+          segmentIndex: startSnap.segmentIndex
+        }
+      });
+
+      graph.get(endKey).push({
+        node: startKey,
+        distance: directDistance,
+        meta: {
+          featureIndex: startSnap.featureIndex,
+          segmentIndex: startSnap.segmentIndex
+        }
+      });
+    }
   }
 
-  const distances = new Map([[start.key, start.distance]]);
-  const previous = new Map();
+  /*
+   * State includes the previous node. An immediate reversal of the edge just
+   * taken is not considered, preventing artificial U-turns/backtracking.
+   */
+  const stateKey = (previous, current) =>
+    (previous || '__none__') + '>' + current;
+
+  const startState = stateKey(null, startKey);
+  const distances = new Map([[startState, 0]]);
+  const previousState = new Map();
+  const stateNodes = new Map([[startState, {
+    previous: null,
+    current: startKey
+  }]]);
+
+  const queue = [{ state: startState, distance: 0 }];
   const visited = new Set();
+  let endState = null;
 
-  while (true) {
-    let current = null;
-    let currentDistance = Infinity;
+  while (queue.length) {
+    queue.sort((a, b) => a.distance - b.distance);
+    const bestState = queue.shift();
 
-    for (const [key, distance] of distances.entries()) {
-      if (!visited.has(key) && distance < currentDistance) {
-        current = key;
-        currentDistance = distance;
-      }
+    if (!bestState || visited.has(bestState.state)) continue;
+
+    visited.add(bestState.state);
+
+    const state = stateNodes.get(bestState.state);
+    if (!state) continue;
+
+    if (state.current === endKey) {
+      endState = bestState.state;
+      break;
     }
 
-    if (!current) break;
-    if (current === end.key) break;
+    for (const edge of graph.get(state.current) || []) {
+      if (state.previous && edge.node === state.previous) continue;
 
-    visited.add(current);
+      const nextDistance = bestState.distance + edge.distance;
+      const nextState = stateKey(state.current, edge.node);
 
-    for (const edge of graph.get(current) || []) {
-      const nextDistance = currentDistance + edge.distance;
-
-      if (nextDistance < (distances.get(edge.node) ?? Infinity)) {
-        distances.set(edge.node, nextDistance);
-        previous.set(edge.node, current);
+      if (nextDistance < (distances.get(nextState) ?? Infinity)) {
+        distances.set(nextState, nextDistance);
+        previousState.set(nextState, bestState.state);
+        stateNodes.set(nextState, {
+          previous: state.current,
+          current: edge.node
+        });
+        queue.push({
+          state: nextState,
+          distance: nextDistance
+        });
       }
     }
   }
 
-  const networkDistance = distances.get(end.key);
+  if (!endState) return null;
+
+  const statePath = [];
+  let currentState = endState;
+
+  while (currentState) {
+    statePath.unshift(currentState);
+    currentState = previousState.get(currentState);
+  }
+
+  const nodeKeys = statePath.map(
+    (state) => stateNodes.get(state).current
+  );
+
+  const routeCoordinates = nodeKeys.map(
+    (key) => coordinates.get(key)
+  );
+
+  const networkDistance = distances.get(endState);
 
   if (!Number.isFinite(networkDistance)) return null;
 
-  const nodeKeys = [];
-  let current = end.key;
-
-  while (current) {
-    nodeKeys.unshift(current);
-    if (current === start.key) break;
-    current = previous.get(current);
-  }
-
-  if (nodeKeys[0] !== start.key) return null;
-
   return {
-    coordinates: [
-      [startLatLng.lng, startLatLng.lat],
-      ...nodeKeys.map((key) => coordinates.get(key)),
-      [endLatLng.lng, endLatLng.lat]
-    ],
-    distance: start.distance + networkDistance + end.distance,
+    coordinates: routeCoordinates,
+    startPoint: startSnap.point,
+    endPoint: endSnap.point,
+    distance: networkDistance,
     walkingSpeedMps: 1.4
   };
 };
@@ -492,10 +674,13 @@ const start = async () => {
 
   const handleUserMapClick = (event) => {
     const clicked = event.latlng;
+    const snapped = nearestPointOnPath(pathData, clicked);
+
+    if (!snapped) return;
 
     if (!pointA || pointB) {
       clearRouteRendering();
-      pointA = clicked;
+      pointA = snapped.point;
       pointB = null;
       resetTripSummary();
       if (userTripFrom) userTripFrom.textContent = 'Point A selected';
@@ -504,7 +689,7 @@ const start = async () => {
       return;
     }
 
-    pointB = clicked;
+    pointB = snapped.point;
     renderEndpointMarkers();
     renderUserRoute();
   };
