@@ -85,6 +85,116 @@ const roadStyle = (feature, casing = false) => {
   };
 };
 
+const findBuildingCenter = (places, nameFragment) => {
+  const feature = (places?.features || []).find((item) =>
+    String(item?.properties?.name || '')
+      .toLowerCase()
+      .includes(nameFragment.toLowerCase())
+  );
+
+  if (!feature?.geometry) return null;
+
+  const layer = L.geoJSON(feature);
+  const bounds = layer.getBounds();
+
+  return bounds.isValid() ? bounds.getCenter() : null;
+};
+
+const routeSummary = (pathData, startLatLng, endLatLng) => {
+  const graph = new Map();
+  const coordinates = new Map();
+
+  const graphKey = (coordinate) =>
+    Number(coordinate[0]).toFixed(7) + ',' +
+    Number(coordinate[1]).toFixed(7);
+
+  const addEdge = (a, b, distance) => {
+    const aKey = graphKey(a);
+    const bKey = graphKey(b);
+
+    if (!graph.has(aKey)) graph.set(aKey, []);
+    if (!graph.has(bKey)) graph.set(bKey, []);
+
+    graph.get(aKey).push({ node: bKey, distance });
+    graph.get(bKey).push({ node: aKey, distance });
+
+    coordinates.set(aKey, a);
+    coordinates.set(bKey, b);
+  };
+
+  for (const feature of pathData?.features || []) {
+    if (feature?.geometry?.type !== 'LineString') continue;
+
+    const points = feature.geometry.coordinates;
+
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const a = points[index];
+      const b = points[index + 1];
+      const distance = distanceMeters(a, b);
+
+      if (distance > 0) addEdge(a, b, distance);
+    }
+  }
+
+  const nearestNode = (latlng) => {
+    let best = null;
+
+    for (const [key, coordinate] of coordinates.entries()) {
+      const distance = latlng.distanceTo(
+        L.latLng(Number(coordinate[1]), Number(coordinate[0]))
+      );
+
+      if (!best || distance < best.distance) {
+        best = { key, distance };
+      }
+    }
+
+    return best;
+  };
+
+  const start = nearestNode(startLatLng);
+  const end = nearestNode(endLatLng);
+
+  if (!start || !end) return null;
+
+  const distances = new Map([[start.key, start.distance]]);
+  const visited = new Set();
+
+  while (true) {
+    let current = null;
+    let currentDistance = Infinity;
+
+    for (const [key, distance] of distances.entries()) {
+      if (!visited.has(key) && distance < currentDistance) {
+        current = key;
+        currentDistance = distance;
+      }
+    }
+
+    if (!current) break;
+    if (current === end.key) break;
+
+    visited.add(current);
+
+    for (const edge of graph.get(current) || []) {
+      const nextDistance = currentDistance + edge.distance;
+
+      if (nextDistance < (distances.get(edge.node) ?? Infinity)) {
+        distances.set(edge.node, nextDistance);
+      }
+    }
+  }
+
+  const networkDistance = distances.get(end.key);
+
+  if (!Number.isFinite(networkDistance)) return null;
+
+  return {
+    distance: start.distance + networkDistance + end.distance,
+    walkingSpeedMps: 1.4
+  };
+};
+
 const buildingLabelSizing = (map, items) => {
   const clamp = (value) => Math.max(8, Math.min(16, value));
 
@@ -192,6 +302,62 @@ const start = async () => {
   }).setView(center, 18);
 
   mapElement.setAttribute('aria-label', 'CampusMaaS campus map');
+
+  /*
+   * Initial user trip: the logical campus entry point is Gate - 09,
+   * presented to the user as KEC Main Gate. The destination is resolved
+   * from the real place geometry in export_places.geojson.
+   */
+  const userTripFrom = document.getElementById('userTripFrom');
+  const userTripTo = document.getElementById('userTripTo');
+  const userTripTime = document.getElementById('userTripTime');
+  const userTripDistance = document.getElementById('userTripDistance');
+
+  const startGate =
+    (gates?.features || []).find((feature) =>
+      String(feature?.properties?.name || '')
+        .toLowerCase()
+        .includes('gate - 09')
+    ) || gates?.features?.[0];
+
+  const startCoordinates =
+    startGate?.properties?.access_point ||
+    startGate?.properties?.center;
+
+  const startLatLng = Array.isArray(startCoordinates)
+    ? L.latLng(
+        Number(startCoordinates[1]),
+        Number(startCoordinates[0])
+      )
+    : null;
+
+  const destinationLatLng =
+    findBuildingCenter(places, 'mechanical and mechatronics block') ||
+    findBuildingCenter(places, 'mechanical block');
+
+  if (startLatLng && destinationLatLng) {
+    const summary = routeSummary(pathData, startLatLng, destinationLatLng);
+
+    if (summary) {
+      const minutes = Math.max(
+        1,
+        Math.ceil(
+          summary.distance / summary.walkingSpeedMps / 60
+        )
+      );
+
+      if (userTripTime) {
+        userTripTime.textContent = minutes + ' min';
+      }
+
+      if (userTripDistance) {
+        userTripDistance.textContent =
+          summary.distance < 1000
+            ? Math.round(summary.distance) + ' m'
+            : (summary.distance / 1000).toFixed(2) + ' km';
+      }
+    }
+  }
 
   const colors = {
     building: '#dedbd4',
