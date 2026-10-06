@@ -619,13 +619,14 @@ const start = async () => {
 
   const handleUserMapClick = (event) => {
     const clicked = event.latlng;
-    const snapped = nearestPointOnPath(pathData, clicked);
 
-    if (!snapped) return;
-
+    /*
+     * User endpoints are the exact coordinates of the click.
+     * Developer snapping is never used here.
+     */
     if (!pointA || pointB) {
       clearRouteRendering();
-      pointA = snapped.point;
+      pointA = clicked;
       pointB = null;
       resetTripSummary();
       if (userTripFrom) userTripFrom.textContent = 'Point A selected';
@@ -634,7 +635,7 @@ const start = async () => {
       return;
     }
 
-    pointB = snapped.point;
+    pointB = clicked;
     renderEndpointMarkers();
     renderUserRoute();
   };
