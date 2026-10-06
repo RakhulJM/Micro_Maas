@@ -137,7 +137,7 @@ const findBuildingCenter = (places, nameFragment) => {
   return bounds.isValid() ? bounds.getCenter() : null;
 };
 
-const nearestPointOnPath = (pathData, latlng) => {
+const projectPointToPath = (pathData, latlng) => {
   let best = null;
 
   const referenceLat = latlng.lat * Math.PI / 180;
@@ -155,14 +155,20 @@ const nearestPointOnPath = (pathData, latlng) => {
       latlng.lng + point.x / metersPerLng
     );
 
-  for (const feature of pathData?.features || []) {
+  for (
+    let featureIndex = 0;
+    featureIndex < (pathData?.features || []).length;
+    featureIndex += 1
+  ) {
+    const feature = pathData.features[featureIndex];
+
     if (feature?.geometry?.type !== 'LineString') continue;
 
     const coordinates = feature.geometry.coordinates;
 
-    for (let index = 0; index < coordinates.length - 1; index += 1) {
-      const a = coordinates[index];
-      const b = coordinates[index + 1];
+    for (let segmentIndex = 0; segmentIndex < coordinates.length - 1; segmentIndex += 1) {
+      const a = coordinates[segmentIndex];
+      const b = coordinates[segmentIndex + 1];
       const pa = project(a);
       const pb = project(b);
       const dx = pb.x - pa.x;
@@ -179,20 +185,19 @@ const nearestPointOnPath = (pathData, latlng) => {
           )
         : 0;
 
-      const snapped = {
+      const projected = {
         x: pa.x + dx * t,
         y: pa.y + dy * t
       };
 
-      const distance = Math.hypot(snapped.x, snapped.y);
+      const distance = Math.hypot(projected.x, projected.y);
 
       if (!best || distance < best.distance) {
         best = {
-          point: unproject(snapped),
+          point: unproject(projected),
           distance,
-          featureIndex: pathData.features.indexOf(feature),
-          segmentIndex: index,
-          segmentT: t,
+          featureIndex,
+          segmentIndex,
           a,
           b
         };
@@ -203,15 +208,20 @@ const nearestPointOnPath = (pathData, latlng) => {
   return best;
 };
 
-const routeSummary = (pathData, clickedStart, clickedEnd) => {
-  const startSnap = nearestPointOnPath(pathData, clickedStart);
-  const endSnap = nearestPointOnPath(pathData, clickedEnd);
+/*
+ * User endpoints are always the exact clicked coordinates.
+ * The projection below is only an internal routing anchor used to connect
+ * that exact point into the walking network. It is never used to move the
+ * rendered A/B markers.
+ */
+const routeSummary = (pathData, startPoint, endPoint) => {
+  const startAnchor = projectPointToPath(pathData, startPoint);
+  const endAnchor = projectPointToPath(pathData, endPoint);
 
-  if (!startSnap || !endSnap) return null;
+  if (!startAnchor || !endAnchor) return null;
 
   const graph = new Map();
   const coordinates = new Map();
-  const edgeMeta = new Map();
 
   const graphKey = (coordinate) =>
     Number(coordinate[0]).toFixed(7) + ',' +
@@ -222,29 +232,19 @@ const routeSummary = (pathData, clickedStart, clickedEnd) => {
     coordinates.set(key, coordinate);
   };
 
-  const addEdge = (a, b, distance, meta = null) => {
-    const aKey = graphKey(a);
-    const bKey = graphKey(b);
+  const addEdgeByKey = (fromKey, toKey, distance) => {
+    if (!graph.has(fromKey)) graph.set(fromKey, []);
+    if (!graph.has(toKey)) graph.set(toKey, []);
 
-    addNode(aKey, a);
-    addNode(bKey, b);
-
-    graph.get(aKey).push({
-      node: bKey,
-      distance,
-      meta
+    graph.get(fromKey).push({
+      node: toKey,
+      distance
     });
 
-    graph.get(bKey).push({
-      node: aKey,
-      distance,
-      meta
+    graph.get(toKey).push({
+      node: fromKey,
+      distance
     });
-
-    if (meta) {
-      edgeMeta.set(aKey + '|' + bKey, meta);
-      edgeMeta.set(bKey + '|' + aKey, meta);
-    }
   };
 
   for (
@@ -258,187 +258,132 @@ const routeSummary = (pathData, clickedStart, clickedEnd) => {
 
     const points = feature.geometry.coordinates;
 
-    for (let index = 0; index < points.length - 1; index += 1) {
-      const a = points[index];
-      const b = points[index + 1];
+    for (let segmentIndex = 0; segmentIndex < points.length - 1; segmentIndex += 1) {
+      const a = points[segmentIndex];
+      const b = points[segmentIndex + 1];
       const distance = distanceMeters(a, b);
 
-      if (distance > 0) {
-        addEdge(a, b, distance, {
-          featureIndex,
-          segmentIndex: index
-        });
-      }
+      if (distance <= 0) continue;
+
+      const aKey = graphKey(a);
+      const bKey = graphKey(b);
+
+      addNode(aKey, a);
+      addNode(bKey, b);
+      addEdgeByKey(aKey, bKey, distance);
     }
   }
 
-  const addSnappedNode = (label, snap) => {
+  /*
+   * Connect an exact user click to the two endpoints of its containing
+   * network segment. This preserves the real click as the route endpoint
+   * while still allowing the shortest-path search to enter the network.
+   */
+  const attachExactPoint = (label, point, anchor) => {
     const key =
-      '__snap_' +
+      '__user_' +
       label +
       '_' +
-      snap.featureIndex +
+      anchor.featureIndex +
       '_' +
-      snap.segmentIndex;
+      anchor.segmentIndex;
 
-    addNode(key, [
-      snap.point.lng,
-      snap.point.lat
-    ]);
+    addNode(key, [point.lng, point.lat]);
 
-    const aDistance =
-      distanceMeters(
-        [snap.point.lng, snap.point.lat],
-        snap.a
-      );
+    const aKey = graphKey(anchor.a);
+    const bKey = graphKey(anchor.b);
 
-    const bDistance =
-      distanceMeters(
-        [snap.point.lng, snap.point.lat],
-        snap.b
-      );
+    const pointCoordinate = [point.lng, point.lat];
 
-    addEdge(
-      [snap.point.lng, snap.point.lat],
-      snap.a,
-      aDistance,
-      {
-        featureIndex: snap.featureIndex,
-        segmentIndex: snap.segmentIndex
-      }
+    addEdgeByKey(
+      key,
+      aKey,
+      distanceMeters(pointCoordinate, anchor.a)
     );
 
-    addEdge(
-      [snap.point.lng, snap.point.lat],
-      snap.b,
-      bDistance,
-      {
-        featureIndex: snap.featureIndex,
-        segmentIndex: snap.segmentIndex
-      }
+    addEdgeByKey(
+      key,
+      bKey,
+      distanceMeters(pointCoordinate, anchor.b)
     );
 
     return key;
   };
 
-  const startKey = addSnappedNode('start', startSnap);
-  const endKey = addSnappedNode('end', endSnap);
+  const startKey = attachExactPoint('start', startPoint, startAnchor);
+  const endKey = attachExactPoint('end', endPoint, endAnchor);
 
   /*
-   * When both points lie on the same source segment, add the direct walk
-   * along that segment. This avoids an unnecessary detour through a junction
-   * and keeps the route human-like.
+   * Exact same-segment trips can be routed directly along that segment.
+   * No detour to a vertex or junction is introduced.
    */
   if (
-    startSnap.featureIndex === endSnap.featureIndex &&
-    startSnap.segmentIndex === endSnap.segmentIndex
+    startAnchor.featureIndex === endAnchor.featureIndex &&
+    startAnchor.segmentIndex === endAnchor.segmentIndex
   ) {
-    const directDistance = startSnap.point.distanceTo(endSnap.point);
+    const directDistance = startPoint.distanceTo(endPoint);
 
-    if (directDistance > 0) {
-      graph.get(startKey).push({
-        node: endKey,
-        distance: directDistance,
-        meta: {
-          featureIndex: startSnap.featureIndex,
-          segmentIndex: startSnap.segmentIndex
-        }
-      });
-
-      graph.get(endKey).push({
-        node: startKey,
-        distance: directDistance,
-        meta: {
-          featureIndex: startSnap.featureIndex,
-          segmentIndex: startSnap.segmentIndex
-        }
-      });
-    }
+    addEdgeByKey(startKey, endKey, directDistance);
   }
 
-  /*
-   * State includes the previous node. An immediate reversal of the edge just
-   * taken is not considered, preventing artificial U-turns/backtracking.
-   */
-  const stateKey = (previous, current) =>
-    (previous || '__none__') + '>' + current;
-
-  const startState = stateKey(null, startKey);
-  const distances = new Map([[startState, 0]]);
-  const previousState = new Map();
-  const stateNodes = new Map([[startState, {
-    previous: null,
-    current: startKey
-  }]]);
-
-  const queue = [{ state: startState, distance: 0 }];
+  const distances = new Map([[startKey, 0]]);
+  const previous = new Map();
   const visited = new Set();
-  let endState = null;
 
-  while (queue.length) {
-    queue.sort((a, b) => a.distance - b.distance);
-    const bestState = queue.shift();
+  while (true) {
+    let current = null;
+    let currentDistance = Infinity;
 
-    if (!bestState || visited.has(bestState.state)) continue;
-
-    visited.add(bestState.state);
-
-    const state = stateNodes.get(bestState.state);
-    if (!state) continue;
-
-    if (state.current === endKey) {
-      endState = bestState.state;
-      break;
+    for (const [key, distance] of distances.entries()) {
+      if (!visited.has(key) && distance < currentDistance) {
+        current = key;
+        currentDistance = distance;
+      }
     }
 
-    for (const edge of graph.get(state.current) || []) {
-      if (state.previous && edge.node === state.previous) continue;
+    if (!current) break;
+    if (current === endKey) break;
 
-      const nextDistance = bestState.distance + edge.distance;
-      const nextState = stateKey(state.current, edge.node);
+    visited.add(current);
 
-      if (nextDistance < (distances.get(nextState) ?? Infinity)) {
-        distances.set(nextState, nextDistance);
-        previousState.set(nextState, bestState.state);
-        stateNodes.set(nextState, {
-          previous: state.current,
-          current: edge.node
-        });
-        queue.push({
-          state: nextState,
-          distance: nextDistance
-        });
+    for (const edge of graph.get(current) || []) {
+      const nextDistance = currentDistance + edge.distance;
+
+      if (nextDistance < (distances.get(edge.node) ?? Infinity)) {
+        distances.set(edge.node, nextDistance);
+        previous.set(edge.node, current);
       }
     }
   }
 
-  if (!endState) return null;
+  const totalDistance = distances.get(endKey);
 
-  const statePath = [];
-  let currentState = endState;
+  if (!Number.isFinite(totalDistance)) return null;
 
-  while (currentState) {
-    statePath.unshift(currentState);
-    currentState = previousState.get(currentState);
+  const nodeKeys = [];
+  let current = endKey;
+
+  while (current) {
+    nodeKeys.unshift(current);
+
+    if (current === startKey) break;
+
+    current = previous.get(current);
   }
 
-  const nodeKeys = statePath.map(
-    (state) => stateNodes.get(state).current
-  );
+  if (nodeKeys[0] !== startKey) return null;
 
-  const routeCoordinates = nodeKeys.map(
+  const networkCoordinates = nodeKeys.map(
     (key) => coordinates.get(key)
   );
 
-  const networkDistance = distances.get(endState);
-
-  if (!Number.isFinite(networkDistance)) return null;
-
   return {
-    coordinates: routeCoordinates,
-    startPoint: startSnap.point,
-    endPoint: endSnap.point,
-    distance: networkDistance,
+    coordinates: [
+      [startPoint.lng, startPoint.lat],
+      ...networkCoordinates.slice(1, -1),
+      [endPoint.lng, endPoint.lat]
+    ],
+    distance: totalDistance,
     walkingSpeedMps: 1.4
   };
 };
