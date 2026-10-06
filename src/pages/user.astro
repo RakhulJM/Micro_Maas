@@ -137,6 +137,8 @@ const findBuildingCenter = (places, nameFragment) => {
   return bounds.isValid() ? bounds.getCenter() : null;
 };
 
+const USER_ROUTE_CONNECT_RADIUS_M = 40;
+
 const projectPointToPath = (pathData, latlng) => {
   let best = null;
 
@@ -166,7 +168,11 @@ const projectPointToPath = (pathData, latlng) => {
 
     const coordinates = feature.geometry.coordinates;
 
-    for (let segmentIndex = 0; segmentIndex < coordinates.length - 1; segmentIndex += 1) {
+    for (
+      let segmentIndex = 0;
+      segmentIndex < coordinates.length - 1;
+      segmentIndex += 1
+    ) {
       const a = coordinates[segmentIndex];
       const b = coordinates[segmentIndex + 1];
       const pa = project(a);
@@ -209,16 +215,21 @@ const projectPointToPath = (pathData, latlng) => {
 };
 
 /*
- * User endpoints are always the exact clicked coordinates.
- * The projection below is only an internal routing anchor used to connect
- * that exact point into the walking network. It is never used to move the
- * rendered A/B markers.
+ * Exact user clicks are preserved as route endpoints.
+ * The nearest path location is only a temporary internal routing anchor.
  */
 const routeSummary = (pathData, startPoint, endPoint) => {
   const startAnchor = projectPointToPath(pathData, startPoint);
   const endAnchor = projectPointToPath(pathData, endPoint);
 
   if (!startAnchor || !endAnchor) return null;
+
+  if (
+    startAnchor.distance > USER_ROUTE_CONNECT_RADIUS_M ||
+    endAnchor.distance > USER_ROUTE_CONNECT_RADIUS_M
+  ) {
+    return null;
+  }
 
   const graph = new Map();
   const coordinates = new Map();
@@ -232,19 +243,12 @@ const routeSummary = (pathData, startPoint, endPoint) => {
     coordinates.set(key, coordinate);
   };
 
-  const addEdgeByKey = (fromKey, toKey, distance) => {
+  const addEdge = (fromKey, toKey, distance) => {
     if (!graph.has(fromKey)) graph.set(fromKey, []);
     if (!graph.has(toKey)) graph.set(toKey, []);
 
-    graph.get(fromKey).push({
-      node: toKey,
-      distance
-    });
-
-    graph.get(toKey).push({
-      node: fromKey,
-      distance
-    });
+    graph.get(fromKey).push({ node: toKey, distance });
+    graph.get(toKey).push({ node: fromKey, distance });
   };
 
   for (
@@ -258,7 +262,11 @@ const routeSummary = (pathData, startPoint, endPoint) => {
 
     const points = feature.geometry.coordinates;
 
-    for (let segmentIndex = 0; segmentIndex < points.length - 1; segmentIndex += 1) {
+    for (
+      let segmentIndex = 0;
+      segmentIndex < points.length - 1;
+      segmentIndex += 1
+    ) {
       const a = points[segmentIndex];
       const b = points[segmentIndex + 1];
       const distance = distanceMeters(a, b);
@@ -270,63 +278,73 @@ const routeSummary = (pathData, startPoint, endPoint) => {
 
       addNode(aKey, a);
       addNode(bKey, b);
-      addEdgeByKey(aKey, bKey, distance);
+      addEdge(aKey, bKey, distance);
     }
   }
 
   /*
-   * Connect an exact user click to the two endpoints of its containing
-   * network segment. This preserves the real click as the route endpoint
-   * while still allowing the shortest-path search to enter the network.
+   * Connect the exact user point directly to the nearest point on the
+   * nearest walkable segment. This supports diagonal, perpendicular, or
+   * any other reasonable straight connection dictated by the geometry.
    */
   const attachExactPoint = (label, point, anchor) => {
-    const key =
-      '__user_' +
+    const pointKey =
+      '__user_point_' +
       label +
       '_' +
       anchor.featureIndex +
       '_' +
       anchor.segmentIndex;
 
-    addNode(key, [point.lng, point.lat]);
+    const anchorKey =
+      '__user_anchor_' +
+      label +
+      '_' +
+      anchor.featureIndex +
+      '_' +
+      anchor.segmentIndex;
+
+    const pointCoordinate = [point.lng, point.lat];
+    const anchorCoordinate = [anchor.point.lng, anchor.point.lat];
+
+    addNode(pointKey, pointCoordinate);
+    addNode(anchorKey, anchorCoordinate);
+
+    addEdge(pointKey, anchorKey, point.distanceTo(anchor.point));
 
     const aKey = graphKey(anchor.a);
     const bKey = graphKey(anchor.b);
 
-    const pointCoordinate = [point.lng, point.lat];
-
-    addEdgeByKey(
-      key,
+    addEdge(
+      anchorKey,
       aKey,
-      distanceMeters(pointCoordinate, anchor.a)
+      distanceMeters(anchorCoordinate, anchor.a)
     );
 
-    addEdgeByKey(
-      key,
+    addEdge(
+      anchorKey,
       bKey,
-      distanceMeters(pointCoordinate, anchor.b)
+      distanceMeters(anchorCoordinate, anchor.b)
     );
 
-    return key;
+    return { pointKey, anchorKey, anchor };
   };
 
-  const startKey = attachExactPoint('start', startPoint, startAnchor);
-  const endKey = attachExactPoint('end', endPoint, endAnchor);
+  const start = attachExactPoint('start', startPoint, startAnchor);
+  const end = attachExactPoint('end', endPoint, endAnchor);
 
-  /*
-   * Exact same-segment trips can be routed directly along that segment.
-   * No detour to a vertex or junction is introduced.
-   */
   if (
-    startAnchor.featureIndex === endAnchor.featureIndex &&
-    startAnchor.segmentIndex === endAnchor.segmentIndex
+    start.anchor.featureIndex === end.anchor.featureIndex &&
+    start.anchor.segmentIndex === end.anchor.segmentIndex
   ) {
-    const directDistance = startPoint.distanceTo(endPoint);
-
-    addEdgeByKey(startKey, endKey, directDistance);
+    addEdge(
+      start.anchorKey,
+      end.anchorKey,
+      startAnchor.point.distanceTo(endAnchor.point)
+    );
   }
 
-  const distances = new Map([[startKey, 0]]);
+  const distances = new Map([[start.pointKey, 0]]);
   const previous = new Map();
   const visited = new Set();
 
@@ -342,7 +360,7 @@ const routeSummary = (pathData, startPoint, endPoint) => {
     }
 
     if (!current) break;
-    if (current === endKey) break;
+    if (current === end.pointKey) break;
 
     visited.add(current);
 
@@ -356,33 +374,24 @@ const routeSummary = (pathData, startPoint, endPoint) => {
     }
   }
 
-  const totalDistance = distances.get(endKey);
+  const totalDistance = distances.get(end.pointKey);
 
   if (!Number.isFinite(totalDistance)) return null;
 
   const nodeKeys = [];
-  let current = endKey;
+  let current = end.pointKey;
 
   while (current) {
     nodeKeys.unshift(current);
 
-    if (current === startKey) break;
-
+    if (current === start.pointKey) break;
     current = previous.get(current);
   }
 
-  if (nodeKeys[0] !== startKey) return null;
-
-  const networkCoordinates = nodeKeys.map(
-    (key) => coordinates.get(key)
-  );
+  if (nodeKeys[0] !== start.pointKey) return null;
 
   return {
-    coordinates: [
-      [startPoint.lng, startPoint.lat],
-      ...networkCoordinates.slice(1, -1),
-      [endPoint.lng, endPoint.lat]
-    ],
+    coordinates: nodeKeys.map((key) => coordinates.get(key)),
     distance: totalDistance,
     walkingSpeedMps: 1.4
   };
