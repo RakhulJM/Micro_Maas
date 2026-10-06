@@ -7,6 +7,32 @@ import 'leaflet/dist/leaflet.css';
 <MainLayout title="CampusMaaS">
   <main class="user-map-page">
     <div id="map" class="map map-local" aria-label="CampusMaaS campus map"></div>
+
+    <section class="user-trip-card" aria-label="Campus trip">
+      <div class="user-trip-field">
+        <span>From</span>
+        <strong id="userTripFrom">KEC Main Gate</strong>
+      </div>
+
+      <div class="user-trip-divider" aria-hidden="true"></div>
+
+      <div class="user-trip-field">
+        <span>To</span>
+        <strong id="userTripTo">Mechanical Block</strong>
+      </div>
+
+      <div class="user-trip-summary">
+        <div>
+          <span>Journey time</span>
+          <strong id="userTripTime">—</strong>
+        </div>
+        <div>
+          <span>Distance</span>
+          <strong id="userTripDistance">—</strong>
+        </div>
+      </div>
+    </section>
+
     <script src="../scripts/campusmaas/user-map.js"></script>
   </main>
 </MainLayout>
@@ -26,5 +52,88 @@ import 'leaflet/dist/leaflet.css';
     inset: 0;
     width: 100%;
     height: 100%;
+  }
+
+  .user-trip-card {
+    position: absolute;
+    z-index: 1000;
+    top: clamp(14px, 2vw, 24px);
+    left: clamp(14px, 2vw, 24px);
+    width: min(356px, calc(100vw - 28px));
+    padding: 14px;
+    border: 1px solid rgba(83, 168, 255, .2);
+    border-radius: 16px;
+    background: rgba(7, 22, 38, .92);
+    color: #edf6ff;
+    box-shadow: 0 14px 38px rgba(0, 0, 0, .3);
+    backdrop-filter: blur(14px);
+  }
+
+  .user-trip-field span,
+  .user-trip-summary span {
+    display: block;
+    margin-bottom: 4px;
+    color: #7f98b1;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .user-trip-field strong {
+    display: block;
+    overflow: hidden;
+    color: #f1f7ff;
+    font-size: 13px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .user-trip-divider {
+    height: 1px;
+    margin: 11px 0;
+    background: rgba(117, 162, 206, .14);
+  }
+
+  .user-trip-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .user-trip-summary > div {
+    min-width: 0;
+    padding: 11px 12px;
+    border: 1px solid rgba(83, 168, 255, .1);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, .035);
+  }
+
+  .user-trip-summary strong {
+    display: block;
+    color: #eaf5ff;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    font-weight: 650;
+  }
+
+  @media (max-width: 560px) {
+    .user-trip-card {
+      top: 10px;
+      left: 10px;
+      width: calc(100vw - 20px);
+      padding: 12px;
+      border-radius: 14px;
+    }
+
+    .user-trip-field strong {
+      font-size: 12px;
+    }
+
+    .user-trip-summary strong {
+      font-size: 15px;
+    }
   }
 </style>
