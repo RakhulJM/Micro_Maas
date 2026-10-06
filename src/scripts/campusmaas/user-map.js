@@ -145,7 +145,7 @@ const routeSummary = (pathData, startLatLng, endLatLng) => {
       );
 
       if (!best || distance < best.distance) {
-        best = { key, distance };
+        best = { key, coordinate, distance };
       }
     }
 
@@ -157,7 +157,19 @@ const routeSummary = (pathData, startLatLng, endLatLng) => {
 
   if (!start || !end) return null;
 
+  if (start.key === end.key) {
+    return {
+      coordinates: [
+        [startLatLng.lng, startLatLng.lat],
+        [endLatLng.lng, endLatLng.lat]
+      ],
+      distance: start.distance + end.distance,
+      walkingSpeedMps: 1.4
+    };
+  }
+
   const distances = new Map([[start.key, start.distance]]);
+  const previous = new Map();
   const visited = new Set();
 
   while (true) {
@@ -181,6 +193,7 @@ const routeSummary = (pathData, startLatLng, endLatLng) => {
 
       if (nextDistance < (distances.get(edge.node) ?? Infinity)) {
         distances.set(edge.node, nextDistance);
+        previous.set(edge.node, current);
       }
     }
   }
@@ -189,13 +202,29 @@ const routeSummary = (pathData, startLatLng, endLatLng) => {
 
   if (!Number.isFinite(networkDistance)) return null;
 
+  const nodeKeys = [];
+  let current = end.key;
+
+  while (current) {
+    nodeKeys.unshift(current);
+    if (current === start.key) break;
+    current = previous.get(current);
+  }
+
+  if (nodeKeys[0] !== start.key) return null;
+
   return {
+    coordinates: [
+      [startLatLng.lng, startLatLng.lat],
+      ...nodeKeys.map((key) => coordinates.get(key)),
+      [endLatLng.lng, endLatLng.lat]
+    ],
     distance: start.distance + networkDistance + end.distance,
     walkingSpeedMps: 1.4
   };
 };
 
-const buildingLabelSizing = (map, items) => {
+const buildingLabelSizing = (map, items) => {const buildingLabelSizing = (map, items) => {
   const clamp = (value) => Math.max(8, Math.min(16, value));
 
   const measureTextAtOnePx = (text) => {
@@ -313,51 +342,138 @@ const start = async () => {
   const userTripTime = document.getElementById('userTripTime');
   const userTripDistance = document.getElementById('userTripDistance');
 
-  const startGate =
-    (gates?.features || []).find((feature) =>
-      String(feature?.properties?.name || '')
-        .toLowerCase()
-        .includes('gate - 09')
-    ) || gates?.features?.[0];
+  let pointA = null;
+  let pointB = null;
+  let pointAMarker = null;
+  let pointBMarker = null;
+  let routeCasing = null;
+  let routeLine = null;
 
-  const startCoordinates =
-    startGate?.properties?.access_point ||
-    startGate?.properties?.center;
-
-  const startLatLng = Array.isArray(startCoordinates)
-    ? L.latLng(
-        Number(startCoordinates[1]),
-        Number(startCoordinates[0])
-      )
-    : null;
-
-  const destinationLatLng =
-    findBuildingCenter(places, 'mechanical and mechatronics block') ||
-    findBuildingCenter(places, 'mechanical block');
-
-  if (startLatLng && destinationLatLng) {
-    const summary = routeSummary(pathData, startLatLng, destinationLatLng);
-
-    if (summary) {
-      const minutes = Math.max(
-        1,
-        Math.ceil(
-          summary.distance / summary.walkingSpeedMps / 60
-        )
-      );
-
-      if (userTripTime) {
-        userTripTime.textContent = minutes + ' min';
-      }
-
-      if (userTripDistance) {
-        userTripDistance.textContent =
-          summary.distance < 1000
-            ? Math.round(summary.distance) + ' m'
-            : (summary.distance / 1000).toFixed(2) + ' km';
-      }
+  const clearRouteRendering = () => {
+    for (const layer of [
+      pointAMarker,
+      pointBMarker,
+      routeCasing,
+      routeLine
+    ]) {
+      if (layer) map.removeLayer(layer);
     }
-  }
+
+    pointAMarker = null;
+    pointBMarker = null;
+    routeCasing = null;
+    routeLine = null;
+  };
+
+  const formatDistance = (distance) =>
+    distance < 1000
+      ? Math.round(distance) + ' m'
+      : (distance / 1000).toFixed(2) + ' km';
+
+  const renderEndpointMarkers = () => {
+    if (pointAMarker) map.removeLayer(pointAMarker);
+    if (pointBMarker) map.removeLayer(pointBMarker);
+
+    pointAMarker = null;
+    pointBMarker = null;
+
+    if (pointA) {
+      pointAMarker = L.circleMarker(pointA, {
+        radius: 8,
+        color: '#ffffff',
+        weight: 2,
+        fillColor: '#16c784',
+        fillOpacity: 1,
+        bubblingMouseEvents: false,
+        interactive: false
+      }).addTo(map);
+    }
+
+    if (pointB) {
+      pointBMarker = L.circleMarker(pointB, {
+        radius: 8,
+        color: '#ffffff',
+        weight: 2,
+        fillColor: '#ff5b63',
+        fillOpacity: 1,
+        bubblingMouseEvents: false,
+        interactive: false
+      }).addTo(map);
+    }
+  };
+
+  const resetTripSummary = () => {
+    if (userTripFrom) userTripFrom.textContent = 'Point A';
+    if (userTripTo) userTripTo.textContent = 'Point B';
+    if (userTripTime) userTripTime.textContent = '—';
+    if (userTripDistance) userTripDistance.textContent = '—';
+  };
+
+  const renderUserRoute = () => {
+    if (!pointA || !pointB) return;
+
+    const summary = routeSummary(pathData, pointA, pointB);
+
+    if (!summary) {
+      if (userTripFrom) userTripFrom.textContent = 'Point A selected';
+      if (userTripTo) userTripTo.textContent = 'Point B unreachable';
+      if (userTripTime) userTripTime.textContent = 'No route';
+      if (userTripDistance) userTripDistance.textContent = '—';
+      return;
+    }
+
+    const latLngs = summary.coordinates.map(([lng, lat]) => [lat, lng]);
+
+    routeCasing = L.polyline(latLngs, {
+      color: '#ffffff',
+      weight: 9,
+      opacity: 0.96,
+      lineCap: 'round',
+      lineJoin: 'round',
+      interactive: false
+    }).addTo(map);
+
+    routeLine = L.polyline(latLngs, {
+      color: '#1687ff',
+      weight: 6,
+      opacity: 1,
+      lineCap: 'round',
+      lineJoin: 'round',
+      interactive: false
+    }).addTo(map);
+
+    const minutes = Math.max(
+      1,
+      Math.ceil(summary.distance / summary.walkingSpeedMps / 60)
+    );
+
+    if (userTripFrom) userTripFrom.textContent = 'Point A selected';
+    if (userTripTo) userTripTo.textContent = 'Point B selected';
+    if (userTripTime) userTripTime.textContent = minutes + ' min';
+    if (userTripDistance) userTripDistance.textContent = formatDistance(summary.distance);
+  };
+
+  const handleUserMapClick = (event) => {
+    const clicked = event.latlng;
+
+    if (!pointA || pointB) {
+      clearRouteRendering();
+      pointA = clicked;
+      pointB = null;
+      resetTripSummary();
+      if (userTripFrom) userTripFrom.textContent = 'Point A selected';
+      if (userTripTo) userTripTo.textContent = 'Select Point B';
+      renderEndpointMarkers();
+      return;
+    }
+
+    pointB = clicked;
+    renderEndpointMarkers();
+    renderUserRoute();
+  };
+
+  resetTripSummary();
+  map.on('click', handleUserMapClick);
 
   const colors = {
     building: '#dedbd4',
