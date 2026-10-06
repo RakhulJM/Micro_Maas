@@ -1,4 +1,4 @@
-import L from 'leaflet';
+import('leaflet').then(({ default: L }) => {
 
 const PATH_COLORS = Object.freeze({
   'Main Road': '#e85d04',
@@ -666,4 +666,5 @@ const start = async () => {
 
 void start().catch((error) => {
   console.error(error);
+});
 });
