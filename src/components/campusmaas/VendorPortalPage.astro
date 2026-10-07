@@ -169,17 +169,25 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const loadData = async () => {
-      const responses = await Promise.all([
-        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-        fetch('/maps/campus_orders.json', { cache: 'no-store' })
-      ]);
+      const response = await fetch('/__campusmaas/vendor-data', { cache: 'no-store' });
 
-      if (!responses[0].ok || !responses[1].ok) {
+      if (!response.ok) {
         throw new Error('Vendor data could not be loaded.');
       }
 
-      state.catalogue = await responses[0].json();
-      state.orders = await responses[1].json();
+      const payload = await response.json();
+
+      if (
+        payload?.catalogue?.version !== 1 ||
+        !Array.isArray(payload?.catalogue?.vendors) ||
+        payload?.orders?.version !== 1 ||
+        !Array.isArray(payload?.orders?.orders)
+      ) {
+        throw new Error('Invalid CampusMaaS vendor data.');
+      }
+
+      state.catalogue = payload.catalogue;
+      state.orders = payload.orders;
     };
 
     const vendorOrders = (id, optionId = '', requireFiles = false) =>
