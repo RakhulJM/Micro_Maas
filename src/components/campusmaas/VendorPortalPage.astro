@@ -112,6 +112,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
     let ordersVendorId = '';
     let ordersVendorName = '';
+    let ordersOptionId = '';
 
     const create = (tag, className, text) => {
       const node = document.createElement(tag);
@@ -186,14 +187,18 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       state.orders = await responses[1].json();
     };
 
-    const vendorOrders = (id, requireFiles = false) =>
+    const vendorOrders = (id, optionId = '', requireFiles = false) =>
       state.orders.orders.filter((order) => {
         if (String(order.vendor_id) !== String(id)) return false;
+        if (optionId && String(order.option_id) !== String(optionId)) return false;
         if (['completed', 'cancelled'].includes(String(order.status || '').toLowerCase())) return false;
         return !requireFiles || (Array.isArray(order.files) && order.files.length);
       });
 
-    const printableOrders = () => vendorOrders('printer', true);
+    const scopedOrders = (id, requireFiles = false) =>
+      vendorOrders(id, ordersOptionId, requireFiles);
+
+    const printableOrders = () => scopedOrders('printer', true);
 
     const printGroupKey = (file) =>
       String(file?.color || 'bw').toLowerCase() + '-' +
@@ -234,7 +239,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         return;
       }
 
-      const orders = vendorOrders(ordersVendorId);
+      const orders = scopedOrders(ordersVendorId);
       printQueueList.innerHTML = '';
       printQueueSummary.textContent =
         orders.length + (orders.length === 1 ? ' active order' : ' active orders');
@@ -305,9 +310,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
       if (!orders.length) {
         printQueueList.appendChild(
-          create('div', 'vendor-empty-card', 'No active print orders.')
+          create('div', 'vendor-empty-card', 'No active print orders for this service.')
         );
-        printQueueFooterText.textContent = 'New print orders will appear here automatically.';
+        printQueueFooterText.textContent = 'New print orders for this service will appear here automatically.';
         return;
       }
 
@@ -418,8 +423,11 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const openPrintQueue = () => {
-      printQueue.querySelector('.vendor-print-queue-kicker').textContent = ordersVendorName.toUpperCase() + ' ORDERS';
-      document.getElementById('vendorPrintQueueTitle').textContent = ordersVendorName + ' orders';
+      const scopeName = ordersOptionId
+        ? String(option(vendor(ordersVendorId), ordersOptionId)?.name || ordersVendorName)
+        : ordersVendorName;
+      printQueue.querySelector('.vendor-print-queue-kicker').textContent = scopeName.toUpperCase() + ' ORDERS';
+      document.getElementById('vendorPrintQueueTitle').textContent = scopeName + ' orders';
       renderVendorOrderList();
       printQueue.hidden = false;
       printQueue.setAttribute('aria-hidden', 'false');
@@ -449,6 +457,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       printQueueButton.hidden = true;
       ordersVendorId = '';
       ordersVendorName = '';
+      ordersOptionId = '';
       closePrintQueue();
 
       content.className = 'vendor-content-grid vendor-root-grid';
@@ -514,6 +523,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       headerStatusToggle.setAttribute('aria-expanded', 'false');
       ordersVendorId = String(item.id);
       ordersVendorName = String(item.name || 'Vendor');
+      ordersOptionId = '';
       printQueueButton.hidden = false;
       closePrintQueue();
 
@@ -713,6 +723,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       back.href = route(item.id);
       ordersVendorId = String(item.id);
       ordersVendorName = String(item.name || 'Vendor');
+      ordersOptionId = String(child.id);
       printQueueButton.hidden = false;
       closePrintQueue();
 
