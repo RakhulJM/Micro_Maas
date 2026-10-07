@@ -169,25 +169,39 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const loadData = async () => {
-      const response = await fetch('/__campusmaas/vendor-data', { cache: 'no-store' });
+      const loadJson = async (url) => {
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Request failed: ' + url);
+        return response.json();
+      };
 
-      if (!response.ok) {
-        throw new Error('Vendor data could not be loaded.');
+      let catalogue;
+      let orders;
+
+      try {
+        [catalogue, orders] = await Promise.all([
+          loadJson('/maps/campus_vendors.json'),
+          loadJson('/maps/campus_orders.json')
+        ]);
+      } catch {
+        const response = await fetch('/__campusmaas/vendor-data', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Vendor data could not be loaded.');
+        const payload = await response.json();
+        catalogue = payload?.catalogue;
+        orders = payload?.orders;
       }
 
-      const payload = await response.json();
-
       if (
-        payload?.catalogue?.version !== 1 ||
-        !Array.isArray(payload?.catalogue?.vendors) ||
-        payload?.orders?.version !== 1 ||
-        !Array.isArray(payload?.orders?.orders)
+        catalogue?.version !== 1 ||
+        !Array.isArray(catalogue?.vendors) ||
+        orders?.version !== 1 ||
+        !Array.isArray(orders?.orders)
       ) {
         throw new Error('Invalid CampusMaaS vendor data.');
       }
 
-      state.catalogue = payload.catalogue;
-      state.orders = payload.orders;
+      state.catalogue = catalogue;
+      state.orders = orders;
     };
 
     const vendorOrders = (id, optionId = '', requireFiles = false) =>
