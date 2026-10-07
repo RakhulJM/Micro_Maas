@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "vendor_id": "food",
+  "service_id": "singles",
+  "service_name": "Single's",
+  "menu": [
+    {
+      "id": "singles-tea",
+      "name": "Tea",
+      "description": "Freshly prepared hot tea",
+      "price": 15,
+      "available": true
+    },
+    {
+      "id": "singles-coffee",
+      "name": "Coffee",
+      "description": "Fresh hot coffee",
+      "price": 20,
+      "available": true
+    },
+    {
+      "id": "singles-veg-puff",
+      "name": "Veg Puff",
+      "description": "Crisp pastry with vegetable filling",
+      "price": 25,
+      "available": true
+    },
+    {
+      "id": "singles-sandwich",
+      "name": "Veg Sandwich",
+      "description": "Toasted sandwich with fresh vegetables",
+      "price": 40,
+      "available": true
+    }
+  ]
+}
