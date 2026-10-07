@@ -67,8 +67,35 @@ const pedestrianNetworkSavePlugin = () => ({
           const payload = JSON.parse(raw);
 
           const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
-          const validModes = new Set(['preferred', 'allow_only_during']);
+          const validModes = new Set([
+            'preferred',
+            'allow',
+            'deny',
+            'allow_only_during',
+            'deny_during'
+          ]);
           const validDirections = new Set(['in_out', 'in', 'out']);
+          const validTargetTypes = new Set(['gate', 'path']);
+          const validGroups = new Set([
+            'all',
+            'students',
+            'boys',
+            'girls',
+            'hostellers',
+            'day_scholars',
+            'staff',
+            'faculty',
+            'visitors'
+          ]);
+          const validDays = new Set([
+            'mon',
+            'tue',
+            'wed',
+            'thu',
+            'fri',
+            'sat',
+            'sun'
+          ]);
 
           if (
             payload?.version !== 1 ||
@@ -78,51 +105,76 @@ const pedestrianNetworkSavePlugin = () => ({
             throw new Error('Invalid access rules root.');
           }
 
+          const policyIds = new Set();
+
           const validPolicies = payload.policies.every((policy) => {
             const target = policy?.target;
+            const windows = Array.isArray(policy?.windows) ? policy.windows : [];
 
             if (
               !policy?.id ||
-              target?.type !== 'gate' ||
+              policyIds.has(String(policy.id)) ||
               !target?.id ||
-              policy.group !== 'students' ||
+              !validTargetTypes.has(target?.type) ||
+              !validGroups.has(policy.group) ||
               !validModes.has(policy.mode) ||
-              !validDirections.has(policy.direction)
+              !validDirections.has(policy.direction) ||
+              typeof policy.enabled !== 'boolean' ||
+              !Number.isInteger(Number(policy.priority)) ||
+              Number(policy.priority) < 0 ||
+              Number(policy.priority) > 100 ||
+              !Array.isArray(policy.days) ||
+              policy.days.length < 1 ||
+              !policy.days.every((day) => validDays.has(day))
             ) {
               return false;
             }
 
-            if (policy.mode === 'preferred') {
-              return Number.isInteger(policy.priority) &&
-                policy.priority >= 0 &&
-                policy.priority <= 100;
+            policyIds.add(String(policy.id));
+
+            if (
+              typeof policy.name !== 'string' ||
+              policy.name.trim().length < 1 ||
+              policy.name.length > 80
+            ) {
+              return false;
             }
 
-            if (policy.mode === 'allow_only_during') {
-              return Array.isArray(policy.windows) &&
-                policy.windows.length >= 1 &&
-                policy.windows.every((window) => {
-                  if (
-                    !timePattern.test(String(window?.start || '')) ||
-                    !timePattern.test(String(window?.end || ''))
-                  ) {
-                    return false;
-                  }
-
-                  const [startHour, startMinute] = window.start.split(':').map(Number);
-                  const [endHour, endMinute] = window.end.split(':').map(Number);
-                  const start = startHour * 60 + startMinute;
-                  const end = endHour * 60 + endMinute;
-
-                  return start < end;
-                });
+            if (
+              typeof policy.description !== 'string' ||
+              policy.description.length > 240
+            ) {
+              return false;
             }
 
-            return false;
+            if (!Array.isArray(windows)) {
+              return false;
+            }
+
+            return windows.every((window) => {
+              if (
+                !timePattern.test(String(window?.start || '')) ||
+                !timePattern.test(String(window?.end || ''))
+              ) {
+                return false;
+              }
+
+              const [startHour, startMinute] = window.start.split(':').map(Number);
+              const [endHour, endMinute] = window.end.split(':').map(Number);
+              const startMinutes = startHour * 60 + startMinute;
+              const endMinutes = endHour * 60 + endMinute;
+
+              return startMinutes < endMinutes;
+            }) &&
+            (
+              policy.mode !== 'allow_only_during' &&
+              policy.mode !== 'deny_during'
+              || windows.length > 0
+            );
           });
 
           if (!validPolicies) {
-            throw new Error('Invalid student gate rule.');
+            throw new Error('Invalid campus access rule.');
           }
 
           const root = process.cwd();
