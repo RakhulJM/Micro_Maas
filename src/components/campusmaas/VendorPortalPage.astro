@@ -54,14 +54,13 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
           <small id="vendorPrintQueueSummary">0 active orders</small>
         </div>
         <div class="vendor-print-queue-header-actions">
-          <button type="button" class="vendor-print-queue-all" id="vendorPrintQueueAll" disabled>PRINT ALL</button>
+          <button type="button" class="vendor-print-queue-all" id="vendorPrintQueueAll" disabled>Print all</button>
           <button type="button" class="vendor-print-queue-close" id="vendorPrintQueueClose" aria-label="Close print queue">×</button>
         </div>
       </header>
       <div class="vendor-print-queue-list" id="vendorPrintQueueList"></div>
       <footer class="vendor-print-queue-footer">
         <span id="vendorPrintQueueFooterText">Print jobs are grouped by customer order.</span>
-        <button type="button" class="vendor-print-queue-all vendor-print-queue-all-footer" id="vendorPrintQueueAllFooter" disabled>PRINT ALL</button>
       </footer>
     </section>
   </aside>
@@ -99,7 +98,6 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     const printQueueList = document.getElementById('vendorPrintQueueList');
     const printQueueSummary = document.getElementById('vendorPrintQueueSummary');
     const printQueueAll = document.getElementById('vendorPrintQueueAll');
-    const printQueueAllFooter = document.getElementById('vendorPrintQueueAllFooter');
     const printQueueFooterText = document.getElementById('vendorPrintQueueFooterText');
 
     if (!root || !content) return;
@@ -235,7 +233,6 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
       const enabled = orders.length > 0;
       printQueueAll.disabled = !enabled;
-      printQueueAllFooter.disabled = !enabled;
 
       if (!orders.length) {
         printQueueList.appendChild(
@@ -865,7 +862,6 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     printQueueAll?.addEventListener('click', printAllOrders);
-    printQueueAllFooter?.addEventListener('click', printAllOrders);
 
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && printQueue && !printQueue.hidden) {
@@ -1176,39 +1172,40 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-print-queue-open{overflow:hidden}
   .vendor-print-queue{position:fixed;inset:0;z-index:6200;display:grid;place-items:center;padding:20px}
   .vendor-print-queue[hidden]{display:none}
-  .vendor-print-queue-backdrop{position:absolute;inset:0;background:rgba(2,9,16,.72);backdrop-filter:blur(8px)}
-  .vendor-print-queue-dialog{position:relative;z-index:1;width:min(960px,calc(100vw - 30px));max-height:min(820px,calc(100dvh - 30px));overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border:1px solid rgba(72,142,194,.28);border-radius:20px;background:linear-gradient(155deg,#102b43,#0a2034);color:#edf6ff;box-shadow:0 36px 100px rgba(0,0,0,.52),0 1px 0 rgba(255,255,255,.08) inset}
-  .vendor-print-queue-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 18px;border-bottom:1px solid rgba(109,155,190,.13);background:rgba(8,25,41,.96)}
-  .vendor-print-queue-kicker{display:block;color:#60bffb;font-size:7px;font-weight:900;letter-spacing:.14em}
-  .vendor-print-queue-header strong{display:block;margin-top:3px;color:#f2f8ff;font:600 19px/1 'Space Grotesk',sans-serif}
-  .vendor-print-queue-header small{display:block;margin-top:5px;color:#7893a8;font-size:7px}
-  .vendor-print-queue-header-actions{display:flex;align-items:center;gap:7px}
-  .vendor-print-queue-all,.vendor-print-order-all,.vendor-print-group-all,.vendor-print-file-button{border:1px solid rgba(83,168,255,.17);border-radius:8px;background:#0d2742;color:#7fcaff;font-size:7px;font-weight:900;letter-spacing:.06em;cursor:pointer}
-  .vendor-print-queue-all{padding:8px 10px;background:#1687ff;border-color:#1687ff;color:#fff}
-  .vendor-print-queue-all:disabled{opacity:.45;cursor:not-allowed}
-  .vendor-print-queue-close{display:grid;place-items:center;width:31px;height:31px;border:1px solid rgba(148,163,184,.12);border-radius:8px;background:#0c2339;color:#aabccc;cursor:pointer;font-size:18px}
-  .vendor-print-queue-list{min-height:0;overflow:auto;padding:12px 14px;display:grid;gap:10px}
-  .vendor-print-order-section{padding:12px;border:1px solid rgba(83,168,255,.10);border-radius:14px;background:rgba(255,255,255,.025)}
-  .vendor-print-order-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1px solid rgba(110,153,187,.10)}
-  .vendor-print-order-kicker{display:block;color:#66c4ff;font-size:7px;font-weight:900;letter-spacing:.08em}
-  .vendor-print-order-header strong{display:block;margin-top:3px;color:#eaf5ff;font:600 12px/1 'Space Grotesk',sans-serif}
-  .vendor-print-order-header small{display:block;margin-top:4px;color:#718ca1;font-size:7px}
-  .vendor-print-order-all{padding:7px 9px}
-  .vendor-print-group-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding:7px 2px}
-  .vendor-print-group-header strong{color:#91d4ff;font-size:7px;letter-spacing:.08em}
-  .vendor-print-group-all{padding:6px 8px}
-  .vendor-print-group-tools{display:flex;justify-content:flex-end;margin-top:9px}
-  .vendor-print-file-card{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:9px 10px;margin-top:6px;border:1px solid rgba(91,144,180,.12);border-radius:10px;background:rgba(255,255,255,.035)}
+  .vendor-print-queue-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.34);backdrop-filter:blur(4px)}
+  .vendor-print-queue-dialog{position:relative;z-index:1;width:min(960px,calc(100vw - 30px));max-height:min(820px,calc(100dvh - 30px));overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border:1px solid #dbe3ea;border-radius:16px;background:#fff;color:#111827;box-shadow:0 20px 60px rgba(15,23,42,.18)}
+  .vendor-print-queue-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid #e5e7eb;background:#fff}
+  .vendor-print-queue-kicker{display:block;color:#2563eb;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+  .vendor-print-queue-header strong{display:block;margin-top:4px;color:#111827;font:600 22px/1.15 'Space Grotesk',sans-serif}
+  .vendor-print-queue-header small{display:block;margin-top:5px;color:#6b7280;font-size:11px}
+  .vendor-print-queue-header-actions{display:flex;align-items:center;gap:8px}
+  .vendor-print-queue-all,.vendor-print-order-all,.vendor-print-group-all,.vendor-print-file-button{border:1px solid #2563eb;border-radius:8px;background:#fff;color:#1d4ed8;font-size:11px;font-weight:700;cursor:pointer}
+  .vendor-print-queue-all{padding:9px 13px;background:#2563eb;color:#fff}
+  .vendor-print-queue-all:hover{background:#1d4ed8}
+  .vendor-print-queue-all:disabled{opacity:.5;cursor:not-allowed}
+  .vendor-print-queue-close{display:grid;place-items:center;width:34px;height:34px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;cursor:pointer;font-size:18px}
+  .vendor-print-queue-close:hover{background:#f3f4f6}
+  .vendor-print-queue-list{min-height:0;overflow:auto;padding:16px;display:grid;gap:12px;background:#f8fafc}
+  .vendor-print-order-section{padding:14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff}
+  .vendor-print-order-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid #edf0f2}
+  .vendor-print-order-kicker{display:block;color:#2563eb;font-size:10px;font-weight:800;letter-spacing:.04em}
+  .vendor-print-order-header strong{display:block;margin-top:4px;color:#111827;font:600 15px/1.15 'Space Grotesk',sans-serif}
+  .vendor-print-order-header small{display:block;margin-top:4px;color:#6b7280;font-size:10px}
+  .vendor-print-order-all{padding:8px 11px}
+  .vendor-print-order-all:hover,.vendor-print-group-all:hover,.vendor-print-file-button:hover{background:#eff6ff}
+  .vendor-print-group-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:8px 2px}
+  .vendor-print-group-header strong{color:#111827;font-size:11px;font-weight:700}
+  .vendor-print-group-all{padding:7px 10px}
+  .vendor-print-group-tools{display:flex;justify-content:flex-end;margin-top:10px}
+  .vendor-print-file-card{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:11px 12px;margin-top:7px;border:1px solid #e5e7eb;border-radius:9px;background:#fff}
   .vendor-print-file-main{min-width:0}
-  .vendor-print-file-main strong{display:block;overflow:hidden;color:#e7f4ff;font-size:9px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
-  .vendor-print-file-main span{display:block;margin-top:3px;color:#718ba0;font-size:6.5px}
-  .vendor-print-file-settings{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
-  .vendor-print-file-settings span{padding:5px 6px;border:1px solid rgba(83,168,255,.10);border-radius:6px;background:rgba(22,135,255,.06);color:#79bfea;font-size:6px;font-weight:900;letter-spacing:.04em}
-  .vendor-print-file-button{padding:7px 9px;min-width:54px}
-  .vendor-print-file-button:hover,.vendor-print-group-all:hover,.vendor-print-order-all:hover{background:#123756;color:#bfe8ff}
-  .vendor-print-queue-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-top:1px solid rgba(109,155,190,.12);background:#0a2034}
-  .vendor-print-queue-footer>span{color:#708ba0;font-size:7px}
-  .vendor-print-queue-all-footer{background:#0d2742}
+  .vendor-print-file-main strong{display:block;overflow:hidden;color:#111827;font-size:13px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}
+  .vendor-print-file-main span{display:block;margin-top:4px;color:#6b7280;font-size:10px}
+  .vendor-print-file-settings{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .vendor-print-file-settings span{padding:5px 7px;border:1px solid #dbe3ea;border-radius:6px;background:#f8fafc;color:#374151;font-size:9px;font-weight:700;letter-spacing:.02em}
+  .vendor-print-file-button{padding:8px 11px;min-width:58px}
+  .vendor-print-queue-footer{display:flex;align-items:center;justify-content:flex-start;gap:12px;padding:11px 16px;border-top:1px solid #e5e7eb;background:#fff}
+  .vendor-print-queue-footer>span{color:#6b7280;font-size:10px}
   .vendor-header-actions{display:flex;align-items:center;gap:9px}
   .vendor-header-service-control{position:relative;z-index:20}
   .vendor-header-status-toggle{
@@ -1255,11 +1252,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     .vendor-header-status-menu{right:0;width:170px}
     .vendor-header-status{padding:6px 8px}
     .vendor-print-queue{padding:10px}
-    .vendor-print-queue-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:16px}
-    .vendor-print-queue-header{padding:13px}
-    .vendor-print-queue-header-actions .vendor-print-queue-all{padding:7px 8px}
+    .vendor-print-queue-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:14px}
+    .vendor-print-queue-header{padding:14px}
+    .vendor-print-queue-header strong{font-size:18px}
+    .vendor-print-queue-header-actions .vendor-print-queue-all{padding:8px 10px}
     .vendor-print-order-header{align-items:flex-start}
-    .vendor-print-file-card{grid-template-columns:minmax(0,1fr) auto;gap:7px}
+    .vendor-print-file-card{grid-template-columns:minmax(0,1fr) auto;gap:8px}
     .vendor-print-file-settings{grid-column:1/-1;justify-content:flex-start}
     .vendor-print-file-button{grid-column:2;grid-row:1;align-self:center}
     .vendor-print-queue-footer{padding:9px 12px}
