@@ -7,6 +7,7 @@ const publicMapsDir = path.join(root, 'public', 'maps');
 
 const supported = /\.(geojson|json|tif|tiff)$/i;
 const manifestSupported = /\.(geojson|json)$/i;
+const privateMapFiles = new Set(['campus_orders.json']);
 
 fs.rmSync(publicMapsDir, { recursive: true, force: true });
 fs.mkdirSync(publicMapsDir, { recursive: true });
