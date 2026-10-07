@@ -458,7 +458,7 @@ const start = async () => {
     fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
     fetch('/maps/gates.geojson', { cache: 'no-store' }),
     fetch('/maps/perimeter.geojson', { cache: 'no-store' }),
-    fetch('/maps/campus_access_rules.json', { cache: 'no-store' })
+    fetch('/maps/campus_access_rules.json', { cache: 'no-store' }).catch(() => null)
   ]);
 
   if (
@@ -475,8 +475,10 @@ const start = async () => {
     pathResponse.json(),
     gatesResponse.json(),
     perimeterResponse.json(),
-    accessRulesResponse.ok
-      ? accessRulesResponse.json()
+    accessRulesResponse
+      ? (accessRulesResponse.ok
+        ? accessRulesResponse.json()
+        : Promise.resolve(null))
       : Promise.resolve(null)
   ]);
 
