@@ -2403,11 +2403,25 @@ const start = async () => {
     userOrderSyncBusy = true;
 
     try {
-      const response = await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' });
-      if (!response.ok) return;
+      const [catalogueResponse, ordersResponse] = await Promise.all([
+        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
+        fetch(
+          '/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId),
+          { cache: 'no-store' }
+        )
+      ]);
 
-      const nextOrders = await response.json();
-      if (nextOrders?.version !== 1 || !Array.isArray(nextOrders?.orders)) return;
+      if (!catalogueResponse.ok || !ordersResponse.ok) return;
+
+      const nextCatalogue = await catalogueResponse.json();
+      const nextOrders = await ordersResponse.json();
+
+      if (
+        nextCatalogue?.version !== 1 ||
+        !Array.isArray(nextCatalogue?.vendors) ||
+        nextOrders?.version !== 1 ||
+        !Array.isArray(nextOrders?.orders)
+      ) return;
 
       const nextMine = nextOrders.orders
         .filter((order) => order.user_id === userId)
@@ -2417,10 +2431,16 @@ const start = async () => {
         .filter((order) => order.user_id === userId)
         .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
 
-      if (JSON.stringify(nextMine) === JSON.stringify(currentMine)) return;
+      const ordersChanged = JSON.stringify(nextMine) !== JSON.stringify(currentMine);
+      const catalogueChanged = JSON.stringify(nextCatalogue) !== JSON.stringify(catalogue);
 
+      if (!ordersChanged && !catalogueChanged) return;
+
+      catalogue = nextCatalogue;
       orders = nextOrders;
-      renderOrders();
+
+      if (catalogueChanged) renderCatalogue();
+      if (ordersChanged) renderOrders();
     } finally {
       userOrderSyncBusy = false;
     }
@@ -2435,6 +2455,55 @@ const start = async () => {
 
   window.addEventListener('pagehide', () => {
     if (userOrderSyncTimer) window.clearInterval(userOrderSyncTimer);
+  }, { once: true });
+
+  let accessPolicySyncBusy = false;
+  let accessPolicySyncTimer = null;
+
+  const refreshAccessPolicy = async () => {
+    if (accessPolicySyncBusy) return;
+    accessPolicySyncBusy = true;
+
+    try {
+      const response = await fetch('/maps/campus_access_rules.json', { cache: 'no-store' });
+      if (!response.ok) return;
+
+      const nextPolicy = await response.json();
+      if (
+        nextPolicy?.version !== 1 ||
+        !Array.isArray(nextPolicy?.policies)
+      ) return;
+
+      if (JSON.stringify(accessPolicy) === JSON.stringify(nextPolicy)) return;
+
+      accessPolicy.policies = nextPolicy.policies;
+      accessPolicy.timezone =
+        nextPolicy.timezone || accessPolicy.timezone || 'Asia/Kolkata';
+
+      if (pointA && pointB) {
+        clearRouteRendering();
+        renderEndpointMarkers();
+        renderUserRoute();
+      }
+    } finally {
+      accessPolicySyncBusy = false;
+    }
+  };
+
+  const startAccessPolicySync = () => {
+    if (accessPolicySyncTimer) window.clearInterval(accessPolicySyncTimer);
+    accessPolicySyncTimer = window.setInterval(() => {
+      void refreshAccessPolicy();
+    }, 5000);
+  };
+
+  startAccessPolicySync();
+
+  window.addEventListener('pagehide', () => {
+    if (accessPolicySyncTimer) {
+      window.clearInterval(accessPolicySyncTimer);
+      accessPolicySyncTimer = null;
+    }
   }, { once: true });
 
   const resetTripSummary = () => {
