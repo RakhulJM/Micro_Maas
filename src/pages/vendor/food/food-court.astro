@@ -14,7 +14,8 @@ const readCampusJson = (name, fallback) => {
 
 const initialData = {
   catalogue: readCampusJson('campus_vendors.json', { version: 1, vendors: [] }),
-  orders: readCampusJson('campus_orders.json', { version: 1, orders: [] })
+  orders: readCampusJson('campus_orders.json', { version: 1, orders: [] }),
+  pageCards: readCampusJson('vendor_page_cards.json', { version: 1, root: {}, categories: {} })
 };
 ---
 <MainLayout title="CampusMaaS · Food Court">
