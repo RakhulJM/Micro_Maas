@@ -16,12 +16,15 @@ const pedestrianNetworkSavePlugin = () => ({
         const parsed=new URL(req.url||'', 'http://localhost');
         const vendorId=parsed.searchParams.get('vendor_id');
         const optionId=parsed.searchParams.get('option_id');
+        const developerScope=parsed.searchParams.get('developer')==='1';
         const catalogue=readJsonFile('maps/campus_vendors.json');
         const allOrders=readJsonFile('maps/campus_orders.json');
         const activeStatuses=new Set(['placed','accepted','preparing']);
 
         let scopedOrders=[];
-        if(vendorId){
+        if(developerScope){
+          scopedOrders=allOrders.orders;
+        }else if(vendorId){
           scopedOrders=allOrders.orders.filter((order)=>{
             if(String(order.vendor_id)!==String(vendorId)) return false;
             return !optionId || String(order.option_id)===String(optionId);
