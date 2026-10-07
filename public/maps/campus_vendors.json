@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "vendors": [
+    {"id":"printer","name":"Printer","order":1,"enabled":true,"options":[
+      {"id":"printer-amenity-01","name":"Amenity 01","order":1,"enabled":true,"service_minutes":5,"price":0},
+      {"id":"printer-amenity-02","name":"Amenity 02","order":2,"enabled":true,"service_minutes":5,"price":0}
+    ]},
+    {"id":"food","name":"Food","order":2,"enabled":true,"options":[
+      {"id":"singles","name":"Single's","order":1,"enabled":true,"service_minutes":5,"price":0},
+      {"id":"food-court","name":"Food Court","order":2,"enabled":true,"service_minutes":5,"price":0}
+    ]}
+  ]
+}
