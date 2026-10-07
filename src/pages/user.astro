@@ -1474,6 +1474,7 @@ const start = async () => {
     const printFileSummary = document.getElementById('printFileSummary');
     const printFileList = document.getElementById('printFileList');
     const printClearFiles = document.getElementById('printClearFiles');
+    const printSelectAll = document.getElementById('printSelectAll');
     const printPopupPlaceOrder = document.getElementById('printPopupPlaceOrder');
     const printPopupError = document.getElementById('printPopupError');
 
@@ -1753,6 +1754,10 @@ const start = async () => {
       printPopup.setAttribute('aria-hidden', 'true');
       printPopupBusy = false;
       printFiles = [];
+      if (printSelectAll) {
+        printSelectAll.checked = false;
+        printSelectAll.indeterminate = false;
+      }
     };
 
     const formatFileSize = (bytes) => {
@@ -1764,15 +1769,24 @@ const start = async () => {
     };
 
     const printSummary = () => {
-      const copies = printFiles.reduce((sum, entry) => sum + entry.copies, 0);
+      const selectedFiles = printFiles.filter((entry) => entry.selected);
+      const copies = selectedFiles.reduce((sum, entry) => sum + entry.copies, 0);
       printFileSummary.textContent =
-        printFiles.length + (printFiles.length === 1 ? ' file · ' : ' files · ') +
+        selectedFiles.length + (selectedFiles.length === 1 ? ' file · ' : ' files · ') +
         copies + (copies === 1 ? ' copy' : ' copies');
 
       printClearFiles.hidden = printFiles.length === 0;
+
+      if (printSelectAll) {
+        printSelectAll.checked =
+          printFiles.length > 0 && selectedFiles.length === printFiles.length;
+        printSelectAll.indeterminate =
+          selectedFiles.length > 0 && selectedFiles.length < printFiles.length;
+      }
+
       const offline = normalizeVendorStatus(printService) === 'offline';
       printPopupPlaceOrder.disabled =
-        offline || printFiles.length === 0 || printPopupBusy;
+        offline || selectedFiles.length === 0 || printPopupBusy;
     };
 
     const renderPrintFiles = () => {
@@ -1791,14 +1805,32 @@ const start = async () => {
 
       printFiles.forEach((entry, index) => {
         const row = document.createElement('article');
-        row.className = 'print-file-row';
+        row.className = 'print-file-row' + (entry.selected ? '' : ' is-unselected');
 
         const main = document.createElement('div');
         main.className = 'print-file-main';
 
+        const nameLine = document.createElement('div');
+        nameLine.className = 'print-file-name-wrap';
+
+        const selectLabel = document.createElement('label');
+        selectLabel.className = 'print-file-select';
+
+        const select = document.createElement('input');
+        select.type = 'checkbox';
+        select.checked = entry.selected;
+        select.setAttribute('aria-label', 'Select ' + entry.file.name);
+        select.addEventListener('change', () => {
+          entry.selected = select.checked;
+          renderPrintFiles();
+        });
+
+        selectLabel.appendChild(select);
+
         const name = document.createElement('div');
         name.className = 'print-file-name';
         name.textContent = entry.file.name;
+        nameLine.append(selectLabel, name);
 
         const meta = document.createElement('div');
         meta.className = 'print-file-meta';
@@ -1806,7 +1838,81 @@ const start = async () => {
           (entry.file.type || 'Unknown file type') + ' · ' +
           formatFileSize(entry.file.size);
 
-        main.append(name, meta);
+        main.append(nameLine, meta);
+
+        const settings = document.createElement('div');
+        settings.className = 'print-file-settings';
+
+        const sidesGroup = document.createElement('div');
+        sidesGroup.className = 'print-file-option-group';
+
+        const sidesLabel = document.createElement('span');
+        sidesLabel.className = 'print-file-option-label';
+        sidesLabel.textContent = 'Sides';
+
+        const sideSingle = document.createElement('label');
+        sideSingle.className = 'print-file-option';
+        const sideSingleInput = document.createElement('input');
+        sideSingleInput.type = 'radio';
+        sideSingleInput.name = 'print-sides-' + index;
+        sideSingleInput.value = 'single';
+        sideSingleInput.checked = entry.sides === 'single';
+        sideSingleInput.disabled = !entry.selected;
+        sideSingleInput.addEventListener('change', () => {
+          if (sideSingleInput.checked) entry.sides = 'single';
+        });
+        sideSingle.append(sideSingleInput, document.createTextNode('One side'));
+
+        const sideDouble = document.createElement('label');
+        sideDouble.className = 'print-file-option';
+        const sideDoubleInput = document.createElement('input');
+        sideDoubleInput.type = 'radio';
+        sideDoubleInput.name = 'print-sides-' + index;
+        sideDoubleInput.value = 'double';
+        sideDoubleInput.checked = entry.sides === 'double';
+        sideDoubleInput.disabled = !entry.selected;
+        sideDoubleInput.addEventListener('change', () => {
+          if (sideDoubleInput.checked) entry.sides = 'double';
+        });
+        sideDouble.append(sideDoubleInput, document.createTextNode('Both sides'));
+
+        sidesGroup.append(sidesLabel, sideSingle, sideDouble);
+
+        const colorGroup = document.createElement('div');
+        colorGroup.className = 'print-file-option-group';
+
+        const colorLabel = document.createElement('span');
+        colorLabel.className = 'print-file-option-label';
+        colorLabel.textContent = 'Colour';
+
+        const bw = document.createElement('label');
+        bw.className = 'print-file-option';
+        const bwInput = document.createElement('input');
+        bwInput.type = 'radio';
+        bwInput.name = 'print-colour-' + index;
+        bwInput.value = 'bw';
+        bwInput.checked = entry.color === 'bw';
+        bwInput.disabled = !entry.selected;
+        bwInput.addEventListener('change', () => {
+          if (bwInput.checked) entry.color = 'bw';
+        });
+        bw.append(bwInput, document.createTextNode('Black & White'));
+
+        const color = document.createElement('label');
+        color.className = 'print-file-option';
+        const colorInput = document.createElement('input');
+        colorInput.type = 'radio';
+        colorInput.name = 'print-colour-' + index;
+        colorInput.value = 'color';
+        colorInput.checked = entry.color === 'color';
+        colorInput.disabled = !entry.selected;
+        colorInput.addEventListener('change', () => {
+          if (colorInput.checked) entry.color = 'color';
+        });
+        color.append(colorInput, document.createTextNode('Colour'));
+
+        colorGroup.append(colorLabel, bw, color);
+        settings.append(sidesGroup, colorGroup);
 
         const controls = document.createElement('div');
         controls.className = 'print-copy-controls';
@@ -1815,6 +1921,7 @@ const start = async () => {
         minus.type = 'button';
         minus.className = 'print-copy-button';
         minus.textContent = '−';
+        minus.disabled = !entry.selected;
         minus.setAttribute('aria-label', 'Decrease copies for ' + entry.file.name);
 
         const count = document.createElement('span');
@@ -1825,18 +1932,17 @@ const start = async () => {
         plus.type = 'button';
         plus.className = 'print-copy-button';
         plus.textContent = '+';
+        plus.disabled = !entry.selected;
         plus.setAttribute('aria-label', 'Increase copies for ' + entry.file.name);
 
         minus.addEventListener('click', () => {
           entry.copies = Math.max(1, entry.copies - 1);
-          count.textContent = String(entry.copies);
-          printSummary();
+          renderPrintFiles();
         });
 
         plus.addEventListener('click', () => {
           entry.copies = Math.min(99, entry.copies + 1);
-          count.textContent = String(entry.copies);
-          printSummary();
+          renderPrintFiles();
         });
 
         controls.append(minus, count, plus);
@@ -1851,7 +1957,7 @@ const start = async () => {
           renderPrintFiles();
         });
 
-        row.append(main, controls, remove);
+        row.append(main, settings, controls, remove);
         printFileList.appendChild(row);
       });
 
@@ -1867,7 +1973,10 @@ const start = async () => {
       selected.forEach((file) => {
         printFiles.push({
           file,
-          copies: 1
+          copies: 1,
+          selected: true,
+          sides: 'single',
+          color: 'bw'
         });
       });
 
@@ -1918,7 +2027,7 @@ const start = async () => {
         printPopupBusy ||
         !printVendor ||
         !printService ||
-        !printFiles.length ||
+        !printFiles.some((entry) => entry.selected) ||
         normalizeVendorStatus(printService) === 'offline'
       ) {
         return;
@@ -1931,12 +2040,14 @@ const start = async () => {
 
       try {
         const files = [];
-        for (const entry of printFiles) {
+        for (const entry of printFiles.filter((item) => item.selected)) {
           files.push({
             name: entry.file.name,
             type: entry.file.type || 'application/octet-stream',
             size: Number(entry.file.size) || 0,
             copies: entry.copies,
+            sides: entry.sides,
+            color: entry.color,
             data_base64: await readFileAsBase64(entry.file)
           });
         }
@@ -2051,6 +2162,13 @@ const start = async () => {
     printPopupPlaceOrder?.addEventListener('click', placePrintOrder);
     printClearFiles?.addEventListener('click', () => {
       printFiles = [];
+      renderPrintFiles();
+    });
+    printSelectAll?.addEventListener('change', () => {
+      const selected = printSelectAll.checked;
+      printFiles.forEach((entry) => {
+        entry.selected = selected;
+      });
       renderPrintFiles();
     });
     printSelectFiles?.addEventListener('click', (event) => {
