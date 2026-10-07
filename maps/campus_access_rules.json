@@ -1,10 +1,11 @@
 {
   "version": 1,
   "timezone": "Asia/Kolkata",
-  "description": "Campus gate access rules for student journeys",
+  "description": "Campus gate and pedestrian-path access rules",
   "policies": [
     {
       "id": "students-gate-06-preferred",
+      "name": "Students · Gate 06 preference",
       "target": {
         "type": "gate",
         "id": "gate-1791182325069",
@@ -13,11 +14,23 @@
       "group": "students",
       "direction": "in_out",
       "mode": "preferred",
+      "days": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ],
+      "windows": [],
       "priority": 85,
+      "enabled": true,
       "description": "College-preferred student gate for both entry and exit. Other valid gates are not blocked by this preference."
     },
     {
       "id": "students-gate-09-time",
+      "name": "Students · Gate 09 time access",
       "target": {
         "type": "gate",
         "id": "gate-1791182233958",
@@ -26,6 +39,15 @@
       "group": "students",
       "direction": "in_out",
       "mode": "allow_only_during",
+      "days": [
+        "mon",
+        "tue",
+        "wed",
+        "thu",
+        "fri",
+        "sat",
+        "sun"
+      ],
       "windows": [
         {
           "start": "07:00",
@@ -40,6 +62,8 @@
           "end": "18:00"
         }
       ],
+      "priority": 0,
+      "enabled": true,
       "description": "Students may use Gate 09 only during the listed time windows. Outside these windows the gate is unavailable to students."
     }
   ]
