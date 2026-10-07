@@ -781,6 +781,45 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       live.appendChild(ordersGrid);
       content.appendChild(live);
 
+      const rightColumn = create('div', 'vendor-dashboard-side-column');
+
+      const waiting = create('section', 'vendor-history-card vendor-waiting-card');
+      const readyOrders = allOrders.filter(
+        (order) => String(order.status || '').toLowerCase() === 'ready'
+      );
+
+      append(
+        waiting,
+        makeHeader('WAITING', 'Waiting for confirmation', String(readyOrders.length))
+      );
+
+      const waitingList = create('div', 'vendor-history-list');
+      readyOrders.forEach((order) => {
+        const row = create('div', 'vendor-history-row vendor-waiting-row');
+        append(
+          row,
+          create('span', '', '#' + order.id),
+          create('span', '', order.vendor_name + ' · ' + order.option_name),
+          create('span', '', 'Ready · ' + new Date(order.created_at).toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit'
+          }))
+        );
+        const chip = create('span', 'vendor-status-chip status-ready', 'Waiting');
+        chip.prepend(create('i'));
+        row.appendChild(chip);
+        waitingList.appendChild(row);
+      });
+
+      if (!readyOrders.length) {
+        waitingList.appendChild(
+          create('div', 'vendor-empty-card', 'No orders are waiting for user confirmation.')
+        );
+      }
+
+      waiting.appendChild(waitingList);
+      rightColumn.appendChild(waiting);
+
       const history = create('section', 'vendor-history-card');
       const completed = allOrders.filter((order) => order.status === 'completed').slice(0, 8);
       append(
@@ -808,7 +847,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       }
 
       history.appendChild(historyList);
-      content.appendChild(history);
+      rightColumn.appendChild(history);
+      content.appendChild(rightColumn);
     };
 
     headerStatusChoices.forEach((button) => {
@@ -1258,6 +1298,10 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-header-status-choice.is-active.status-offline{background:#fee2e2;color:#b91c1c;box-shadow:inset 0 0 0 1px #fca5a5}
   .vendor-header-status-choice:disabled{opacity:.55;cursor:wait}
   .vendor-header-status-message{max-width:130px;color:#64748b;font-size:7px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vendor-dashboard-side-column{display:grid;gap:12px;min-width:0}
+  .vendor-waiting-card{border-color:rgba(245,158,11,.16)}
+  .vendor-waiting-row{grid-template-columns:1fr 1.2fr auto auto}
+  .vendor-waiting-row .vendor-status-chip.status-ready{color:#b45309;border-color:rgba(245,158,11,.22);background:rgba(245,158,11,.07)}
   @media(max-width:850px){
     .vendor-portal{padding:22px 16px 34px}
     .vendor-hero{padding-top:38px}
