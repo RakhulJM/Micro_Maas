@@ -1,27 +1,8 @@
 ---
-import fs from 'node:fs';
-import path from 'node:path';
-
 const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
-
-const readCampusJson = (relativePath, fallback) => {
-  try {
-    return JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), relativePath), 'utf8')
-    );
-  } catch {
-    return fallback;
-  }
-};
-
-const initialVendorData = {
-  catalogue: readCampusJson('maps/campus_vendors.json', { version: 1, vendors: [] }),
-  orders: readCampusJson('maps/campus_orders.json', { version: 1, orders: [] })
-};
 ---
 
 <main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId}>
-  <script type="application/json" id="vendorPortalInitialData" set:html={JSON.stringify(initialVendorData)}></script>
   <div class="vendor-portal-glow vendor-portal-glow-a" aria-hidden="true"></div>
   <div class="vendor-portal-glow vendor-portal-glow-b" aria-hidden="true"></div>
 
@@ -188,23 +169,19 @@ const initialVendorData = {
     };
 
     const loadData = async () => {
-      const initial = JSON.parse(
-        document.getElementById('vendorPortalInitialData')?.textContent || '{}'
-      );
+      const [catalogueResponse, ordersResponse] = await Promise.all([
+        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
+        fetch('/maps/campus_orders.json', { cache: 'no-store' })
+      ]);
 
-      let catalogue = initial?.catalogue;
-      let orders = initial?.orders;
-
-      try {
-        const response = await fetch('/__campusmaas/vendor-data', { cache: 'no-store' });
-        if (response.ok) {
-          const payload = await response.json();
-          catalogue = payload?.catalogue;
-          orders = payload?.orders;
-        }
-      } catch {
-        // Keep the server-rendered snapshot as the reliable fallback.
+      if (!catalogueResponse.ok || !ordersResponse.ok) {
+        throw new Error('Vendor data could not be loaded.');
       }
+
+      const [catalogue, orders] = await Promise.all([
+        catalogueResponse.json(),
+        ordersResponse.json()
+      ]);
 
       if (
         catalogue?.version !== 1 ||
