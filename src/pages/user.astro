@@ -1518,7 +1518,7 @@ const start = async () => {
               }
 
               orders = await (
-                await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+                await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' })
               ).json();
 
               renderOrders();
@@ -1738,7 +1738,7 @@ const start = async () => {
         if (!response.ok) throw new Error('Food order could not be placed.');
 
         orders = await (
-          await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+          await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' })
         ).json();
 
         closeFoodPopup();
@@ -2081,7 +2081,7 @@ const start = async () => {
         }
 
         orders = await (
-          await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+          await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' })
         ).json();
 
         closePrintPopup();
@@ -2227,7 +2227,7 @@ const start = async () => {
     try {
       const [vendorResponse, orderResponse] = await Promise.all([
         fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-        fetch('/maps/campus_orders.json', { cache: 'no-store' })
+        fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' })
       ]);
 
       if (!vendorResponse.ok || !orderResponse.ok) throw new Error('Services unavailable.');
@@ -2252,7 +2252,7 @@ const start = async () => {
     userOrderSyncBusy = true;
 
     try {
-      const response = await fetch('/maps/campus_orders.json', { cache: 'no-store' });
+      const response = await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' });
       if (!response.ok) return;
 
       const nextOrders = await response.json();
