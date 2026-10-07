@@ -31,8 +31,11 @@ const renderCatalogue=()=>{
     const opts=[...(v.options||[])].sort((a,b)=>Number(a.order)-Number(b.order));
     const basePath=v.id === 'food' ? '/vendor/food' : v.id === 'printer' ? '/vendor/print' : '/vendor';
     const optionMarkup=opts.map((o,i)=>{
+      const optionPath=v.id === 'printer'
+        ? String(o.id).replace(/^printer-/, '')
+        : String(o.id);
       const optionLink=v.id === 'food' || v.id === 'printer'
-        ? `<a class="vendor-option-open-link" href="${basePath}/${encodeURIComponent(o.id)}" aria-label="Open ${esc(o.name)} dashboard" title="Open service dashboard">↗</a>`
+        ? `<a class="vendor-option-open-link" href="${basePath}/${encodeURIComponent(optionPath)}" aria-label="Open ${esc(o.name)} dashboard" title="Open service dashboard">↗</a>`
         : '<span class="vendor-option-open-spacer" aria-hidden="true"></span>';
       return `<div class="vendor-option-item ${o.enabled===false?'is-disabled':''}"><span>${String(i+1).padStart(2,'0')}</span><strong>${esc(o.name)}</strong><small>${o.service_minutes||0} min · ₹${Number(o.price||0).toFixed(2)}</small>${optionLink}</div>`;
     }).join('');
