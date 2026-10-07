@@ -16,16 +16,17 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       </div>
     </div>
     <div class="vendor-header-actions">
+      <button class="vendor-print-queue-button" id="vendorPrintQueueButton" type="button" hidden aria-label="Open Order's" title="Order's">
+        <span class="vendor-print-queue-icon" aria-hidden="true">🖨</span>
+        <span>Order's</span>
+      </button>
       <div class="vendor-header-service-control" id="vendorHeaderServiceControl" hidden>
-        <button class="vendor-header-status-toggle" id="vendorHeaderStatusToggle" type="button" aria-expanded="false" aria-haspopup="true">
-          <span class="vendor-header-status-dot" id="vendorHeaderStatusDot"></span>
-          <span class="vendor-header-status-copy">
-            <strong id="vendorHeaderStatusLabel">ONLINE</strong>
-            <small id="vendorHeaderStatusMessage">Accepting new orders</small>
-          </span>
-          <span class="vendor-header-status-chevron" aria-hidden="true">⌄</span>
-        </button>
-        <div class="vendor-header-status-menu" id="vendorHeaderStatusMenu" hidden></div>
+        <div class="vendor-header-status-toggle" id="vendorHeaderStatusToggle" role="group" aria-label="Service status">
+          <button type="button" class="vendor-header-status-choice status-online" data-status="online">Online</button>
+          <button type="button" class="vendor-header-status-choice status-busy" data-status="busy">Busy</button>
+          <button type="button" class="vendor-header-status-choice status-offline" data-status="offline">Offline</button>
+        </div>
+        <span class="vendor-header-status-message" id="vendorHeaderStatusMessage">Accepting new orders</span>
       </div>
       <div class="vendor-header-status">
         <span class="vendor-live-dot"></span>
@@ -39,6 +40,27 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     <h1 id="portalTitle">Vendors</h1>
     <p id="portalSubtitle">Campus service dashboards</p>
   </section>
+
+  <aside class="vendor-print-queue" id="vendorPrintQueue" hidden aria-hidden="true">
+    <div class="vendor-print-queue-backdrop" id="vendorPrintQueueBackdrop"></div>
+    <section class="vendor-print-queue-dialog" role="dialog" aria-modal="true" aria-labelledby="vendorPrintQueueTitle">
+      <header class="vendor-print-queue-header">
+        <div>
+          <span class="vendor-print-queue-kicker">ORDERS</span>
+          <strong id="vendorPrintQueueTitle">Print orders</strong>
+          <small id="vendorPrintQueueSummary">0 active orders</small>
+        </div>
+        <div class="vendor-print-queue-header-actions">
+          <button type="button" class="vendor-print-queue-all" id="vendorPrintQueueAll" disabled>Print all</button>
+          <button type="button" class="vendor-print-queue-close" id="vendorPrintQueueClose" aria-label="Close print queue">×</button>
+        </div>
+      </header>
+      <div class="vendor-print-queue-list" id="vendorPrintQueueList"></div>
+      <footer class="vendor-print-queue-footer">
+        <span id="vendorPrintQueueFooterText">Orders are grouped by customer.</span>
+      </footer>
+    </section>
+  </aside>
 
   <section class="vendor-content" aria-live="polite">
     <div id="portalContent" class="vendor-content-grid">
@@ -62,10 +84,16 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     const back = document.getElementById('vendorBack');
     const headerServiceControl = document.getElementById('vendorHeaderServiceControl');
     const headerStatusToggle = document.getElementById('vendorHeaderStatusToggle');
-    const headerStatusDot = document.getElementById('vendorHeaderStatusDot');
-    const headerStatusLabel = document.getElementById('vendorHeaderStatusLabel');
     const headerStatusMessage = document.getElementById('vendorHeaderStatusMessage');
-    const headerStatusMenu = document.getElementById('vendorHeaderStatusMenu');
+    const headerStatusChoices = Array.from(document.querySelectorAll('.vendor-header-status-choice'));
+    const printQueueButton = document.getElementById('vendorPrintQueueButton');
+    const printQueue = document.getElementById('vendorPrintQueue');
+    const printQueueBackdrop = document.getElementById('vendorPrintQueueBackdrop');
+    const printQueueClose = document.getElementById('vendorPrintQueueClose');
+    const printQueueList = document.getElementById('vendorPrintQueueList');
+    const printQueueSummary = document.getElementById('vendorPrintQueueSummary');
+    const printQueueAll = document.getElementById('vendorPrintQueueAll');
+    const printQueueFooterText = document.getElementById('vendorPrintQueueFooterText');
 
     if (!root || !content) return;
 
@@ -77,6 +105,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       catalogue: { version: 1, vendors: [] },
       orders: { version: 1, orders: [] }
     };
+    let ordersVendorId = '';
+    let ordersVendorName = '';
+    let ordersOptionId = '';
 
     const create = (tag, className, text) => {
       const node = document.createElement(tag);
@@ -151,6 +182,287 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       state.orders = await responses[1].json();
     };
 
+    const vendorOrders = (id, optionId = '', requireFiles = false) =>
+      state.orders.orders.filter((order) => {
+        if (String(order.vendor_id) !== String(id)) return false;
+        if (optionId && String(order.option_id) !== String(optionId)) return false;
+        const status = String(order.status || '').toLowerCase();
+        if (!['placed', 'accepted', 'preparing'].includes(status)) return false;
+        return !requireFiles || (Array.isArray(order.files) && order.files.length);
+      });
+
+    const scopedOrders = (id, requireFiles = false) =>
+      vendorOrders(id, ordersOptionId, requireFiles);
+
+    const orderButtonLevels = ['order-level-idle', 'order-level-green', 'order-level-blue', 'order-level-yellow', 'order-level-orange', 'order-level-red', 'order-level-critical'];
+
+    const updateOrdersButton = () => {
+      if (!ordersVendorId) {
+        printQueueButton.hidden = true;
+        return;
+      }
+
+      const count = scopedOrders(ordersVendorId).length;
+      const level =
+        count <= 0 ? 'order-level-idle' :
+        count === 1 ? 'order-level-green' :
+        count === 2 ? 'order-level-blue' :
+        count === 3 ? 'order-level-yellow' :
+        count === 4 ? 'order-level-orange' :
+        count === 5 ? 'order-level-red' :
+        'order-level-critical';
+
+      printQueueButton.classList.remove(...orderButtonLevels);
+      printQueueButton.classList.add(level);
+      printQueueButton.dataset.orderCount = String(count);
+
+      const label = count === 1 ? '1 active order' : count + ' active orders';
+      printQueueButton.setAttribute('aria-label', "Open Order's · " + label);
+      printQueueButton.setAttribute('title', "Order's · " + label);
+    };
+
+    const printableOrders = () => scopedOrders('printer', true);
+
+    const printGroupKey = (file) =>
+      String(file?.color || 'bw').toLowerCase() + '-' +
+      String(file?.sides || 'single').toLowerCase();
+
+    const printGroupLabel = (key) => {
+      const [color, sides] = String(key).split('-');
+      const colourLabel = color === 'color' ? 'Colour' : 'Black & White';
+      const sidesLabel = sides === 'double' ? 'Both sides' : 'One side';
+      return colourLabel + ' · ' + sidesLabel;
+    };
+
+    const openPrintFile = (order, file, index) => {
+      const url =
+        '/__campusmaas/print-file?order_id=' +
+        encodeURIComponent(order.id) +
+        '&file_index=' +
+        encodeURIComponent(String(index));
+      window.open(url, '_blank', 'noopener,noreferrer');
+    };
+
+    const openPrintBatch = (order, entries, label) => {
+      const indexes = entries.map((entry) => String(entry.index)).join(',');
+      const url =
+        '/__campusmaas/print-batch?order_id=' +
+        encodeURIComponent(order.id) +
+        '&indexes=' +
+        encodeURIComponent(indexes) +
+        '&label=' +
+        encodeURIComponent(label);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    };
+
+    const renderVendorOrderList = () => {
+      const isPrinter = String(ordersVendorId) === 'printer';
+      if (isPrinter) {
+        renderPrintQueue();
+        return;
+      }
+
+      const orders = scopedOrders(ordersVendorId);
+      printQueueList.innerHTML = '';
+      printQueueSummary.textContent =
+        orders.length + (orders.length === 1 ? ' active order' : ' active orders');
+
+      printQueueAll.hidden = true;
+
+      if (!orders.length) {
+        printQueueList.appendChild(
+          create('div', 'vendor-empty-card', 'No active orders for ' + (ordersVendorName || 'this vendor') + '.')
+        );
+        printQueueFooterText.textContent = 'New orders for this vendor will appear here automatically.';
+        return;
+      }
+
+      const grouped = new Map();
+      orders.forEach((order) => {
+        const key = String(order.option_name || 'Service');
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(order);
+      });
+
+      let totalQuantity = 0;
+
+      grouped.forEach((serviceOrders, serviceName) => {
+        const serviceSection = create('section', 'vendor-print-order-section');
+        const serviceHeader = create('header', 'vendor-print-order-header');
+        const heading = create('div');
+
+        append(
+          heading,
+          create('span', 'vendor-print-order-kicker', ordersVendorName.toUpperCase()),
+          create('strong', '', serviceName),
+          create('small', '', serviceOrders.length + (serviceOrders.length === 1 ? ' active order' : ' active orders'))
+        );
+
+        append(serviceHeader, heading);
+        serviceSection.appendChild(serviceHeader);
+
+        const list = create('div', 'vendor-orders-grid');
+        serviceOrders.forEach((order) => {
+          totalQuantity += Number(order.quantity) || 1;
+          const service = option(vendor(ordersVendorId), order.option_id);
+          list.appendChild(
+            makeOrderCard(order, String(service?.status || 'online').toLowerCase())
+          );
+        });
+
+        serviceSection.appendChild(list);
+        printQueueList.appendChild(serviceSection);
+      });
+
+      printQueueFooterText.textContent =
+        orders.length + (orders.length === 1 ? ' order · ' : ' orders · ') +
+        totalQuantity + (totalQuantity === 1 ? ' item' : ' items') +
+        ' waiting.';
+    };
+
+    const renderPrintQueue = () => {
+      const orders = printableOrders();
+      printQueueAll.hidden = false;
+
+      printQueueList.innerHTML = '';
+      printQueueSummary.textContent =
+        orders.length + (orders.length === 1 ? ' active order' : ' active orders');
+
+      const enabled = orders.length > 0;
+      printQueueAll.disabled = !enabled;
+
+      if (!orders.length) {
+        printQueueList.appendChild(
+          create('div', 'vendor-empty-card', 'No active print orders for this service.')
+        );
+        printQueueFooterText.textContent = 'New print orders for this service will appear here automatically.';
+        return;
+      }
+
+      let totalFiles = 0;
+      let totalCopies = 0;
+
+      orders.forEach((order) => {
+        const files = Array.isArray(order.files) ? order.files : [];
+        totalFiles += files.length;
+        totalCopies += files.reduce((sum, file) => sum + (Number(file.copies) || 1), 0);
+
+        const orderCard = create('section', 'vendor-print-order-section');
+        const orderHeader = create('header', 'vendor-print-order-header');
+
+        const orderHeading = create('div');
+        append(
+          orderHeading,
+          create('span', 'vendor-print-order-kicker', '#' + order.id),
+          create('strong', '', String(order.option_name || 'Print service')),
+          create('small', '', String(order.status || 'placed').replace(/^./, (char) => char.toUpperCase()) + ' · ' +
+            new Date(order.created_at).toLocaleString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
+              day: '2-digit',
+              month: 'short'
+            }))
+        );
+
+        const orderPrint = create('button', 'vendor-print-order-all', 'PRINT THIS ORDER');
+        orderPrint.type = 'button';
+
+        const orderEntries = files.map((file, index) => ({ file, index }));
+        orderPrint.addEventListener('click', () => {
+          openPrintBatch(order, orderEntries, 'Order #' + order.id);
+        });
+
+        append(orderHeader, orderHeading, orderPrint);
+        orderCard.appendChild(orderHeader);
+
+        const groups = new Map();
+        orderEntries.forEach((entry) => {
+          const key = printGroupKey(entry.file);
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(entry);
+        });
+
+        const showGroupHeadings = groups.size > 1;
+
+        groups.forEach((entries, key) => {
+          if (showGroupHeadings) {
+            const groupHeader = create('div', 'vendor-print-group-header');
+            append(
+              groupHeader,
+              create('strong', '', printGroupLabel(key))
+            );
+            const groupPrint = create('button', 'vendor-print-group-all', 'PRINT ALL');
+            groupPrint.type = 'button';
+            groupPrint.addEventListener('click', () => {
+              openPrintBatch(order, entries, printGroupLabel(key));
+            });
+            groupHeader.appendChild(groupPrint);
+            orderCard.appendChild(groupHeader);
+          } else {
+            const groupTools = create('div', 'vendor-print-group-tools');
+            const groupPrint = create('button', 'vendor-print-group-all', 'PRINT ALL');
+            groupPrint.type = 'button';
+            groupPrint.addEventListener('click', () => {
+              openPrintBatch(order, entries, printGroupLabel(key));
+            });
+            groupTools.appendChild(groupPrint);
+            orderCard.appendChild(groupTools);
+          }
+
+          entries.forEach(({ file, index }) => {
+            const fileCard = create('article', 'vendor-print-file-card');
+
+            const fileMain = create('div', 'vendor-print-file-main');
+            append(
+              fileMain,
+              create('strong', '', file.name || ('File ' + (index + 1))),
+              create('span', '', (file.type || 'Unknown file') + ' · ' +
+                (Number(file.copies) || 1) + ((Number(file.copies) || 1) === 1 ? ' copy' : ' copies'))
+            );
+
+            const fileSettings = create('div', 'vendor-print-file-settings');
+            append(
+              fileSettings,
+              create('span', '', file.color === 'color' ? 'COLOUR' : 'B&W'),
+              create('span', '', file.sides === 'double' ? 'BOTH SIDES' : 'ONE SIDE')
+            );
+
+            const filePrint = create('button', 'vendor-print-file-button', 'PRINT');
+            filePrint.type = 'button';
+            filePrint.addEventListener('click', () => openPrintFile(order, file, index));
+
+            append(fileCard, fileMain, fileSettings, filePrint);
+            orderCard.appendChild(fileCard);
+          });
+        });
+
+        printQueueList.appendChild(orderCard);
+      });
+
+      printQueueFooterText.textContent =
+        totalFiles + (totalFiles === 1 ? ' file · ' : ' files · ') +
+        totalCopies + (totalCopies === 1 ? ' copy' : ' copies') +
+        ' waiting to print.';
+    };
+
+    const openPrintQueue = () => {
+      const scopeName = ordersOptionId
+        ? String(option(vendor(ordersVendorId), ordersOptionId)?.name || ordersVendorName)
+        : ordersVendorName;
+      printQueue.querySelector('.vendor-print-queue-kicker').textContent = scopeName.toUpperCase() + ' ORDERS';
+      document.getElementById('vendorPrintQueueTitle').textContent = scopeName + ' orders';
+      renderVendorOrderList();
+      printQueue.hidden = false;
+      printQueue.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('vendor-print-queue-open');
+    };
+
+    const closePrintQueue = () => {
+      printQueue.hidden = true;
+      printQueue.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('vendor-print-queue-open');
+    };
+
     const renderRoot = () => {
       const vendors = state.catalogue.vendors
         .filter((item) => item.enabled !== false)
@@ -163,8 +475,11 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       back.href = '/';
       back.setAttribute('aria-label', 'Back to map');
       headerServiceControl.hidden = true;
-      headerStatusMenu.hidden = true;
-      headerStatusToggle.setAttribute('aria-expanded', 'false');
+      printQueueButton.hidden = true;
+      ordersVendorId = '';
+      ordersVendorName = '';
+      ordersOptionId = '';
+      closePrintQueue();
 
       content.className = 'vendor-content-grid vendor-root-grid';
       content.innerHTML = '';
@@ -225,8 +540,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       subtitle.textContent = 'Service list and dedicated dashboards';
       back.href = '/vendor';
       headerServiceControl.hidden = true;
-      headerStatusMenu.hidden = true;
-      headerStatusToggle.setAttribute('aria-expanded', 'false');
+      ordersVendorId = String(item.id);
+      ordersVendorName = String(item.name || 'Vendor');
+      ordersOptionId = '';
+      printQueueButton.hidden = false;
+      updateOrdersButton();
+      closePrintQueue();
 
       content.className = 'vendor-content-grid vendor-category-grid';
       content.innerHTML = '';
@@ -274,48 +593,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         );
         append(card, info);
 
-        const statusControls = create('div', 'vendor-category-status-controls');
-        ['online', 'busy', 'offline'].forEach((value) => {
-          const button = create('button', 'vendor-status-button vendor-category-status-button', value[0].toUpperCase() + value.slice(1));
-          button.type = 'button';
-          button.classList.toggle('is-active', serviceStatus === value);
-          button.addEventListener('click', async (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            button.disabled = true;
-            try {
-              const nextCatalogue = structuredClone(state.catalogue);
-              const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
-              const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
-              if (!target) throw new Error('Service not found.');
-              target.status = value;
-              target.status_message = value === 'offline'
-                ? 'Currently unavailable'
-                : value === 'busy'
-                  ? 'Currently serving customers'
-                  : 'Accepting new orders';
-              const response = await fetch('/__campusmaas/save-vendors', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(nextCatalogue)
-              });
-              if (!response.ok) throw new Error('Status update failed.');
-              state.catalogue = nextCatalogue;
-              render();
-            } catch {
-              button.disabled = false;
-            }
-          });
-          statusControls.appendChild(button);
-        });
-
-        const footer = create('div', 'vendor-service-footer');
-        append(
-          footer,
-          create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
-          create('span', '', 'Open →')
-        );
-        append(card, statusControls, footer);
+        append(card, footer);
         content.appendChild(card);
       });
 
@@ -324,7 +602,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       }
     };
 
-    const makeOrderCard = (order) => {
+    const makeOrderCard = (order, currentServiceStatus = 'online') => {
       const card = create('article', 'vendor-order-card');
       const main = create('div', 'vendor-order-card-main');
 
@@ -355,14 +633,13 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       append(card, main);
 
       const actions = {
-        placed: ['Accept', 'accepted'],
-        accepted: ['Start preparing', 'preparing'],
-        preparing: ['Mark ready', 'ready'],
-        ready: ['Complete', 'completed']
+        placed: ['Accept', 'preparing'],
+        accepted: ['Mark ready', 'ready'],
+        preparing: ['Mark ready', 'ready']
       };
 
       const next = actions[order.status];
-      if (next && serviceStatus !== 'offline') {
+      if (next && currentServiceStatus !== 'offline') {
         const action = create('button', 'vendor-order-action', next[0]);
         action.type = 'button';
         action.dataset.orderId = order.id;
@@ -393,6 +670,22 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       return card;
     };
 
+    const saveServiceStatus = async (item, child, value) => {
+      const nextCatalogue = structuredClone(state.catalogue);
+      const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
+      const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
+      if (!target) throw new Error('Service not found.');
+      target.status = value;
+      target.status_message = value === 'offline' ? 'Currently unavailable' : value === 'busy' ? 'Currently serving customers' : 'Accepting new orders';
+      const response = await fetch('/__campusmaas/save-vendors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextCatalogue)
+      });
+      if (!response.ok) throw new Error('Status update failed.');
+      state.catalogue = nextCatalogue;
+    };
+
     const renderDetail = (item, child) => {
       const allOrders = state.orders.orders.filter(
         (order) =>
@@ -400,8 +693,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
           String(order.option_id) === String(child.id)
       );
 
-      const active = allOrders.filter(
-        (order) => !['completed', 'cancelled'].includes(order.status)
+      const active = allOrders.filter((order) =>
+        ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
       );
 
       const stats = {
@@ -411,7 +704,6 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         ready: active.filter((order) => order.status === 'ready').length
       };
       const serviceStatus = String(child.status || 'online').toLowerCase();
-      const serviceStatusLabel = serviceStatus === 'offline' ? 'Offline' : serviceStatus === 'busy' ? 'Busy' : 'Online';
       const serviceStatusMessage = child.status_message || (
         serviceStatus === 'offline' ? 'Currently unavailable' :
         serviceStatus === 'busy' ? 'Currently serving customers' : 'Accepting new orders'
@@ -422,49 +714,18 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       headerTitle.textContent = child.name;
       subtitle.textContent = 'Vendor dashboard';
       back.href = route(item.id);
+      ordersVendorId = String(item.id);
+      ordersVendorName = String(item.name || 'Vendor');
+      ordersOptionId = String(child.id);
+      printQueueButton.hidden = false;
+      updateOrdersButton();
+      closePrintQueue();
 
       headerServiceControl.hidden = false;
-      headerStatusMenu.hidden = true;
-      headerStatusToggle.setAttribute('aria-expanded', 'false');
-      headerStatusLabel.textContent = serviceStatusLabel.toUpperCase();
       headerStatusMessage.textContent = serviceStatusMessage;
-      headerStatusDot.className = 'vendor-header-status-dot status-' + serviceStatus;
-      headerStatusToggle.classList.remove('status-online', 'status-busy', 'status-offline');
-      headerStatusToggle.classList.add('status-' + serviceStatus);
-      headerStatusMenu.innerHTML = '';
-
-      ['online', 'busy', 'offline'].forEach((value) => {
-        const button = create('button', 'vendor-header-status-option', value[0].toUpperCase() + value.slice(1));
-        button.type = 'button';
-        button.classList.toggle('is-active', serviceStatus === value);
-        button.addEventListener('click', async (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          button.disabled = true;
-          try {
-            const nextCatalogue = structuredClone(state.catalogue);
-            const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
-            const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
-            if (!target) throw new Error('Service not found.');
-            target.status = value;
-            target.status_message = value === 'offline'
-              ? 'Currently unavailable'
-              : value === 'busy'
-                ? 'Currently serving customers'
-                : 'Accepting new orders';
-            const response = await fetch('/__campusmaas/save-vendors', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(nextCatalogue)
-            });
-            if (!response.ok) throw new Error('Status update failed.');
-            state.catalogue = nextCatalogue;
-            render();
-          } catch {
-            button.disabled = false;
-          }
-        });
-        headerStatusMenu.appendChild(button);
+      headerStatusChoices.forEach((button) => {
+        button.classList.toggle('is-active', String(button.dataset.status) === serviceStatus);
+        button.disabled = false;
       });
 
       content.className = 'vendor-content-grid vendor-dashboard-grid';
@@ -496,14 +757,6 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         statGrid.appendChild(box);
       });
 
-      const statusCard = create('div', 'vendor-service-status status-' + serviceStatus);
-      append(
-        statusCard,
-        create('span', 'vendor-service-status-dot'),
-        create('strong', serviceStatusLabel.toUpperCase()),
-        create('small', '', serviceStatusMessage)
-      );
-
       const facts = create('div', 'vendor-service-facts');
       append(
         facts,
@@ -511,32 +764,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         create('span', '', 'Price ' + formatPrice(child.price))
       );
 
-      const statusControls = create('div', 'vendor-service-status-controls');
-      ['online', 'busy', 'offline'].forEach((value) => {
-        const button = create('button', 'vendor-status-button', value[0].toUpperCase() + value.slice(1));
-        button.type = 'button';
-        button.classList.toggle('is-active', serviceStatus === value);
-        button.addEventListener('click', async () => {
-          button.disabled = true;
-          try {
-            const nextCatalogue = structuredClone(state.catalogue);
-            const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
-            const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
-            if (!target) throw new Error('Service not found.');
-            target.status = value;
-            target.status_message = value === 'offline' ? 'Currently unavailable' : value === 'busy' ? 'Currently serving customers' : 'Accepting new orders';
-            const response = await fetch('/__campusmaas/save-vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nextCatalogue) });
-            if (!response.ok) throw new Error('Status update failed.');
-            state.catalogue = nextCatalogue;
-            render();
-          } catch {
-            button.disabled = false;
-          }
-        });
-        statusControls.appendChild(button);
-      });
-
-      append(overview, dashboardTitle, statusCard, statusControls, statGrid, facts);
+      append(overview, dashboardTitle, statGrid, facts);
       content.appendChild(overview);
 
       const live = create('section', 'vendor-dashboard-orders');
@@ -546,12 +774,51 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       );
 
       const ordersGrid = create('div', 'vendor-orders-grid');
-      active.forEach((order) => ordersGrid.appendChild(makeOrderCard(order)));
+      active.forEach((order) => ordersGrid.appendChild(makeOrderCard(order, serviceStatus)));
       if (!active.length) {
         ordersGrid.appendChild(create('div', 'vendor-empty-card', 'No active orders for this service.'));
       }
       live.appendChild(ordersGrid);
       content.appendChild(live);
+
+      const rightColumn = create('div', 'vendor-dashboard-side-column');
+
+      const waiting = create('section', 'vendor-history-card vendor-waiting-card');
+      const readyOrders = allOrders.filter(
+        (order) => String(order.status || '').toLowerCase() === 'ready'
+      );
+
+      append(
+        waiting,
+        makeHeader('WAITING', 'Waiting for confirmation', String(readyOrders.length))
+      );
+
+      const waitingList = create('div', 'vendor-history-list');
+      readyOrders.forEach((order) => {
+        const row = create('div', 'vendor-history-row vendor-waiting-row');
+        append(
+          row,
+          create('span', '', '#' + order.id),
+          create('span', '', order.vendor_name + ' · ' + order.option_name),
+          create('span', '', 'Ready · ' + new Date(order.created_at).toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit'
+          }))
+        );
+        const chip = create('span', 'vendor-status-chip status-ready', 'Waiting');
+        chip.prepend(create('i'));
+        row.appendChild(chip);
+        waitingList.appendChild(row);
+      });
+
+      if (!readyOrders.length) {
+        waitingList.appendChild(
+          create('div', 'vendor-empty-card', 'No orders are waiting for user confirmation.')
+        );
+      }
+
+      waiting.appendChild(waitingList);
+      rightColumn.appendChild(waiting);
 
       const history = create('section', 'vendor-history-card');
       const completed = allOrders.filter((order) => order.status === 'completed').slice(0, 8);
@@ -580,22 +847,26 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       }
 
       history.appendChild(historyList);
-      content.appendChild(history);
+      rightColumn.appendChild(history);
+      content.appendChild(rightColumn);
     };
 
-    headerStatusToggle.addEventListener('click', (event) => {
-      event.preventDefault();
-      if (headerServiceControl.hidden) return;
-      const open = headerStatusMenu.hidden;
-      headerStatusMenu.hidden = !open;
-      headerStatusToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-
-    document.addEventListener('click', (event) => {
-      if (!headerServiceControl.contains(event.target)) {
-        headerStatusMenu.hidden = true;
-        headerStatusToggle.setAttribute('aria-expanded', 'false');
-      }
+    headerStatusChoices.forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+        if (headerServiceControl.hidden || button.classList.contains('is-active')) return;
+        const value = String(button.dataset.status || '').toLowerCase();
+        const item = vendor(vendorId);
+        const child = option(item, optionId);
+        if (!item || !child) return;
+        headerStatusChoices.forEach((choice) => { choice.disabled = true; });
+        try {
+          await saveServiceStatus(item, child, value);
+          render();
+        } catch {
+          headerStatusChoices.forEach((choice) => { choice.disabled = false; });
+        }
+      });
     });
 
     const render = () => {
@@ -631,6 +902,27 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
       renderDetail(item, child);
     };
+
+    printQueueButton?.addEventListener('click', openPrintQueue);
+    printQueueClose?.addEventListener('click', closePrintQueue);
+    printQueueBackdrop?.addEventListener('click', closePrintQueue);
+
+    const printAllOrders = () => {
+      const orders = printableOrders();
+      if (!orders.length) return;
+      orders.forEach((order) => {
+        const entries = (order.files || []).map((file, index) => ({ file, index }));
+        openPrintBatch(order, entries, 'All pending print jobs');
+      });
+    };
+
+    printQueueAll?.addEventListener('click', printAllOrders);
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && printQueue && !printQueue.hidden) {
+        closePrintQueue();
+      }
+    });
 
     const start = async () => {
       try {
@@ -932,34 +1224,84 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-service-status.status-offline{border-color:rgba(239,68,68,.18)}.vendor-service-status.status-offline .vendor-service-status-dot{background:#ef4444;box-shadow:0 0 10px rgba(239,68,68,.4)}
   .vendor-service-status.status-offline strong{color:#ff9a9a}
   .vendor-service-status-controls{display:flex;gap:6px;margin:8px 0 10px}.vendor-status-button{border:1px solid rgba(83,168,255,.12);border-radius:7px;background:#0d2035;color:#91aac1;padding:6px 9px;font-size:8px;cursor:pointer}.vendor-status-button.is-active{background:#1687ff;border-color:#1687ff;color:#fff}
+  .vendor-print-queue-open{overflow:hidden}
+  .vendor-print-queue{position:fixed;inset:0;z-index:6200;display:grid;place-items:center;padding:20px}
+  .vendor-print-queue[hidden]{display:none}
+  .vendor-print-queue-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.34);backdrop-filter:blur(4px)}
+  .vendor-print-queue-dialog{position:relative;z-index:1;width:min(960px,calc(100vw - 30px));max-height:min(820px,calc(100dvh - 30px));overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border:1px solid #dbe3ea;border-radius:16px;background:#fff;color:#111827;box-shadow:0 20px 60px rgba(15,23,42,.18)}
+  .vendor-print-queue-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid #e5e7eb;background:#fff}
+  .vendor-print-queue-kicker{display:block;color:#2563eb;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+  .vendor-print-queue-header strong{display:block;margin-top:4px;color:#111827;font:600 22px/1.15 'Space Grotesk',sans-serif}
+  .vendor-print-queue-header small{display:block;margin-top:5px;color:#6b7280;font-size:11px}
+  .vendor-print-queue-header-actions{display:flex;align-items:center;gap:8px}
+  .vendor-print-queue-all,.vendor-print-order-all,.vendor-print-group-all,.vendor-print-file-button{border:1px solid #2563eb;border-radius:8px;background:#fff;color:#1d4ed8;font-size:11px;font-weight:700;cursor:pointer}
+  .vendor-print-queue-all,.vendor-print-group-all{background:#2563eb;color:#fff}
+  .vendor-print-queue-all{padding:9px 13px}
+  .vendor-print-queue-all:hover,.vendor-print-group-all:hover{background:#1d4ed8}
+  .vendor-print-queue-all:disabled{opacity:.5;cursor:not-allowed}
+  .vendor-print-queue-close{display:grid;place-items:center;width:34px;height:34px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;cursor:pointer;font-size:18px}
+  .vendor-print-queue-close:hover{background:#f3f4f6}
+  .vendor-print-queue-list{min-height:0;overflow:auto;padding:16px;display:grid;gap:12px;background:#f8fafc}
+  .vendor-print-order-section{padding:14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff}
+  .vendor-print-order-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid #edf0f2}
+  .vendor-print-order-kicker{display:block;color:#2563eb;font-size:10px;font-weight:800;letter-spacing:.04em}
+  .vendor-print-order-header strong{display:block;margin-top:4px;color:#111827;font:600 15px/1.15 'Space Grotesk',sans-serif}
+  .vendor-print-order-header small{display:block;margin-top:4px;color:#6b7280;font-size:10px}
+  .vendor-print-order-all{padding:8px 11px}
+  .vendor-print-order-all:hover,.vendor-print-group-all:hover,.vendor-print-file-button:hover{background:#eff6ff}
+  .vendor-print-group-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:8px 2px}
+  .vendor-print-group-header strong{color:#111827;font-size:11px;font-weight:700}
+  .vendor-print-group-all{padding:7px 10px}
+  .vendor-print-group-tools{display:flex;justify-content:flex-end;margin-top:10px}
+  .vendor-print-file-card{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:11px 12px;margin-top:7px;border:1px solid #e5e7eb;border-radius:9px;background:#fff}
+  .vendor-print-file-main{min-width:0}
+  .vendor-print-file-main strong{display:block;overflow:hidden;color:#111827;font-size:13px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}
+  .vendor-print-file-main span{display:block;margin-top:4px;color:#6b7280;font-size:10px}
+  .vendor-print-file-settings{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .vendor-print-file-settings span{padding:5px 7px;border:1px solid #dbe3ea;border-radius:6px;background:#f8fafc;color:#374151;font-size:9px;font-weight:700;letter-spacing:.02em}
+  .vendor-print-file-button{padding:8px 11px;min-width:58px}
+  .vendor-print-queue-footer{display:flex;align-items:center;justify-content:flex-start;gap:12px;padding:11px 16px;border-top:1px solid #e5e7eb;background:#fff}
+  .vendor-print-queue-footer>span{color:#6b7280;font-size:10px}
+  .vendor-print-queue-button{
+    display:inline-flex;align-items:center;gap:7px;height:54px;padding:0 15px;
+    border:1px solid #d1d5db;border-radius:14px;background:#fff;color:#111827;
+    font:600 11px/1 'Space Grotesk',sans-serif;letter-spacing:.02em;cursor:pointer;
+    box-shadow:0 8px 22px rgba(15,23,42,.08)
+  }
+  .vendor-print-queue-button:hover{border-color:#2563eb;color:#1d4ed8;background:#f8fbff}
+  .vendor-print-queue-icon{font-size:14px;line-height:1;color:#2563eb}
+  .vendor-print-queue-button.order-level-idle{background:#fff;color:#111827;border-color:#d1d5db}
+  .vendor-print-queue-button.order-level-green{background:#f0fdf4;color:#15803d;border-color:#86efac}
+  .vendor-print-queue-button.order-level-blue{background:#eff6ff;color:#1d4ed8;border-color:#93c5fd}
+  .vendor-print-queue-button.order-level-yellow{background:#fefce8;color:#a16207;border-color:#fde047}
+  .vendor-print-queue-button.order-level-orange{background:#fff7ed;color:#c2410c;border-color:#fdba74}
+  .vendor-print-queue-button.order-level-red{background:#fef2f2;color:#b91c1c;border-color:#fca5a5}
+  .vendor-print-queue-button.order-level-critical{background:#dc2626;color:#fff;border-color:#b91c1c;animation:vendorOrdersCriticalBlink .42s steps(2,end) infinite}
+  .vendor-print-queue-button.order-level-green:hover{background:#dcfce7;color:#166534;border-color:#4ade80}
+  .vendor-print-queue-button.order-level-blue:hover{background:#dbeafe;color:#1e40af;border-color:#60a5fa}
+  .vendor-print-queue-button.order-level-yellow:hover{background:#fef9c3;color:#854d0e;border-color:#facc15}
+  .vendor-print-queue-button.order-level-orange:hover{background:#ffedd5;color:#9a3412;border-color:#fb923c}
+  .vendor-print-queue-button.order-level-red:hover{background:#fee2e2;color:#991b1b;border-color:#f87171}
+  .vendor-print-queue-button.order-level-critical:hover{background:#ef4444;color:#fff;border-color:#dc2626}
+  @keyframes vendorOrdersCriticalBlink{
+    0%,49%{opacity:1;filter:none}
+    50%,100%{opacity:.34;filter:brightness(.92)}
+  }
+
   .vendor-header-actions{display:flex;align-items:center;gap:9px}
-  .vendor-header-service-control{position:relative;z-index:20}
-  .vendor-header-status-toggle{
-    display:flex;align-items:center;gap:9px;min-width:188px;min-height:54px;padding:8px 11px;
-    border:1px solid rgba(83,168,255,.22);border-radius:14px;background:rgba(8,27,45,.96);
-    color:#eaf6ff;cursor:pointer;box-shadow:0 12px 30px rgba(7,28,48,.20),0 1px 0 rgba(255,255,255,.07) inset;
-  }
-  .vendor-header-status-toggle:hover{border-color:rgba(83,168,255,.48);transform:translateY(-1px)}
-  .vendor-header-status-dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto;background:#22c55e;box-shadow:0 0 14px rgba(34,197,94,.55)}
-  .vendor-header-status-dot.status-busy{background:#f59e0b;box-shadow:0 0 14px rgba(245,158,11,.55)}
-  .vendor-header-status-dot.status-offline{background:#ef4444;box-shadow:0 0 14px rgba(239,68,68,.55)}
-  .vendor-header-status-copy{display:flex;flex-direction:column;align-items:flex-start;min-width:0;text-align:left}
-  .vendor-header-status-copy strong{font:800 10px/1 'Space Grotesk',sans-serif;letter-spacing:.12em;color:#eff8ff}
-  .vendor-header-status-copy small{margin-top:4px;color:#7791a8;font-size:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:118px}
-  .vendor-header-status-toggle.status-busy{border-color:rgba(245,158,11,.28)}
-  .vendor-header-status-toggle.status-offline{border-color:rgba(239,68,68,.28)}
-  .vendor-header-status-chevron{margin-left:auto;color:#74bdf1;font-size:16px;line-height:1;transform:translateY(-1px)}
-  .vendor-header-status-menu{
-    position:absolute;right:0;top:calc(100% + 7px);width:188px;padding:6px;
-    border:1px solid rgba(83,168,255,.22);border-radius:13px;background:#0a2035;
-    box-shadow:0 20px 45px rgba(3,16,28,.38);backdrop-filter:blur(16px)
-  }
-  .vendor-header-status-option{
-    display:flex;width:100%;align-items:center;justify-content:space-between;padding:10px 11px;
-    border:0;border-radius:8px;background:transparent;color:#9db4c7;font-size:9px;font-weight:700;cursor:pointer;text-align:left
-  }
-  .vendor-header-status-option:hover{background:rgba(83,168,255,.09);color:#e7f5ff}
-  .vendor-header-status-option.is-active{background:rgba(22,135,255,.14);color:#6fc5ff}
+  .vendor-header-service-control{display:flex;align-items:center;gap:8px;position:relative;z-index:20}
+  .vendor-header-status-toggle{display:flex;align-items:center;padding:3px;border:1px solid #d7dee7;border-radius:14px;background:#fff;box-shadow:0 8px 22px rgba(15,23,42,.08)}
+  .vendor-header-status-choice{min-width:70px;height:42px;padding:0 11px;border:0;border-radius:10px;background:transparent;color:#64748b;font:700 9px/1 'Space Grotesk',sans-serif;letter-spacing:.05em;cursor:pointer;transition:background .15s ease,color .15s ease}
+  .vendor-header-status-choice:hover{background:#f1f5f9;color:#0f172a}
+  .vendor-header-status-choice.is-active.status-online{background:#dcfce7;color:#15803d;box-shadow:inset 0 0 0 1px #86efac}
+  .vendor-header-status-choice.is-active.status-busy{background:#fef3c7;color:#b45309;box-shadow:inset 0 0 0 1px #fcd34d}
+  .vendor-header-status-choice.is-active.status-offline{background:#fee2e2;color:#b91c1c;box-shadow:inset 0 0 0 1px #fca5a5}
+  .vendor-header-status-choice:disabled{opacity:.55;cursor:wait}
+  .vendor-header-status-message{max-width:130px;color:#64748b;font-size:7px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vendor-dashboard-side-column{display:grid;gap:12px;min-width:0}
+  .vendor-waiting-card{border-color:rgba(245,158,11,.16)}
+  .vendor-waiting-row{grid-template-columns:1fr 1.2fr auto auto}
+  .vendor-waiting-row .vendor-status-chip.status-ready{color:#b45309;border-color:rgba(245,158,11,.22);background:rgba(245,158,11,.07)}
   @media(max-width:850px){
     .vendor-portal{padding:22px 16px 34px}
     .vendor-hero{padding-top:38px}
@@ -971,12 +1313,23 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   @media(max-width:560px){
     .vendor-portal-header{align-items:flex-start}
     .vendor-header-actions{align-items:flex-start}
-    .vendor-header-service-control{max-width:54px}
-    .vendor-header-status-toggle{min-width:54px;width:54px;height:54px;padding:0;justify-content:center}
-    .vendor-header-status-copy,.vendor-header-status-chevron{display:none}
+    .vendor-print-queue-button{height:54px;padding:0 12px;font-size:10px}
+    .vendor-print-queue-button .vendor-print-queue-icon{font-size:13px}
+    .vendor-header-service-control{max-width:100%;gap:4px}
+    .vendor-header-status-toggle{padding:2px;border-radius:11px}
+    .vendor-header-status-choice{min-width:54px;height:40px;padding:0 8px;font-size:8px}
+    .vendor-header-status-message{display:none}
     .vendor-header-status{display:none}
-    .vendor-header-status-menu{right:0;width:170px}
-    .vendor-header-status{padding:6px 8px}
+    .vendor-print-queue{padding:10px}
+    .vendor-print-queue-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:14px}
+    .vendor-print-queue-header{padding:14px}
+    .vendor-print-queue-header strong{font-size:18px}
+    .vendor-print-queue-header-actions .vendor-print-queue-all{padding:8px 10px}
+    .vendor-print-order-header{align-items:flex-start}
+    .vendor-print-file-card{grid-template-columns:minmax(0,1fr) auto;gap:8px}
+    .vendor-print-file-settings{grid-column:1/-1;justify-content:flex-start}
+    .vendor-print-file-button{grid-column:2;grid-row:1;align-self:center}
+    .vendor-print-queue-footer{padding:9px 12px}
     .vendor-hero{padding:32px 0 21px}
     .vendor-large-card{min-height:245px;padding:20px}
     .vendor-large-icon{margin-top:30px}

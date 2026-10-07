@@ -1,0 +1,157 @@
+---
+---
+
+<aside class="print-order-popup" id="printOrderPopup" hidden aria-hidden="true">
+  <div class="print-order-popup-backdrop" id="printOrderPopupBackdrop"></div>
+
+  <section class="print-order-dialog" role="dialog" aria-modal="true" aria-labelledby="printPopupService">
+    <header class="print-order-header">
+      <div>
+        <span class="print-popup-kicker">PRINT ORDER</span>
+        <strong id="printPopupVendor">Printer</strong>
+        <h2 id="printPopupService">Select a service</h2>
+        <div id="printPopupStatus" class="print-popup-status print-popup-status-online">
+          <i aria-hidden="true"></i><span>Online</span><small>Accepting new orders</small>
+        </div>
+      </div>
+      <button type="button" class="print-order-close" id="printOrderPopupClose" aria-label="Close print order">×</button>
+    </header>
+
+    <div class="print-order-body">
+      <div class="print-drop-zone" id="printDropZone" tabindex="0" role="button" aria-label="Add files for printing">
+        <div class="print-drop-icon" aria-hidden="true">↥</div>
+        <strong>DROP FILES HERE</strong>
+        <span>or</span>
+        <button type="button" class="print-select-button" id="printSelectFiles">SELECT FILE</button>
+        <small>All file types supported · multiple files allowed</small>
+        <input id="printFileInput" type="file" multiple hidden />
+      </div>
+
+      <section class="print-files-section" aria-label="Selected print files">
+        <div class="print-files-heading">
+          <div>
+            <span>FILES</span>
+            <strong id="printFileSummary">0 files · 0 copies</strong>
+          </div>
+          <div class="print-files-actions">
+            <label class="print-select-all">
+              <input id="printSelectAll" type="checkbox" />
+              <span>Select all</span>
+            </label>
+            <button type="button" class="print-clear-files" id="printClearFiles" hidden>CLEAR ALL</button>
+          </div>
+        </div>
+        <div id="printFileList" class="print-file-list">
+          <div class="print-files-empty">Select or drop files to add them to your order.</div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="print-order-footer">
+      <div>
+        <span>Service</span>
+        <strong id="printPopupPrepSummary">5 min service</strong>
+      </div>
+      <button type="button" class="print-place-order" id="printPopupPlaceOrder" disabled>ORDER PRINT</button>
+    </footer>
+
+    <div class="print-order-error" id="printPopupError" role="alert" hidden></div>
+  </section>
+</aside>
+
+<style is:global>
+.print-order-popup{position:fixed;inset:0;z-index:5100;display:grid;place-items:center;padding:18px}
+.print-order-popup[hidden]{display:none}
+.print-order-popup-backdrop{position:absolute;inset:0;background:rgba(2,8,14,.74);backdrop-filter:blur(8px)}
+.print-order-dialog{position:relative;z-index:1;width:min(820px,calc(100vw - 30px));max-height:min(720px,calc(100dvh - 30px));overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;border:1px solid rgba(66,126,170,.24);border-radius:18px;background:linear-gradient(155deg,#f9fcff 0%,#edf5fb 100%);color:#102132;box-shadow:0 32px 96px rgba(0,0,0,.50),0 1px 0 rgba(255,255,255,.82) inset}
+.print-order-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 20px 15px;background:linear-gradient(135deg,#ffffff 0%,#eef6fc 100%);border-bottom:1px solid rgba(31,91,138,.10)}
+.print-order-header>div:first-child{min-width:0}
+.print-popup-kicker{display:block;color:#1687ff;font-size:7px;font-weight:900;letter-spacing:.16em}
+.print-order-header>div>strong{display:block;margin-top:5px;color:#6a7f92;font-size:8px;font-weight:700}
+.print-order-header h2{margin:3px 0 0;color:#0a1b2e;font:650 22px/1 'Space Grotesk',sans-serif;letter-spacing:-.025em}
+.print-order-header .print-popup-status{margin-top:8px}
+.print-order-close{display:grid;place-items:center;flex:0 0 auto;width:32px;height:32px;border:1px solid rgba(26,73,108,.12);border-radius:9px;background:#fff;color:#607589;cursor:pointer;font-size:18px;line-height:1;box-shadow:0 4px 12px rgba(31,73,106,.06)}
+.print-order-close:hover{background:#edf5fc;color:#17324a}
+.print-popup-status{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid rgba(53,210,123,.15);border-radius:999px;background:rgba(53,210,123,.055);color:#159447;font-size:6.5px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.print-popup-status i{width:6px;height:6px;border-radius:50%;background:#35b96d;box-shadow:0 0 7px rgba(53,185,109,.35)}
+.print-popup-status small{color:#6f8497;font-size:6.5px;font-weight:600;letter-spacing:0;text-transform:none}
+.print-popup-status-busy{border-color:rgba(245,158,11,.18);background:rgba(245,158,11,.07);color:#b56a00}
+.print-popup-status-busy i{background:#f59e0b;box-shadow:0 0 7px rgba(245,158,11,.36)}
+.print-popup-status-offline{border-color:rgba(239,68,68,.18);background:rgba(239,68,68,.06);color:#c53d45}
+.print-popup-status-offline i{background:#ef4444;box-shadow:0 0 7px rgba(239,68,68,.36)}
+.print-order-body{min-height:0;overflow:auto;padding:14px 16px 12px}
+.print-drop-zone{display:grid;place-items:center;gap:5px;min-height:154px;padding:18px 24px;border:1.5px dashed rgba(22,135,255,.24);border-radius:14px;background:rgba(255,255,255,.70);text-align:center;cursor:pointer;transition:border-color .16s ease,background .16s ease,box-shadow .16s ease}
+.print-drop-zone:hover,.print-drop-zone.is-dragover{border-color:rgba(22,135,255,.66);background:#f5faff;box-shadow:0 10px 28px rgba(22,135,255,.07)}
+.print-drop-zone.is-disabled{opacity:.55;cursor:not-allowed}
+.print-drop-icon{display:grid;place-items:center;width:42px;height:42px;border:1px solid rgba(22,135,255,.16);border-radius:11px;background:#eaf5fd;color:#1687ff;font-size:20px}
+.print-drop-zone strong{color:#18344d;font-size:10px;letter-spacing:.12em}
+.print-drop-zone>span{color:#7a8da0;font-size:7px}
+.print-drop-zone>small{color:#7d91a4;font-size:6.5px}
+.print-select-button{padding:8px 14px;border:0;border-radius:8px;background:#1687ff;color:#fff;cursor:pointer;font-size:7px;font-weight:900;letter-spacing:.08em;box-shadow:0 7px 17px rgba(22,135,255,.18)}
+.print-select-button:hover{background:#0f78e7}
+.print-select-button:disabled{opacity:.5;cursor:not-allowed}
+.print-files-section{margin-top:12px}
+.print-files-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 7px}
+.print-files-heading>div{min-width:0}
+.print-files-heading span{display:block;color:#1687ff;font-size:6.5px;font-weight:900;letter-spacing:.14em}
+.print-files-heading strong{display:block;margin-top:3px;color:#18344d;font:650 12px/1 'Space Grotesk',sans-serif}
+.print-clear-files{padding:5px 8px;border:1px solid rgba(26,73,108,.10);border-radius:7px;background:#fff;color:#6c8093;font-size:6.5px;font-weight:800;cursor:pointer}
+.print-clear-files:hover{color:#bf414a;background:#fff3f4}
+.print-file-list{display:grid;gap:7px;max-height:220px;overflow:auto;padding:2px}
+.print-files-empty{padding:22px 14px;border:1px dashed rgba(67,115,153,.15);border-radius:11px;color:#7b8ea1;font-size:7.5px;text-align:center;background:rgba(255,255,255,.54)}
+.print-file-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:11px 12px;border:1px solid rgba(67,126,165,.15);border-radius:12px;background:rgba(255,255,255,.96);box-shadow:0 7px 18px rgba(29,73,106,.055)}
+
+.print-files-actions{display:flex;align-items:center;gap:8px}
+.print-select-all{display:inline-flex;align-items:center;gap:5px;color:#5f7488;font-size:6.5px;font-weight:800;cursor:pointer;white-space:nowrap}
+.print-select-all input,.print-file-select input{appearance:none;width:13px;height:13px;margin:0;border:1px solid rgba(42,105,148,.22);border-radius:4px;background:#fff;cursor:pointer;position:relative}
+.print-select-all input:checked,.print-file-select input:checked{border-color:#1687ff;background:#1687ff}
+.print-select-all input:checked::after,.print-file-select input:checked::after{content:'✓';position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:8px;font-weight:900}
+.print-select-all input:indeterminate{border-color:#1687ff;background:#1687ff}
+.print-select-all input:indeterminate::after{content:'';position:absolute;left:3px;right:3px;top:5px;height:2px;border-radius:2px;background:#fff}
+.print-file-row.is-unselected{opacity:.54}
+.print-file-row.is-unselected .print-copy-controls,.print-file-row.is-unselected .print-file-settings{opacity:.52}
+.print-file-select{display:inline-flex;align-items:center;margin-right:2px}
+.print-file-name-wrap{display:flex;align-items:center;gap:7px;min-width:0}
+.print-file-settings{display:flex;align-items:center;gap:5px;justify-self:center}
+.print-file-option{display:inline-flex;align-items:center;gap:4px;padding:4px 6px;border:1px solid rgba(67,126,165,.10);border-radius:7px;background:#f7fafc;color:#687f92;font-size:6.5px;white-space:nowrap;cursor:pointer}
+.print-file-option:has(input:checked){border-color:rgba(22,135,255,.20);background:#edf6fd;color:#1687ff}
+.print-file-option input{display:none}
+.print-file-row .print-copy-controls{justify-self:end}
+.print-file-option-group{display:flex;align-items:center;gap:4px}
+.print-file-option-label{color:#8899a8;font-size:6px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+
+.print-file-main{min-width:0}
+.print-file-name{display:flex;align-items:center;gap:8px;overflow:hidden;color:#17324a;font:600 10px/1.2 'Space Grotesk',sans-serif;text-overflow:ellipsis;white-space:nowrap}
+.print-file-name::before{content:'▧';display:grid;place-items:center;flex:0 0 auto;width:24px;height:24px;border:1px solid rgba(22,135,255,.13);border-radius:7px;background:#eef7fd;color:#1687ff;font-size:11px}
+.print-file-meta{margin:4px 0 0 32px;color:#74899b;font-size:6.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.print-copy-controls{display:flex;align-items:center;gap:3px;padding:3px;border:1px solid rgba(67,126,165,.11);border-radius:8px;background:#f4f8fc}
+.print-copy-button{display:grid;place-items:center;width:25px;height:25px;border:0;border-radius:6px;background:#e7f1f8;color:#1687ff;cursor:pointer;font-size:13px;line-height:1}
+.print-copy-button:hover{background:#d9ebf8}
+.print-copy-count{display:grid;place-items:center;min-width:24px;color:#17324b;font-size:8px;font-weight:900}
+.print-remove-file{display:grid;place-items:center;width:26px;height:26px;border:1px solid rgba(194,59,69,.10);border-radius:7px;background:#fff6f6;color:#bd4a52;cursor:pointer;font-size:13px;line-height:1}
+.print-remove-file:hover{background:#ffe7e9;color:#a93840}
+.print-order-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 20px 15px;border-top:1px solid rgba(31,91,138,.10);background:#f5f9fd}
+.print-order-footer>div span{display:block;color:#73879a;font-size:6.5px;text-transform:uppercase;letter-spacing:.1em}
+.print-order-footer>div strong{display:block;margin-top:3px;color:#0b1e31;font:650 14px/1 'Space Grotesk',sans-serif}
+.print-place-order{min-width:165px;padding:10px 15px;border:0;border-radius:9px;background:#1687ff;color:#fff;cursor:pointer;font-size:7px;font-weight:900;letter-spacing:.08em;box-shadow:0 8px 20px rgba(22,135,255,.20)}
+.print-place-order:hover{background:#0f78e7}
+.print-place-order:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+.print-order-error{padding:8px 20px 11px;color:#c23b45;background:#fff3f4;border-top:1px solid rgba(194,59,69,.11);font-size:7px}
+@media(max-width:560px){
+  .print-order-popup{padding:10px}
+  .print-order-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:16px}
+  .print-order-header{padding:14px}
+  .print-order-body{padding:10px}
+  .print-drop-zone{min-height:150px;padding:16px}
+  .print-file-row{grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:10px}
+  .print-remove-file{grid-column:2;grid-row:1;align-self:start}
+  .print-copy-controls{grid-column:1/-1;justify-self:end}
+  .print-order-footer{padding:11px 14px 12px}
+  .print-place-order{min-width:126px}
+  .print-files-actions{gap:6px}
+  .print-file-row{grid-template-columns:minmax(0,1fr) auto;gap:7px}
+  .print-file-settings{grid-column:1/-1;justify-self:start;flex-wrap:wrap}
+  .print-file-row .print-copy-controls{grid-column:1;justify-self:start}
+  .print-remove-file{grid-column:2;grid-row:2;align-self:center}
+}
+</style>
