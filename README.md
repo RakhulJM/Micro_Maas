@@ -53,3 +53,13 @@ Campus MaaS map with:
 - Gates
 - Access rules
 - User routing
+
+## /user
+
+The `/user` page is the end-user campus map. It provides:
+
+- Point A and Point B selection
+- Walking route calculation on the active pedestrian network
+- Campus gate access-rule checking
+- Male/Female selection for gender-specific access rules
+- No developer or map-editing controls
