@@ -16,6 +16,10 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       </div>
     </div>
     <div class="vendor-header-actions">
+      <button class="vendor-print-queue-button" id="vendorPrintQueueButton" type="button" hidden aria-label="Open print queue" title="Print queue">
+        <span class="vendor-print-queue-icon" aria-hidden="true">🖨</span>
+        <span>PRINT QUEUE</span>
+      </button>
       <div class="vendor-header-service-control" id="vendorHeaderServiceControl" hidden>
         <button class="vendor-header-status-toggle" id="vendorHeaderStatusToggle" type="button" aria-expanded="false" aria-haspopup="true">
           <span class="vendor-header-status-dot" id="vendorHeaderStatusDot"></span>
@@ -39,6 +43,28 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     <h1 id="portalTitle">Vendors</h1>
     <p id="portalSubtitle">Campus service dashboards</p>
   </section>
+
+  <aside class="vendor-print-queue" id="vendorPrintQueue" hidden aria-hidden="true">
+    <div class="vendor-print-queue-backdrop" id="vendorPrintQueueBackdrop"></div>
+    <section class="vendor-print-queue-dialog" role="dialog" aria-modal="true" aria-labelledby="vendorPrintQueueTitle">
+      <header class="vendor-print-queue-header">
+        <div>
+          <span class="vendor-print-queue-kicker">PRINTER WORKSPACE</span>
+          <strong id="vendorPrintQueueTitle">Print queue</strong>
+          <small id="vendorPrintQueueSummary">0 active orders</small>
+        </div>
+        <div class="vendor-print-queue-header-actions">
+          <button type="button" class="vendor-print-queue-all" id="vendorPrintQueueAll" disabled>PRINT ALL</button>
+          <button type="button" class="vendor-print-queue-close" id="vendorPrintQueueClose" aria-label="Close print queue">×</button>
+        </div>
+      </header>
+      <div class="vendor-print-queue-list" id="vendorPrintQueueList"></div>
+      <footer class="vendor-print-queue-footer">
+        <span id="vendorPrintQueueFooterText">Print jobs are grouped by customer order.</span>
+        <button type="button" class="vendor-print-queue-all vendor-print-queue-all-footer" id="vendorPrintQueueAllFooter" disabled>PRINT ALL</button>
+      </footer>
+    </section>
+  </aside>
 
   <section class="vendor-content" aria-live="polite">
     <div id="portalContent" class="vendor-content-grid">
@@ -66,6 +92,15 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     const headerStatusLabel = document.getElementById('vendorHeaderStatusLabel');
     const headerStatusMessage = document.getElementById('vendorHeaderStatusMessage');
     const headerStatusMenu = document.getElementById('vendorHeaderStatusMenu');
+    const printQueueButton = document.getElementById('vendorPrintQueueButton');
+    const printQueue = document.getElementById('vendorPrintQueue');
+    const printQueueBackdrop = document.getElementById('vendorPrintQueueBackdrop');
+    const printQueueClose = document.getElementById('vendorPrintQueueClose');
+    const printQueueList = document.getElementById('vendorPrintQueueList');
+    const printQueueSummary = document.getElementById('vendorPrintQueueSummary');
+    const printQueueAll = document.getElementById('vendorPrintQueueAll');
+    const printQueueAllFooter = document.getElementById('vendorPrintQueueAllFooter');
+    const printQueueFooterText = document.getElementById('vendorPrintQueueFooterText');
 
     if (!root || !content) return;
 
@@ -151,6 +186,184 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       state.orders = await responses[1].json();
     };
 
+    const printableOrders = () =>
+      state.orders.orders.filter((order) =>
+        String(order.vendor_id) === 'printer' &&
+        !['completed', 'cancelled'].includes(String(order.status || '').toLowerCase()) &&
+        Array.isArray(order.files) &&
+        order.files.length
+      );
+
+    const printGroupKey = (file) =>
+      String(file?.color || 'bw').toLowerCase() + '-' +
+      String(file?.sides || 'single').toLowerCase();
+
+    const printGroupLabel = (key) => {
+      const [color, sides] = String(key).split('-');
+      const colourLabel = color === 'color' ? 'Colour' : 'Black & White';
+      const sidesLabel = sides === 'double' ? 'Both sides' : 'One side';
+      return colourLabel + ' · ' + sidesLabel;
+    };
+
+    const openPrintFile = (order, file, index) => {
+      const url =
+        '/__campusmaas/print-file?order_id=' +
+        encodeURIComponent(order.id) +
+        '&file_index=' +
+        encodeURIComponent(String(index));
+      window.open(url, '_blank', 'noopener,noreferrer');
+    };
+
+    const openPrintBatch = (order, entries, label) => {
+      const indexes = entries.map((entry) => String(entry.index)).join(',');
+      const url =
+        '/__campusmaas/print-batch?order_id=' +
+        encodeURIComponent(order.id) +
+        '&indexes=' +
+        encodeURIComponent(indexes) +
+        '&label=' +
+        encodeURIComponent(label);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    };
+
+    const renderPrintQueue = () => {
+      const orders = printableOrders();
+
+      printQueueList.innerHTML = '';
+      printQueueSummary.textContent =
+        orders.length + (orders.length === 1 ? ' active order' : ' active orders');
+
+      const enabled = orders.length > 0;
+      printQueueAll.disabled = !enabled;
+      printQueueAllFooter.disabled = !enabled;
+
+      if (!orders.length) {
+        printQueueList.appendChild(
+          create('div', 'vendor-empty-card', 'No active print orders in the queue.')
+        );
+        printQueueFooterText.textContent = 'New print orders will appear here automatically.';
+        return;
+      }
+
+      let totalFiles = 0;
+      let totalCopies = 0;
+
+      orders.forEach((order) => {
+        const files = Array.isArray(order.files) ? order.files : [];
+        totalFiles += files.length;
+        totalCopies += files.reduce((sum, file) => sum + (Number(file.copies) || 1), 0);
+
+        const orderCard = create('section', 'vendor-print-order-section');
+        const orderHeader = create('header', 'vendor-print-order-header');
+
+        const orderHeading = create('div');
+        append(
+          orderHeading,
+          create('span', 'vendor-print-order-kicker', '#' + order.id),
+          create('strong', '', String(order.option_name || 'Print service')),
+          create('small', '', String(order.status || 'placed').replace(/^./, (char) => char.toUpperCase()) + ' · ' +
+            new Date(order.created_at).toLocaleString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
+              day: '2-digit',
+              month: 'short'
+            }))
+        );
+
+        const orderPrint = create('button', 'vendor-print-order-all', 'PRINT THIS ORDER');
+        orderPrint.type = 'button';
+
+        const orderEntries = files.map((file, index) => ({ file, index }));
+        orderPrint.addEventListener('click', () => {
+          openPrintBatch(order, orderEntries, 'Order #' + order.id);
+        });
+
+        append(orderHeader, orderHeading, orderPrint);
+        orderCard.appendChild(orderHeader);
+
+        const groups = new Map();
+        orderEntries.forEach((entry) => {
+          const key = printGroupKey(entry.file);
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(entry);
+        });
+
+        const showGroupHeadings = groups.size > 1;
+
+        groups.forEach((entries, key) => {
+          if (showGroupHeadings) {
+            const groupHeader = create('div', 'vendor-print-group-header');
+            append(
+              groupHeader,
+              create('strong', '', printGroupLabel(key))
+            );
+            const groupPrint = create('button', 'vendor-print-group-all', 'PRINT ALL');
+            groupPrint.type = 'button';
+            groupPrint.addEventListener('click', () => {
+              openPrintBatch(order, entries, printGroupLabel(key));
+            });
+            groupHeader.appendChild(groupPrint);
+            orderCard.appendChild(groupHeader);
+          } else {
+            const groupTools = create('div', 'vendor-print-group-tools');
+            const groupPrint = create('button', 'vendor-print-group-all', 'PRINT ALL');
+            groupPrint.type = 'button';
+            groupPrint.addEventListener('click', () => {
+              openPrintBatch(order, entries, printGroupLabel(key));
+            });
+            groupTools.appendChild(groupPrint);
+            orderCard.appendChild(groupTools);
+          }
+
+          entries.forEach(({ file, index }) => {
+            const fileCard = create('article', 'vendor-print-file-card');
+
+            const fileMain = create('div', 'vendor-print-file-main');
+            append(
+              fileMain,
+              create('strong', '', file.name || ('File ' + (index + 1))),
+              create('span', '', (file.type || 'Unknown file') + ' · ' +
+                (Number(file.copies) || 1) + ((Number(file.copies) || 1) === 1 ? ' copy' : ' copies'))
+            );
+
+            const fileSettings = create('div', 'vendor-print-file-settings');
+            append(
+              fileSettings,
+              create('span', '', file.color === 'color' ? 'COLOUR' : 'B&W'),
+              create('span', '', file.sides === 'double' ? 'BOTH SIDES' : 'ONE SIDE')
+            );
+
+            const filePrint = create('button', 'vendor-print-file-button', 'PRINT');
+            filePrint.type = 'button';
+            filePrint.addEventListener('click', () => openPrintFile(order, file, index));
+
+            append(fileCard, fileMain, fileSettings, filePrint);
+            orderCard.appendChild(fileCard);
+          });
+        });
+
+        printQueueList.appendChild(orderCard);
+      });
+
+      printQueueFooterText.textContent =
+        totalFiles + (totalFiles === 1 ? ' file · ' : ' files · ') +
+        totalCopies + (totalCopies === 1 ? ' copy' : ' copies') +
+        ' waiting to print.';
+    };
+
+    const openPrintQueue = () => {
+      renderPrintQueue();
+      printQueue.hidden = false;
+      printQueue.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('vendor-print-queue-open');
+    };
+
+    const closePrintQueue = () => {
+      printQueue.hidden = true;
+      printQueue.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('vendor-print-queue-open');
+    };
+
     const renderRoot = () => {
       const vendors = state.catalogue.vendors
         .filter((item) => item.enabled !== false)
@@ -165,6 +378,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       headerServiceControl.hidden = true;
       headerStatusMenu.hidden = true;
       headerStatusToggle.setAttribute('aria-expanded', 'false');
+      printQueueButton.hidden = true;
+      closePrintQueue();
 
       content.className = 'vendor-content-grid vendor-root-grid';
       content.innerHTML = '';
@@ -227,6 +442,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       headerServiceControl.hidden = true;
       headerStatusMenu.hidden = true;
       headerStatusToggle.setAttribute('aria-expanded', 'false');
+      printQueueButton.hidden = String(item.id) !== 'printer';
+      closePrintQueue();
 
       content.className = 'vendor-content-grid vendor-category-grid';
       content.innerHTML = '';
@@ -422,6 +639,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       headerTitle.textContent = child.name;
       subtitle.textContent = 'Vendor dashboard';
       back.href = route(item.id);
+      printQueueButton.hidden = true;
+      closePrintQueue();
 
       headerServiceControl.hidden = false;
       headerStatusMenu.hidden = true;
@@ -631,6 +850,28 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
       renderDetail(item, child);
     };
+
+    printQueueButton?.addEventListener('click', openPrintQueue);
+    printQueueClose?.addEventListener('click', closePrintQueue);
+    printQueueBackdrop?.addEventListener('click', closePrintQueue);
+
+    const printAllOrders = () => {
+      const orders = printableOrders();
+      if (!orders.length) return;
+      orders.forEach((order) => {
+        const entries = (order.files || []).map((file, index) => ({ file, index }));
+        openPrintBatch(order, entries, 'All pending print jobs');
+      });
+    };
+
+    printQueueAll?.addEventListener('click', printAllOrders);
+    printQueueAllFooter?.addEventListener('click', printAllOrders);
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && printQueue && !printQueue.hidden) {
+        closePrintQueue();
+      }
+    });
 
     const start = async () => {
       try {
@@ -932,6 +1173,42 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-service-status.status-offline{border-color:rgba(239,68,68,.18)}.vendor-service-status.status-offline .vendor-service-status-dot{background:#ef4444;box-shadow:0 0 10px rgba(239,68,68,.4)}
   .vendor-service-status.status-offline strong{color:#ff9a9a}
   .vendor-service-status-controls{display:flex;gap:6px;margin:8px 0 10px}.vendor-status-button{border:1px solid rgba(83,168,255,.12);border-radius:7px;background:#0d2035;color:#91aac1;padding:6px 9px;font-size:8px;cursor:pointer}.vendor-status-button.is-active{background:#1687ff;border-color:#1687ff;color:#fff}
+  .vendor-print-queue-open{overflow:hidden}
+  .vendor-print-queue{position:fixed;inset:0;z-index:6200;display:grid;place-items:center;padding:20px}
+  .vendor-print-queue[hidden]{display:none}
+  .vendor-print-queue-backdrop{position:absolute;inset:0;background:rgba(2,9,16,.72);backdrop-filter:blur(8px)}
+  .vendor-print-queue-dialog{position:relative;z-index:1;width:min(960px,calc(100vw - 30px));max-height:min(820px,calc(100dvh - 30px));overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border:1px solid rgba(72,142,194,.28);border-radius:20px;background:linear-gradient(155deg,#102b43,#0a2034);color:#edf6ff;box-shadow:0 36px 100px rgba(0,0,0,.52),0 1px 0 rgba(255,255,255,.08) inset}
+  .vendor-print-queue-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 18px;border-bottom:1px solid rgba(109,155,190,.13);background:rgba(8,25,41,.96)}
+  .vendor-print-queue-kicker{display:block;color:#60bffb;font-size:7px;font-weight:900;letter-spacing:.14em}
+  .vendor-print-queue-header strong{display:block;margin-top:3px;color:#f2f8ff;font:600 19px/1 'Space Grotesk',sans-serif}
+  .vendor-print-queue-header small{display:block;margin-top:5px;color:#7893a8;font-size:7px}
+  .vendor-print-queue-header-actions{display:flex;align-items:center;gap:7px}
+  .vendor-print-queue-all,.vendor-print-order-all,.vendor-print-group-all,.vendor-print-file-button{border:1px solid rgba(83,168,255,.17);border-radius:8px;background:#0d2742;color:#7fcaff;font-size:7px;font-weight:900;letter-spacing:.06em;cursor:pointer}
+  .vendor-print-queue-all{padding:8px 10px;background:#1687ff;border-color:#1687ff;color:#fff}
+  .vendor-print-queue-all:disabled{opacity:.45;cursor:not-allowed}
+  .vendor-print-queue-close{display:grid;place-items:center;width:31px;height:31px;border:1px solid rgba(148,163,184,.12);border-radius:8px;background:#0c2339;color:#aabccc;cursor:pointer;font-size:18px}
+  .vendor-print-queue-list{min-height:0;overflow:auto;padding:12px 14px;display:grid;gap:10px}
+  .vendor-print-order-section{padding:12px;border:1px solid rgba(83,168,255,.10);border-radius:14px;background:rgba(255,255,255,.025)}
+  .vendor-print-order-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1px solid rgba(110,153,187,.10)}
+  .vendor-print-order-kicker{display:block;color:#66c4ff;font-size:7px;font-weight:900;letter-spacing:.08em}
+  .vendor-print-order-header strong{display:block;margin-top:3px;color:#eaf5ff;font:600 12px/1 'Space Grotesk',sans-serif}
+  .vendor-print-order-header small{display:block;margin-top:4px;color:#718ca1;font-size:7px}
+  .vendor-print-order-all{padding:7px 9px}
+  .vendor-print-group-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding:7px 2px}
+  .vendor-print-group-header strong{color:#91d4ff;font-size:7px;letter-spacing:.08em}
+  .vendor-print-group-all{padding:6px 8px}
+  .vendor-print-group-tools{display:flex;justify-content:flex-end;margin-top:9px}
+  .vendor-print-file-card{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:9px 10px;margin-top:6px;border:1px solid rgba(91,144,180,.12);border-radius:10px;background:rgba(255,255,255,.035)}
+  .vendor-print-file-main{min-width:0}
+  .vendor-print-file-main strong{display:block;overflow:hidden;color:#e7f4ff;font-size:9px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+  .vendor-print-file-main span{display:block;margin-top:3px;color:#718ba0;font-size:6.5px}
+  .vendor-print-file-settings{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+  .vendor-print-file-settings span{padding:5px 6px;border:1px solid rgba(83,168,255,.10);border-radius:6px;background:rgba(22,135,255,.06);color:#79bfea;font-size:6px;font-weight:900;letter-spacing:.04em}
+  .vendor-print-file-button{padding:7px 9px;min-width:54px}
+  .vendor-print-file-button:hover,.vendor-print-group-all:hover,.vendor-print-order-all:hover{background:#123756;color:#bfe8ff}
+  .vendor-print-queue-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-top:1px solid rgba(109,155,190,.12);background:#0a2034}
+  .vendor-print-queue-footer>span{color:#708ba0;font-size:7px}
+  .vendor-print-queue-all-footer{background:#0d2742}
   .vendor-header-actions{display:flex;align-items:center;gap:9px}
   .vendor-header-service-control{position:relative;z-index:20}
   .vendor-header-status-toggle{
@@ -977,6 +1254,15 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     .vendor-header-status{display:none}
     .vendor-header-status-menu{right:0;width:170px}
     .vendor-header-status{padding:6px 8px}
+    .vendor-print-queue{padding:10px}
+    .vendor-print-queue-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:16px}
+    .vendor-print-queue-header{padding:13px}
+    .vendor-print-queue-header-actions .vendor-print-queue-all{padding:7px 8px}
+    .vendor-print-order-header{align-items:flex-start}
+    .vendor-print-file-card{grid-template-columns:minmax(0,1fr) auto;gap:7px}
+    .vendor-print-file-settings{grid-column:1/-1;justify-content:flex-start}
+    .vendor-print-file-button{grid-column:2;grid-row:1;align-self:center}
+    .vendor-print-queue-footer{padding:9px 12px}
     .vendor-hero{padding:32px 0 21px}
     .vendor-large-card{min-height:245px;padding:20px}
     .vendor-large-icon{margin-top:30px}
