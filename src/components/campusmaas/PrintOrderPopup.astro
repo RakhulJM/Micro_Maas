@@ -1,0 +1,109 @@
+---
+---
+
+<aside class="print-order-popup" id="printOrderPopup" hidden aria-hidden="true">
+  <div class="print-order-popup-backdrop" id="printOrderPopupBackdrop"></div>
+
+  <section class="print-order-dialog" role="dialog" aria-modal="true" aria-labelledby="printPopupService">
+    <header class="print-order-header">
+      <div>
+        <span class="print-popup-kicker">PRINT ORDER</span>
+        <strong id="printPopupVendor">Printer</strong>
+        <h2 id="printPopupService">Select a service</h2>
+        <div id="printPopupStatus" class="print-popup-status print-popup-status-online">
+          <i aria-hidden="true"></i><span>Online</span><small>Accepting new orders</small>
+        </div>
+      </div>
+      <button type="button" class="print-order-close" id="printOrderPopupClose" aria-label="Close print order">×</button>
+    </header>
+
+    <div class="print-order-body">
+      <div class="print-drop-zone" id="printDropZone" tabindex="0" role="button" aria-label="Add files for printing">
+        <div class="print-drop-icon" aria-hidden="true">↥</div>
+        <strong>DROP FILES HERE</strong>
+        <span>or</span>
+        <button type="button" class="print-select-button" id="printSelectFiles">SELECT FILE</button>
+        <small>All file types supported · multiple files allowed</small>
+        <input id="printFileInput" type="file" multiple hidden />
+      </div>
+
+      <section class="print-files-section" aria-label="Selected print files">
+        <div class="print-files-heading">
+          <div>
+            <span>FILES</span>
+            <strong id="printFileSummary">0 files · 0 copies</strong>
+          </div>
+          <button type="button" class="print-clear-files" id="printClearFiles" hidden>CLEAR ALL</button>
+        </div>
+        <div id="printFileList" class="print-file-list">
+          <div class="print-files-empty">Select or drop files to add them to your order.</div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="print-order-footer">
+      <div>
+        <span>Service</span>
+        <strong id="printPopupPrepSummary">5 min service</strong>
+      </div>
+      <button type="button" class="print-place-order" id="printPopupPlaceOrder" disabled>ORDER PRINT</button>
+    </footer>
+
+    <div class="print-order-error" id="printPopupError" role="alert" hidden></div>
+  </section>
+</aside>
+
+<style is="global">
+  .print-order-popup{position:fixed;inset:0;z-index:5100;display:grid;place-items:center;padding:18px}
+  .print-order-popup[hidden]{display:none}
+  .print-order-popup-backdrop{position:absolute;inset:0;background:rgba(2,8,14,.68);backdrop-filter:blur(7px)}
+  .print-order-dialog{position:relative;z-index:1;width:min(600px,calc(100vw - 28px));max-height:min(820px,calc(100dvh - 28px));overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;border:1px solid rgba(90,178,255,.34);border-radius:22px;background:linear-gradient(150deg,#f7fbff 0%,#edf5fc 100%);color:#102132;box-shadow:0 32px 90px rgba(0,0,0,.48),0 0 0 1px rgba(255,255,255,.36) inset}
+  .print-order-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 20px 16px;background:linear-gradient(135deg,rgba(255,255,255,.98),rgba(232,242,251,.96));border-bottom:1px solid rgba(31,91,138,.11)}
+  .print-popup-kicker{display:block;color:#1687ff;font-size:8px;font-weight:900;letter-spacing:.16em}
+  .print-order-header>div>strong{display:block;margin-top:6px;color:#627991;font-size:9px;font-weight:700}
+  .print-order-header h2{margin:3px 0 0;color:#0a1b2e;font:650 22px/1 'Space Grotesk',sans-serif;letter-spacing:-.02em}
+  .print-order-close{width:34px;height:34px;border:1px solid rgba(26,73,108,.13);border-radius:10px;background:#fff;color:#5e7387;cursor:pointer;font-size:20px;line-height:1}
+  .print-order-close:hover{background:#edf5fc;color:#17324a}
+  .print-popup-status{display:inline-flex;align-items:center;gap:6px;margin-top:9px;padding:6px 8px;border:1px solid rgba(53,210,123,.16);border-radius:999px;background:rgba(53,210,123,.06);color:#159447;font-size:7px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+  .print-popup-status i{width:6px;height:6px;border-radius:50%;background:#35b96d;box-shadow:0 0 7px rgba(53,185,109,.38)}
+  .print-popup-status small{color:#6f8497;font-size:7px;font-weight:600;letter-spacing:0;text-transform:none}
+  .print-popup-status-busy{border-color:rgba(245,158,11,.18);background:rgba(245,158,11,.07);color:#b56a00}
+  .print-popup-status-busy i{background:#f59e0b;box-shadow:0 0 7px rgba(245,158,11,.38)}
+  .print-popup-status-offline{border-color:rgba(239,68,68,.18);background:rgba(239,68,68,.06);color:#c53d45}
+  .print-popup-status-offline i{background:#ef4444;box-shadow:0 0 7px rgba(239,68,68,.38)}
+  .print-order-body{min-height:0;overflow:auto;padding:14px}
+  .print-drop-zone{display:grid;place-items:center;gap:6px;min-height:220px;padding:24px;border:2px dashed rgba(22,135,255,.20);border-radius:16px;background:rgba(255,255,255,.60);text-align:center;cursor:pointer;transition:border-color .16s ease,background .16s ease,transform .16s ease}
+  .print-drop-zone:hover,.print-drop-zone.is-dragover{border-color:rgba(22,135,255,.60);background:rgba(225,241,252,.95);transform:translateY(-1px)}
+  .print-drop-zone.is-disabled{opacity:.55;cursor:not-allowed}
+  .print-drop-icon{display:grid;place-items:center;width:50px;height:50px;border:1px solid rgba(22,135,255,.16);border-radius:14px;background:#e9f4fc;color:#1687ff;font-size:24px}
+  .print-drop-zone strong{color:#18344d;font-size:12px;letter-spacing:.12em}
+  .print-drop-zone>span{color:#7a8da0;font-size:8px}
+  .print-drop-zone>small{margin-top:3px;color:#7d91a4;font-size:7px}
+  .print-select-button{padding:9px 14px;border:0;border-radius:9px;background:#1687ff;color:#fff;cursor:pointer;font-size:8px;font-weight:900;letter-spacing:.08em;box-shadow:0 8px 20px rgba(22,135,255,.22)}
+  .print-select-button:hover{background:#0f78e7}
+  .print-select-button:disabled{opacity:.5;cursor:not-allowed}
+  .print-files-section{margin-top:14px}
+  .print-files-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .print-files-heading span{display:block;color:#1687ff;font-size:7px;font-weight:900;letter-spacing:.14em}
+  .print-files-heading strong{display:block;margin-top:3px;color:#18344d;font:650 13px/1 'Space Grotesk',sans-serif}
+  .print-clear-files{padding:6px 8px;border:1px solid rgba(26,73,108,.12);border-radius:7px;background:#fff;color:#6c8093;font-size:7px;font-weight:800;cursor:pointer}
+  .print-clear-files:hover{color:#bf414a;background:#fff3f4}
+  .print-file-list{display:grid;gap:7px;max-height:240px;overflow:auto}
+  .print-files-empty{padding:24px 14px;border:1px dashed rgba(67,115,153,.16);border-radius:12px;color:#7b8ea1;font-size:8px;text-align:center;background:rgba(255,255,255,.55)}
+  .print-file-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:9px 10px;border:1px solid rgba(55,105,143,.12);border-radius:11px;background:rgba(255,255,255,.82);box-shadow:0 5px 14px rgba(29,73,106,.05)}
+  .print-file-main{min-width:0}
+  .print-file-name{overflow:hidden;color:#17324a;font:600 10px/1.2 'Space Grotesk',sans-serif;text-overflow:ellipsis;white-space:nowrap}
+  .print-file-meta{margin-top:4px;color:#768b9e;font-size:7px}
+  .print-copy-controls{display:flex;align-items:center;gap:5px}
+  .print-copy-button{width:26px;height:26px;border:1px solid rgba(26,92,138,.15);border-radius:7px;background:#edf5fc;color:#1687ff;cursor:pointer;font-size:14px;line-height:1}
+  .print-copy-count{min-width:22px;text-align:center;color:#17324b;font-size:9px;font-weight:800}
+  .print-remove-file{width:25px;height:25px;border:1px solid rgba(194,59,69,.12);border-radius:7px;background:#fff3f4;color:#c23b45;cursor:pointer;font-size:14px;line-height:1}
+  .print-copy-button:hover{background:#e0eef9}.print-remove-file:hover{background:#ffe7e9}
+  .print-order-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 20px 16px;border-top:1px solid rgba(31,91,138,.12);background:#f5f9fd}
+  .print-order-footer>div span{display:block;color:#73879a;font-size:8px;text-transform:uppercase;letter-spacing:.1em}
+  .print-order-footer>div strong{display:block;margin-top:3px;color:#0b1e31;font:650 15px/1 'Space Grotesk',sans-serif}
+  .print-place-order{min-width:170px;padding:11px 14px;border:0;border-radius:10px;background:#1687ff;color:#fff;cursor:pointer;font-size:8px;font-weight:900;letter-spacing:.08em;box-shadow:0 9px 22px rgba(22,135,255,.22)}
+  .print-place-order:hover{background:#0f78e7}.print-place-order:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+  .print-order-error{padding:9px 20px 13px;color:#c23b45;background:#fff3f4;border-top:1px solid rgba(194,59,69,.12);font-size:8px}
+  @media(max-width:560px){.print-order-popup{padding:10px}.print-order-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:18px}.print-order-header{padding:16px 16px 13px}.print-order-body{padding:10px}.print-drop-zone{min-height:190px}.print-order-footer{padding:12px 16px 14px}.print-place-order{min-width:132px}.print-file-row{grid-template-columns:minmax(0,1fr) auto}.print-remove-file{grid-column:2;grid-row:1}.print-copy-controls{grid-column:2;grid-row:2}}
+</style>
