@@ -843,7 +843,10 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   }
   .vendor-large-footer span:last-child,.vendor-service-footer span:last-child { color:#67c6ff; font-weight:700; }
 
-  .vendor-service-card { min-height:250px; padding:20px; }
+  .vendor-service-card { min-height:250px; padding:20px; text-decoration:none; }
+  .vendor-service-card:hover,
+  .vendor-service-card:focus,
+  .vendor-service-card:visited { text-decoration:none; }
   .vendor-service-card-head .vendor-service-icon { margin-top:0; width:48px; height:48px; border-radius:13px; }
   .vendor-service-number { margin-top:30px; width:29px; height:29px; font-size:8px; }
   .vendor-service-card h2 { margin:10px 0 0; color:#f2f7fb; font:600 27px/1.05 'Space Grotesk',sans-serif; }
