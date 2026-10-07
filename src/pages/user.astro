@@ -2,6 +2,7 @@
 import MainLayout from '../layouts/MainLayout.astro';
 import '../styles/global.css';
 import 'leaflet/dist/leaflet.css';
+import FoodOrderPopup from '../components/campusmaas/FoodOrderPopup.astro';
 ---
 
 <MainLayout title="CampusMaaS">
@@ -73,7 +74,7 @@ import 'leaflet/dist/leaflet.css';
       </section>
     </aside>
 
-
+    <FoodOrderPopup />
 
     <script>
       import L from 'leaflet';
@@ -1416,19 +1417,422 @@ const start = async () => {
   });
 
   const loadVendorOrders = async () => {
-    const vendorList=document.getElementById('userVendorList'), orderList=document.getElementById('userOrderList'), orderCount=document.getElementById('userOrderCount'), composer=document.getElementById('userOrderComposer');
-    let catalogue={vendors:[]}, orders={orders:[]};
-    const key='campusmaas-user-id';
-    let userId=localStorage.getItem(key);
+    const vendorList = document.getElementById('userVendorList');
+    const orderList = document.getElementById('userOrderList');
+    const orderCount = document.getElementById('userOrderCount');
+    const composer = document.getElementById('userOrderComposer');
+    const foodPopup = document.getElementById('foodOrderPopup');
+    const foodPopupBackdrop = document.getElementById('foodOrderPopupBackdrop');
+    const foodPopupClose = document.getElementById('foodOrderPopupClose');
+    const foodPopupVendor = document.getElementById('foodPopupVendor');
+    const foodPopupService = document.getElementById('foodPopupService');
+    const foodPopupItemSummary = document.getElementById('foodPopupItemSummary');
+    const foodPopupPrepSummary = document.getElementById('foodPopupPrepSummary');
+    const foodMenuList = document.getElementById('foodMenuList');
+    const foodPopupTotal = document.getElementById('foodPopupTotal');
+    const foodPopupPlaceOrder = document.getElementById('foodPopupPlaceOrder');
+    const foodPopupError = document.getElementById('foodPopupError');
+
+    let catalogue = { vendors: [] };
+    let orders = { orders: [] };
+    let foodMenu = { menu: [] };
+    let foodVendor = null;
+    let foodService = null;
+    let foodCart = new Map();
+    let foodPopupBusy = false;
+
+    const key = 'campusmaas-user-id';
+    let userId = localStorage.getItem(key);
     if (!userId) {
-      userId='user-'+Math.random().toString(36).slice(2,10);
-      localStorage.setItem(key,userId);
+      userId = 'user-' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(key, userId);
     }
-    const esc=v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    const renderOrders=()=>{const mine=orders.orders.filter(o=>o.user_id===userId).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));orderCount.textContent=mine.length+(mine.length===1?' order':' orders');orderList.innerHTML=mine.length?'':'<div class="user-services-empty">No orders yet.</div>';mine.forEach(o=>{const el=document.createElement('article');el.className='user-order-item';el.innerHTML=`<div><strong>#${esc(o.id)}</strong><span>${esc(o.vendor_name)} · ${esc(o.option_name)}</span><small>Qty ${Number(o.quantity)||1} · ${esc(o.status)}</small></div><b>₹${(Number(o.total_price)||0).toFixed(2)}</b>`;orderList.appendChild(el)})};
-    const openComposer=(vendor,option)=>{composer.hidden=false;composer.innerHTML=`<div class="user-order-compose-head"><div><span>${esc(vendor.name)}</span><strong>${esc(option.name)}</strong></div><button type="button" id="closeOrderComposer">×</button></div><div class="user-order-compose-meta"><div><span>Service</span><strong>${Number(option.service_minutes)||0} min</strong></div><div><span>Price</span><strong>₹${(Number(option.price)||0).toFixed(2)}</strong></div></div><div class="user-qty-row"><span>Quantity</span><div><button type="button" data-qty="-1">−</button><strong id="userOrderQty">1</strong><button type="button" data-qty="1">+</button></div></div><button type="button" class="user-place-order" id="placeUserOrder">PLACE ORDER</button>`;let q=1;const qText=composer.querySelector('#userOrderQty');composer.querySelectorAll('[data-qty]').forEach(b=>b.onclick=()=>{q=Math.max(1,q+Number(b.dataset.qty));qText.textContent=String(q)});composer.querySelector('#closeOrderComposer').onclick=()=>composer.hidden=true;composer.querySelector('#placeUserOrder').onclick=async()=>{const b=composer.querySelector('#placeUserOrder');b.disabled=true;b.textContent='PLACING…';const r=await fetch('/__campusmaas/create-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:userId,vendor_id:vendor.id,vendor_name:vendor.name,option_id:option.id,option_name:option.name,quantity:q,unit_price:Number(option.price)||0,total_price:(Number(option.price)||0)*q,service_minutes:Number(option.service_minutes)||0})});if(!r.ok){b.disabled=false;b.textContent='TRY AGAIN';return}orders=await(await fetch('/maps/campus_orders.json',{cache:'no-store'})).json();composer.hidden=true;renderOrders()}};
-    const renderCatalogue=()=>{vendorList.innerHTML='';[...catalogue.vendors].filter(v=>v.enabled!==false).sort((a,b)=>Number(a.order)-Number(b.order)).forEach(v=>{const s=document.createElement('section');s.className='user-vendor-card';s.innerHTML=`<div class="user-vendor-title"><div class="user-vendor-index"><span>${String(v.order).padStart(2,'0')}</span></div><div><span>VENDOR</span><strong>${esc(v.name)}</strong></div></div><div class="user-vendor-options"></div>`;const wrap=s.querySelector('.user-vendor-options');[...(v.options||[])].filter(o=>o.enabled!==false).sort((a,b)=>Number(a.order)-Number(b.order)).forEach(o=>{const b=document.createElement('button');b.type='button';b.className='user-service-option';b.innerHTML=`<span><strong>${esc(o.name)}</strong><small>${Number(o.service_minutes)||0} min · ${Number(o.price)||0===0?'Free':'₹'+(Number(o.price)||0).toFixed(2)}</small></span><b>›</b>`;b.onclick=()=>openComposer(v,o);wrap.appendChild(b)});vendorList.appendChild(s)})};
-    try{const [a,b]=await Promise.all([fetch('/maps/campus_vendors.json',{cache:'no-store'}),fetch('/maps/campus_orders.json',{cache:'no-store'})]);if(!a.ok||!b.ok)throw 0;catalogue=await a.json();orders=await b.json();renderCatalogue();renderOrders()}catch{vendorList.innerHTML='<div class="user-services-empty">Services are unavailable.</div>'}
+
+    const esc = (value) =>
+      String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const money = (value) => '₹' + (Number(value) || 0).toFixed(2);
+
+    const renderOrders = () => {
+      const mine = orders.orders
+        .filter((order) => order.user_id === userId)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+
+      orderCount.textContent = mine.length + (mine.length === 1 ? ' order' : ' orders');
+      orderList.innerHTML = mine.length
+        ? ''
+        : '<div class="user-services-empty">No orders yet.</div>';
+
+      mine.forEach((order) => {
+        const el = document.createElement('article');
+        el.className = 'user-order-item';
+        el.innerHTML =
+          '<div><strong>#' + esc(order.id) +
+          '</strong><span>' + esc(order.vendor_name) + ' · ' + esc(order.option_name) +
+          '</span><small>Qty ' + (Number(order.quantity) || 1) + ' · ' +
+          esc(order.status) + '</small></div><b>' + money(order.total_price) + '</b>';
+        orderList.appendChild(el);
+      });
+    };
+
+    const closeFoodPopup = () => {
+      if (!foodPopup) return;
+      foodPopup.hidden = true;
+      foodPopup.setAttribute('aria-hidden', 'true');
+      foodPopupBusy = false;
+    };
+
+    const updateFoodTotals = () => {
+      const entries = Array.from(foodCart.entries())
+        .filter(([, quantity]) => quantity > 0);
+
+      const itemCount = entries.reduce((sum, [, quantity]) => sum + quantity, 0);
+      const total = entries.reduce((sum, [itemId, quantity]) => {
+        const item = foodMenu.menu.find((menuItem) => menuItem.id === itemId);
+        return sum + (Number(item?.price) || 0) * quantity;
+      }, 0);
+
+      foodPopupItemSummary.textContent =
+        itemCount + (itemCount === 1 ? ' item' : ' items');
+
+      foodPopupTotal.textContent = money(total);
+      foodPopupPlaceOrder.disabled = itemCount === 0 || foodPopupBusy;
+      foodPopupPrepSummary.textContent =
+        foodService
+          ? ((Number(foodService.service_minutes) || 0) + ' min service')
+          : 'Select items to continue';
+    };
+
+    const renderFoodMenu = () => {
+      foodMenuList.innerHTML = '';
+
+      const items = Array.isArray(foodMenu.menu) ? foodMenu.menu : [];
+
+      if (!items.length) {
+        foodMenuList.appendChild(
+          Object.assign(document.createElement('div'), {
+            className: 'food-menu-empty',
+            textContent: 'No menu items are configured for this service.'
+          })
+        );
+        updateFoodTotals();
+        return;
+      }
+
+      items.forEach((item) => {
+        const available = item.available !== false;
+        const row = document.createElement('article');
+        row.className = 'food-menu-item' + (available ? '' : ' is-unavailable');
+
+        const main = document.createElement('div');
+        main.className = 'food-menu-item-main';
+
+        const name = document.createElement('div');
+        name.className = 'food-menu-item-name';
+        name.textContent = item.name;
+
+        const description = document.createElement('div');
+        description.className = 'food-menu-item-description';
+        description.textContent = item.description || '';
+
+        const price = document.createElement('div');
+        price.className = 'food-menu-item-price';
+        price.textContent = money(item.price);
+
+        main.append(name, description, price);
+
+        const actions = document.createElement('div');
+        actions.className = 'food-menu-item-actions';
+
+        if (available) {
+          const minus = document.createElement('button');
+          minus.type = 'button';
+          minus.className = 'food-menu-qty-button';
+          minus.textContent = '−';
+          minus.setAttribute('aria-label', 'Remove one ' + item.name);
+
+          const quantity = document.createElement('span');
+          quantity.className = 'food-menu-qty';
+          quantity.id = 'food-menu-qty-' + item.id;
+          quantity.textContent = '0';
+
+          const plus = document.createElement('button');
+          plus.type = 'button';
+          plus.className = 'food-menu-qty-button';
+          plus.textContent = '+';
+          plus.setAttribute('aria-label', 'Add one ' + item.name);
+
+          minus.addEventListener('click', () => {
+            const next = Math.max(0, (foodCart.get(item.id) || 0) - 1);
+            if (next) foodCart.set(item.id, next);
+            else foodCart.delete(item.id);
+            quantity.textContent = String(next);
+            updateFoodTotals();
+          });
+
+          plus.addEventListener('click', () => {
+            const next = Math.min(99, (foodCart.get(item.id) || 0) + 1);
+            foodCart.set(item.id, next);
+            quantity.textContent = String(next);
+            updateFoodTotals();
+          });
+
+          actions.append(minus, quantity, plus);
+        } else {
+          const unavailable = document.createElement('span');
+          unavailable.className = 'food-menu-unavailable';
+          unavailable.textContent = 'Unavailable';
+          actions.appendChild(unavailable);
+        }
+
+        row.append(main, actions);
+        foodMenuList.appendChild(row);
+      });
+
+      updateFoodTotals();
+    };
+
+    const openFoodPopup = async (vendor, service) => {
+      foodVendor = vendor;
+      foodService = service;
+      foodCart = new Map();
+
+      foodPopupVendor.textContent = vendor.name;
+      foodPopupService.textContent = service.name;
+      foodMenuList.innerHTML = '<div class="food-menu-empty">Loading menu…</div>';
+      foodPopupError.hidden = true;
+      foodPopup.hidden = false;
+      foodPopup.setAttribute('aria-hidden', 'false');
+      updateFoodTotals();
+
+      try {
+        const response = await fetch(
+          '/maps/food_menus/' + encodeURIComponent(service.id) + '.json',
+          { cache: 'no-store' }
+        );
+
+        if (!response.ok) throw new Error('Menu could not be loaded.');
+
+        foodMenu = await response.json();
+
+        if (
+          foodMenu.vendor_id !== vendor.id ||
+          foodMenu.service_id !== service.id ||
+          !Array.isArray(foodMenu.menu)
+        ) {
+          throw new Error('Invalid menu configuration.');
+        }
+
+        renderFoodMenu();
+      } catch (error) {
+        foodMenu = { menu: [] };
+        foodMenuList.innerHTML = '';
+        foodMenuList.appendChild(
+          Object.assign(document.createElement('div'), {
+            className: 'food-menu-empty',
+            textContent: 'Menu is unavailable for this service.'
+          })
+        );
+        foodPopupError.textContent = error.message || 'Menu could not be loaded.';
+        foodPopupError.hidden = false;
+        updateFoodTotals();
+      }
+    };
+
+    const placeFoodOrder = async () => {
+      if (foodPopupBusy || !foodVendor || !foodService) return;
+
+      const items = Array.from(foodCart.entries())
+        .filter(([, quantity]) => quantity > 0)
+        .map(([menuItemId, quantity]) => ({
+          menu_item_id: menuItemId,
+          quantity
+        }));
+
+      if (!items.length) return;
+
+      foodPopupBusy = true;
+      foodPopupError.hidden = true;
+      foodPopupPlaceOrder.disabled = true;
+      foodPopupPlaceOrder.textContent = 'PLACING…';
+
+      try {
+        const response = await fetch('/__campusmaas/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userId,
+            vendor_id: foodVendor.id,
+            vendor_name: foodVendor.name,
+            option_id: foodService.id,
+            option_name: foodService.name,
+            items
+          })
+        });
+
+        if (!response.ok) throw new Error('Food order could not be placed.');
+
+        orders = await (
+          await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+        ).json();
+
+        closeFoodPopup();
+        renderOrders();
+      } catch (error) {
+        foodPopupBusy = false;
+        foodPopupError.textContent = error.message || 'Food order could not be placed.';
+        foodPopupError.hidden = false;
+        foodPopupPlaceOrder.disabled = false;
+        foodPopupPlaceOrder.textContent = 'PLACE ORDER';
+      }
+    };
+
+    const openPrinterComposer = (vendor, option) => {
+      composer.hidden = false;
+      composer.innerHTML =
+        '<div class="user-order-compose-head"><div><span>' + esc(vendor.name) +
+        '</span><strong>' + esc(option.name) +
+        '</strong></div><button type="button" id="closeOrderComposer">×</button></div>' +
+        '<div class="user-order-compose-meta"><div><span>Service</span><strong>' +
+        (Number(option.service_minutes) || 0) + ' min</strong></div><div><span>Price</span><strong>' +
+        money(option.price) + '</strong></div></div>' +
+        '<div class="user-qty-row"><span>Quantity</span><div><button type="button" data-qty="-1">−</button>' +
+        '<strong id="userOrderQty">1</strong><button type="button" data-qty="1">+</button></div></div>' +
+        '<button type="button" class="user-place-order" id="placeUserOrder">PLACE ORDER</button>';
+
+      let quantity = 1;
+      const qText = composer.querySelector('#userOrderQty');
+
+      composer.querySelectorAll('[data-qty]').forEach((button) => {
+        button.onclick = () => {
+          quantity = Math.max(1, quantity + Number(button.dataset.qty));
+          qText.textContent = String(quantity);
+        };
+      });
+
+      composer.querySelector('#closeOrderComposer').onclick = () => {
+        composer.hidden = true;
+      };
+
+      composer.querySelector('#placeUserOrder').onclick = async () => {
+        const button = composer.querySelector('#placeUserOrder');
+        button.disabled = true;
+        button.textContent = 'PLACING…';
+
+        const response = await fetch('/__campusmaas/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: userId,
+            vendor_id: vendor.id,
+            vendor_name: vendor.name,
+            option_id: option.id,
+            option_name: option.name,
+            quantity,
+            unit_price: Number(option.price) || 0,
+            total_price: (Number(option.price) || 0) * quantity,
+            service_minutes: Number(option.service_minutes) || 0
+          })
+        });
+
+        if (!response.ok) {
+          button.disabled = false;
+          button.textContent = 'TRY AGAIN';
+          return;
+        }
+
+        orders = await (
+          await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+        ).json();
+
+        composer.hidden = true;
+        renderOrders();
+      };
+    };
+
+    const renderCatalogue = () => {
+      vendorList.innerHTML = '';
+
+      [...catalogue.vendors]
+        .filter((vendor) => vendor.enabled !== false)
+        .sort((a, b) => Number(a.order) - Number(b.order))
+        .forEach((vendor) => {
+          const section = document.createElement('section');
+          section.className = 'user-vendor-card';
+
+          section.innerHTML =
+            '<div class="user-vendor-title"><div class="user-vendor-index"><span>' +
+            String(vendor.order).padStart(2, '0') +
+            '</span></div><div><span>VENDOR</span><strong>' +
+            esc(vendor.name) +
+            '</strong></div></div><div class="user-vendor-options"></div>';
+
+          const wrap = section.querySelector('.user-vendor-options');
+
+          [...(vendor.options || [])]
+            .filter((service) => service.enabled !== false)
+            .sort((a, b) => Number(a.order) - Number(b.order))
+            .forEach((service) => {
+              const button = document.createElement('button');
+              button.type = 'button';
+              button.className = 'user-service-option';
+
+              const secondary =
+                Number(service.service_minutes) > 0
+                  ? Number(service.service_minutes) + ' min · ' +
+                    (Number(service.price) === 0 ? 'Free' : money(service.price))
+                  : (Number(service.price) === 0 ? 'Free' : money(service.price));
+
+              button.innerHTML =
+                '<span><strong>' + esc(service.name) +
+                '</strong><small>' + esc(secondary) +
+                '</small></span><b>›</b>';
+
+              button.onclick = () => {
+                if (vendor.id === 'food') {
+                  openFoodPopup(vendor, service);
+                } else {
+                  openPrinterComposer(vendor, service);
+                }
+              };
+
+              wrap.appendChild(button);
+            });
+
+          vendorList.appendChild(section);
+        });
+    };
+
+    foodPopupClose?.addEventListener('click', closeFoodPopup);
+    foodPopupBackdrop?.addEventListener('click', closeFoodPopup);
+    foodPopupPlaceOrder?.addEventListener('click', placeFoodOrder);
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && foodPopup && !foodPopup.hidden) {
+        closeFoodPopup();
+      }
+    });
+
+    try {
+      const [vendorResponse, orderResponse] = await Promise.all([
+        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
+        fetch('/maps/campus_orders.json', { cache: 'no-store' })
+      ]);
+
+      if (!vendorResponse.ok || !orderResponse.ok) throw new Error('Services unavailable.');
+
+      catalogue = await vendorResponse.json();
+      orders = await orderResponse.json();
+
+      renderCatalogue();
+      renderOrders();
+    } catch {
+      vendorList.innerHTML = '<div class="user-services-empty">Services are unavailable.</div>';
+    }
   };
   loadVendorOrders();
 
