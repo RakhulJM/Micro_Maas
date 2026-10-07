@@ -240,9 +240,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         );
         const statusBadge = create('div', 'vendor-service-status status-' + serviceStatus);
         append(statusBadge, create('span', 'vendor-service-status-dot'), create('strong', statusLabel), create('small', '', statusText));
-        card.insertBefore(statusBadge, info);
-
         const info = create('div', 'vendor-service-info');
+        card.appendChild(statusBadge);
         append(
           info,
           create('span', '', (Number(child.service_minutes) || 0) + ' min service'),
@@ -408,7 +407,32 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         create('span', '', 'Price ' + formatPrice(child.price))
       );
 
-      append(overview, dashboardTitle, statusCard, statGrid, facts);
+      const statusControls = create('div', 'vendor-service-status-controls');
+      ['online', 'busy', 'offline'].forEach((value) => {
+        const button = create('button', 'vendor-status-button', value[0].toUpperCase() + value.slice(1));
+        button.type = 'button';
+        button.classList.toggle('is-active', serviceStatus === value);
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          try {
+            const nextCatalogue = structuredClone(state.catalogue);
+            const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
+            const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
+            if (!target) throw new Error('Service not found.');
+            target.status = value;
+            target.status_message = value === 'offline' ? 'Currently unavailable' : value === 'busy' ? 'Currently serving customers' : 'Accepting new orders';
+            const response = await fetch('/__campusmaas/save-vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nextCatalogue) });
+            if (!response.ok) throw new Error('Status update failed.');
+            state.catalogue = nextCatalogue;
+            render();
+          } catch {
+            button.disabled = false;
+          }
+        });
+        statusControls.appendChild(button);
+      });
+
+      append(overview, dashboardTitle, statusCard, statusControls, statGrid, facts);
       content.appendChild(overview);
 
       const live = create('section', 'vendor-dashboard-orders');
@@ -779,6 +803,13 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-service-status.status-offline .vendor-service-status-dot { background:#ef4444; box-shadow:0 0 10px rgba(239,68,68,.4); }
   .vendor-service-status.status-offline strong { color:#ff9a9a; }
 
+  .vendor-service-status{display:flex;align-items:center;gap:7px;margin:10px 0;padding:9px 11px;border:1px solid rgba(83,168,255,.12);border-radius:10px;background:rgba(255,255,255,.025)}
+  .vendor-service-status-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:#22c55e;box-shadow:0 0 10px rgba(34,197,94,.45)}
+  .vendor-service-status strong{font-size:8px;letter-spacing:.1em;color:#b8d7ed}.vendor-service-status small{margin-left:auto;color:#728ba2;font-size:8px}
+  .vendor-service-status.status-busy{border-color:rgba(245,158,11,.18)}.vendor-service-status.status-busy .vendor-service-status-dot{background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,.4)}
+  .vendor-service-status.status-offline{border-color:rgba(239,68,68,.18)}.vendor-service-status.status-offline .vendor-service-status-dot{background:#ef4444;box-shadow:0 0 10px rgba(239,68,68,.4)}
+  .vendor-service-status.status-offline strong{color:#ff9a9a}
+  .vendor-service-status-controls{display:flex;gap:6px;margin:8px 0 10px}.vendor-status-button{border:1px solid rgba(83,168,255,.12);border-radius:7px;background:#0d2035;color:#91aac1;padding:6px 9px;font-size:8px;cursor:pointer}.vendor-status-button.is-active{background:#1687ff;border-color:#1687ff;color:#fff}
   @media(max-width:850px){
     .vendor-portal{padding:22px 16px 34px}
     .vendor-hero{padding-top:38px}
