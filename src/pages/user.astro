@@ -139,6 +139,109 @@ const findBuildingCenter = (places, nameFragment) => {
 
 const USER_ROUTE_CONNECT_RADIUS_M = 40;
 const USER_GATE_MATCH_RADIUS_M = 25;
+const ALL_POLICY_DAYS = Object.freeze([
+  'mon',
+  'tue',
+  'wed',
+  'thu',
+  'fri',
+  'sat',
+  'sun'
+]);
+
+const policyTemporalState = (timezone = 'Asia/Kolkata', date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: timezone,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+
+  const read = (type) =>
+    parts.find((part) => part.type === type)?.value || '';
+
+  return {
+    day: read('weekday').slice(0, 3).toLowerCase(),
+    time: read('hour') + ':' + read('minute')
+  };
+};
+
+const policyMatchesNow = (policy, temporal) => {
+  if (policy?.enabled === false) return false;
+
+  const days = Array.isArray(policy?.days) && policy.days.length
+    ? policy.days
+    : ALL_POLICY_DAYS;
+
+  if (!days.includes(temporal.day)) return false;
+
+  const windows =
+    Array.isArray(policy?.windows)
+      ? policy.windows
+      : Array.isArray(policy?.condition?.time_windows)
+        ? policy.condition.time_windows
+        : [];
+
+  if (!windows.length) return true;
+
+  const current = minutesFromClockValue(temporal.time);
+
+  return windows.some((window) => {
+    const start = minutesFromClockValue(window?.start);
+    const end = minutesFromClockValue(window?.end);
+    return current >= start && current <= end;
+  });
+};
+
+const minutesFromClockValue = (value) => {
+  const [hours, minutes] = String(value || '00:00').split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+const policyAppliesToGroup = (policy, group) => {
+  const policyGroup = String(policy?.group || 'all');
+  return policyGroup === 'all' || policyGroup === group;
+};
+
+const pathFeatureAllowed = (feature, accessPolicy, group = 'students') => {
+  const temporal = policyTemporalState(accessPolicy?.timezone || 'Asia/Kolkata');
+  const policies = (accessPolicy?.policies || []).filter(
+    (policy) =>
+      policy?.target?.type === 'path' &&
+      String(policy?.target?.id) === String(feature?.id) &&
+      policyAppliesToGroup(policy, group) &&
+      policy?.enabled !== false
+  );
+
+  if (!policies.length) return true;
+
+  const activePolicies = policies.filter((policy) =>
+    policyMatchesNow(policy, temporal)
+  );
+
+  if (policies.some((policy) => policy.mode === 'deny' && activePolicies.includes(policy))) {
+    return false;
+  }
+
+  const denyDuring = policies.some(
+    (policy) =>
+      policy.mode === 'deny_during' &&
+      activePolicies.includes(policy)
+  );
+
+  if (denyDuring) return false;
+
+  const allowOnly = policies.filter(
+    (policy) => policy.mode === 'allow_only_during'
+  );
+
+  if (allowOnly.length) {
+    return allowOnly.some((policy) => activePolicies.includes(policy));
+  }
+
+  return true;
+};
 
 const projectPointToPath = (pathData, latlng) => {
   let best = null;
@@ -219,9 +322,16 @@ const projectPointToPath = (pathData, latlng) => {
  * Exact user clicks are preserved as route endpoints.
  * The nearest path location is only a temporary internal routing anchor.
  */
-const routeSummary = (pathData, startPoint, endPoint) => {
-  const startAnchor = projectPointToPath(pathData, startPoint);
-  const endAnchor = projectPointToPath(pathData, endPoint);
+const routeSummary = (pathData, startPoint, endPoint, accessPolicy) => {
+  const routablePathData = {
+    ...pathData,
+    features: (routablePathData?.features || []).filter((feature) =>
+      pathFeatureAllowed(feature, accessPolicy, 'students')
+    )
+  };
+
+  const startAnchor = projectPointToPath(routablePathData, startPoint);
+  const endAnchor = projectPointToPath(routablePathData, endPoint);
 
   if (!startAnchor || !endAnchor) return null;
 
@@ -254,7 +364,7 @@ const routeSummary = (pathData, startPoint, endPoint) => {
 
   for (
     let featureIndex = 0;
-    featureIndex < (pathData?.features || []).length;
+    featureIndex < (routablePathData?.features || []).length;
     featureIndex += 1
   ) {
     const feature = pathData.features[featureIndex];
@@ -637,7 +747,7 @@ const start = async () => {
   const renderUserRoute = () => {
     if (!pointA || !pointB) return;
 
-    const summary = routeSummary(pathData, pointA, pointB);
+    const summary = routeSummary(pathData, pointA, pointB, accessPolicy);
 
     if (!summary) {
       if (userTripFrom) userTripFrom.textContent = 'Point A selected';
