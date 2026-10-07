@@ -5,6 +5,13 @@ import { defineConfig } from 'astro/config';
 const jsonBody=(chunks)=>JSON.parse(Buffer.concat(chunks).toString('utf8'));
 const readJsonFile=(relativePath)=>JSON.parse(fs.readFileSync(path.join(process.cwd(),relativePath),'utf8'));
 const normalizeVendorStatus=(service)=>{const status=String(service?.status||'online').toLowerCase();return status==='offline'||status==='busy'?status:'online'};
+const writePrivateJson=(relativePath,payload)=>{
+  const sourcePath=path.join(process.cwd(),relativePath);
+  const output=JSON.stringify(payload,null,2)+'\n';
+  fs.mkdirSync(path.dirname(sourcePath),{recursive:true});
+  fs.writeFileSync(sourcePath,output,'utf8');
+};
+
 const writeJsonCopies=(relativePath,payload)=>{const sourcePath=path.join(process.cwd(),relativePath);const publicPath=path.join(process.cwd(),'public',relativePath);const output=JSON.stringify(payload,null,2)+'\n';fs.mkdirSync(path.dirname(sourcePath),{recursive:true});fs.mkdirSync(path.dirname(publicPath),{recursive:true});fs.writeFileSync(sourcePath,output,'utf8');fs.writeFileSync(publicPath,output,'utf8')};
 
 const pedestrianNetworkSavePlugin = () => ({
@@ -166,7 +173,7 @@ const pedestrianNetworkSavePlugin = () => ({
           }
 
           orders.orders.push(order);
-          writeJsonCopies('maps/campus_orders.json',orders);
+          writePrivateJson('maps/campus_orders.json',orders);
           res.statusCode=200;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,order_id:order.id}));
         }catch(e){
           res.statusCode=400;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:false,error:e.message||'Order creation failed'}));
@@ -365,7 +372,7 @@ const pedestrianNetworkSavePlugin = () => ({
 
           o.status=p.status;
           o.updated_at=new Date().toISOString();
-          writeJsonCopies('maps/campus_orders.json',orders);
+          writePrivateJson('maps/campus_orders.json',orders);
 
           res.statusCode=200;
           res.setHeader('Content-Type','application/json');
