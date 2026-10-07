@@ -232,6 +232,16 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
           create('p', '', 'Dedicated vendor dashboard')
         );
 
+        const serviceStatus = String(child.status || 'online').toLowerCase();
+        const statusLabel = serviceStatus === 'offline' ? 'OFFLINE' : serviceStatus === 'busy' ? 'BUSY' : 'ONLINE';
+        const statusText = child.status_message || (
+          serviceStatus === 'offline' ? 'Currently unavailable' :
+          serviceStatus === 'busy' ? 'Currently serving customers' : 'Accepting new orders'
+        );
+        const statusBadge = create('div', 'vendor-service-status status-' + serviceStatus);
+        append(statusBadge, create('span', 'vendor-service-status-dot'), create('strong', statusLabel), create('small', '', statusText));
+        card.insertBefore(statusBadge, info);
+
         const info = create('div', 'vendor-service-info');
         append(
           info,
@@ -293,7 +303,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       };
 
       const next = actions[order.status];
-      if (next) {
+      if (next && serviceStatus !== 'offline') {
         const action = create('button', 'vendor-order-action', next[0]);
         action.type = 'button';
         action.dataset.orderId = order.id;
@@ -341,6 +351,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         preparing: active.filter((order) => ['accepted', 'preparing'].includes(order.status)).length,
         ready: active.filter((order) => order.status === 'ready').length
       };
+      const serviceStatus = String(child.status || 'online').toLowerCase();
+      const serviceStatusLabel = serviceStatus === 'offline' ? 'Offline' : serviceStatus === 'busy' ? 'Busy' : 'Online';
+      const serviceStatusMessage = child.status_message || (
+        serviceStatus === 'offline' ? 'Currently unavailable' :
+        serviceStatus === 'busy' ? 'Currently serving customers' : 'Accepting new orders'
+      );
 
       kicker.textContent = String(item.name).toUpperCase();
       title.textContent = child.name;
@@ -377,6 +393,14 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         statGrid.appendChild(box);
       });
 
+      const statusCard = create('div', 'vendor-service-status status-' + serviceStatus);
+      append(
+        statusCard,
+        create('span', 'vendor-service-status-dot'),
+        create('strong', serviceStatusLabel.toUpperCase()),
+        create('small', '', serviceStatusMessage)
+      );
+
       const facts = create('div', 'vendor-service-facts');
       append(
         facts,
@@ -384,7 +408,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         create('span', '', 'Price ' + formatPrice(child.price))
       );
 
-      append(overview, dashboardTitle, statGrid, facts);
+      append(overview, dashboardTitle, statusCard, statGrid, facts);
       content.appendChild(overview);
 
       const live = create('section', 'vendor-dashboard-orders');
@@ -740,6 +764,20 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-loading-line.wide { width:55%; height:20px; margin-top:26px; }
   .vendor-loading-line.short { width:34%; }
   @keyframes vendorShimmer { 50% { opacity:.45; } }
+
+  .vendor-service-status {
+    display:flex; align-items:center; gap:7px; margin:10px 0;
+    padding:9px 11px; border:1px solid rgba(83,168,255,.12);
+    border-radius:10px; background:rgba(255,255,255,.025);
+  }
+  .vendor-service-status-dot { width:8px; height:8px; border-radius:50%; flex:0 0 auto; background:#22c55e; box-shadow:0 0 10px rgba(34,197,94,.45); }
+  .vendor-service-status strong { font-size:8px; letter-spacing:.1em; color:#b8d7ed; }
+  .vendor-service-status small { margin-left:auto; color:#728ba2; font-size:8px; }
+  .vendor-service-status.status-busy { border-color:rgba(245,158,11,.18); }
+  .vendor-service-status.status-busy .vendor-service-status-dot { background:#f59e0b; box-shadow:0 0 10px rgba(245,158,11,.4); }
+  .vendor-service-status.status-offline { border-color:rgba(239,68,68,.18); }
+  .vendor-service-status.status-offline .vendor-service-status-dot { background:#ef4444; box-shadow:0 0 10px rgba(239,68,68,.4); }
+  .vendor-service-status.status-offline strong { color:#ff9a9a; }
 
   @media(max-width:850px){
     .vendor-portal{padding:22px 16px 34px}
