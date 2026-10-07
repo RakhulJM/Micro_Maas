@@ -52,6 +52,103 @@ const pedestrianNetworkSavePlugin = () => ({
       });
     });
 
+    server.middlewares.use('/__campusmaas/save-access-rules', (req, res, next) => {
+      if (req.method !== 'POST') {
+        next();
+        return;
+      }
+
+      const chunks = [];
+
+      req.on('data', (chunk) => chunks.push(chunk));
+      req.on('end', () => {
+        try {
+          const raw = Buffer.concat(chunks).toString('utf8');
+          const payload = JSON.parse(raw);
+
+          const timePattern = /^([01]\\d|2[0-3]):[0-5]\\d$/;
+          const validModes = new Set(['preferred', 'allow_only_during']);
+          const validDirections = new Set(['in_out', 'in', 'out']);
+
+          if (
+            payload?.version !== 1 ||
+            payload?.timezone !== 'Asia/Kolkata' ||
+            !Array.isArray(payload?.policies)
+          ) {
+            throw new Error('Invalid access rules root.');
+          }
+
+          const validPolicies = payload.policies.every((policy) => {
+            const target = policy?.target;
+
+            if (
+              !policy?.id ||
+              target?.type !== 'gate' ||
+              !target?.id ||
+              policy.group !== 'students' ||
+              !validModes.has(policy.mode) ||
+              !validDirections.has(policy.direction)
+            ) {
+              return false;
+            }
+
+            if (policy.mode === 'preferred') {
+              return Number.isInteger(policy.priority) &&
+                policy.priority >= 0 &&
+                policy.priority <= 100;
+            }
+
+            if (policy.mode === 'allow_only_during') {
+              return Array.isArray(policy.windows) &&
+                policy.windows.length >= 1 &&
+                policy.windows.every((window) => {
+                  if (
+                    !timePattern.test(String(window?.start || '')) ||
+                    !timePattern.test(String(window?.end || ''))
+                  ) {
+                    return false;
+                  }
+
+                  const [startHour, startMinute] = window.start.split(':').map(Number);
+                  const [endHour, endMinute] = window.end.split(':').map(Number);
+                  const start = startHour * 60 + startMinute;
+                  const end = endHour * 60 + endMinute;
+
+                  return start < end;
+                });
+            }
+
+            return false;
+          });
+
+          if (!validPolicies) {
+            throw new Error('Invalid student gate rule.');
+          }
+
+          const root = process.cwd();
+          const sourcePath = path.join(root, 'maps', 'campus_access_rules.json');
+          const publicPath = path.join(root, 'public', 'maps', 'campus_access_rules.json');
+          const output = JSON.stringify(payload, null, 2) + '\\n';
+
+          fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+          fs.mkdirSync(path.dirname(publicPath), { recursive: true });
+          fs.writeFileSync(sourcePath, output, 'utf8');
+          fs.writeFileSync(publicPath, output, 'utf8');
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ ok: true, policies: payload.policies.length }));
+        } catch (error) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({
+            ok: false,
+            error: error instanceof Error ? error.message : 'Access rules save failed'
+          }));
+        }
+      });
+    });
+
     server.middlewares.use('/__campusmaas/save-pedestrian-network', (req, res, next) => {
       if (req.method !== 'POST') {
         next();
