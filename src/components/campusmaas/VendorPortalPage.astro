@@ -586,10 +586,11 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-history-card {
     position:relative;
     overflow:hidden;
-    border:1px solid rgba(89,174,255,.42);
+    border:1px solid rgba(184,201,215,.86);
     border-radius:22px;
-    background:linear-gradient(145deg,rgba(24,58,89,.99),rgba(15,39,63,.99));
-    box-shadow:0 24px 64px rgba(0,0,0,.46),0 1px 0 rgba(255,255,255,.06) inset,0 0 0 1px rgba(43,143,235,.035);
+    background:linear-gradient(145deg,#ffffff 0%,#f5f9fd 58%,#eaf3fa 100%);
+    color:#0b1e31;
+    box-shadow:0 24px 64px rgba(0,0,0,.34),0 1px 0 rgba(255,255,255,.95) inset,0 0 0 1px rgba(22,135,255,.04);
     backdrop-filter:blur(15px);
   }
 
@@ -598,10 +599,10 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     padding:25px;
     transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;
   }
-  .vendor-large-card:hover {
+  .vendor-large-card:hover,.vendor-service-card:hover {
     transform:translateY(-3px);
-    border-color:rgba(103,198,255,.68);
-    box-shadow:0 30px 90px rgba(0,0,0,.52),0 0 0 1px rgba(39,191,255,.12) inset,0 10px 34px rgba(22,135,255,.10);
+    border-color:rgba(22,135,255,.50);
+    box-shadow:0 30px 84px rgba(0,0,0,.42),0 1px 0 rgba(255,255,255,.98) inset,0 10px 34px rgba(22,135,255,.12);
   }
   .vendor-large-card::after,.vendor-service-card::after {
     content:'';
@@ -628,8 +629,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     height:32px;
     border:1px solid rgba(83,168,255,.18);
     border-radius:9px;
-    background:#0d2742;
-    color:#67c6ff;
+    background:#e7f2fa;
+    color:#1687ff;
     font:800 9px 'Space Grotesk',sans-serif;
   }
   .vendor-open-icon {
@@ -639,8 +640,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     height:32px;
     border:1px solid rgba(83,168,255,.13);
     border-radius:9px;
-    background:rgba(255,255,255,.028);
-    color:#6caedf;
+    background:rgba(22,135,255,.06);
+    color:#1687ff;
     font-size:15px;
   }
   .vendor-large-icon,.vendor-service-icon {
@@ -651,29 +652,29 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     margin-top:42px;
     border:1px solid rgba(39,191,255,.18);
     border-radius:16px;
-    background:linear-gradient(145deg,#0c2c49,#0b2035);
-    color:#52c8ff;
+    background:linear-gradient(145deg,#e8f4fc,#dcecf8);
+    color:#1687ff;
     font:700 21px 'Space Grotesk',sans-serif;
     box-shadow:inset 0 0 30px rgba(31,136,242,.05);
   }
-  .vendor-large-title { margin-top:20px; color:#f3f8ff; font:600 27px/1 'Space Grotesk',sans-serif; letter-spacing:-.02em; }
-  .vendor-large-card p { margin:9px 0 0; color:#7e97ad; font-size:11px; }
+  .vendor-large-title { margin-top:20px; color:#0b1e31; font:600 27px/1 'Space Grotesk',sans-serif; letter-spacing:-.02em; }
+  .vendor-large-card p { margin:9px 0 0; color:#64798b; font-size:11px; }
   .vendor-large-footer,.vendor-service-footer {
     display:flex; align-items:center; justify-content:space-between; gap:12px;
     margin-top:27px; padding-top:12px;
-    border-top:1px solid rgba(117,162,206,.10);
-    color:#6e89a2; font-size:8px;
+    border-top:1px solid rgba(55,88,116,.14);
+    color:#5d7388; font-size:8px;
   }
   .vendor-large-footer span:last-child,.vendor-service-footer span:last-child { color:#67c6ff; font-weight:700; }
 
   .vendor-service-card { min-height:250px; padding:20px; }
   .vendor-service-card-head .vendor-service-icon { margin-top:0; width:48px; height:48px; border-radius:13px; }
   .vendor-service-number { margin-top:30px; width:29px; height:29px; font-size:8px; }
-  .vendor-service-card h2 { margin:10px 0 0; color:#f0f7ff; font:600 22px/1.05 'Space Grotesk',sans-serif; }
-  .vendor-service-card p { margin:7px 0 0; color:#728aa0; font-size:10px; }
+  .vendor-service-card h2 { margin:10px 0 0; color:#0b1e31; font:600 22px/1.05 'Space Grotesk',sans-serif; }
+  .vendor-service-card p { margin:7px 0 0; color:#687e91; font-size:10px; }
   .vendor-service-info { display:flex; gap:9px; margin-top:18px; }
-  .vendor-service-info span { padding:6px 8px; border:1px solid rgba(83,168,255,.08); border-radius:7px; background:rgba(255,255,255,.025); color:#7d95aa; font-size:8px; }
-  .vendor-service-info b { color:#cbe7fb; }
+  .vendor-service-info span { padding:6px 8px; border:1px solid rgba(83,168,255,.08); border-radius:7px; background:#edf5fb; color:#63798d; font-size:8px; }
+  .vendor-service-info b { color:#173b5a; }
 
   .vendor-dashboard-grid { grid-template-columns:1.08fr .92fr; }
   .vendor-dashboard-overview,.vendor-dashboard-orders,.vendor-history-card { padding:20px; }
