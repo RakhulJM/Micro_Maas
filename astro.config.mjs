@@ -89,6 +89,50 @@ const pedestrianNetworkSavePlugin = () => ({
     });
 
     server.middlewares.use('/__campusmaas/save-vendors',(req,res,next)=>{if(req.method!=='POST')return next();const chunks=[];req.on('data',c=>chunks.push(c));req.on('end',()=>{try{const p=jsonBody(chunks);if(p?.version!==1||!Array.isArray(p.vendors))throw Error('Invalid vendor catalogue.');const vids=new Set(),oids=new Set();for(const v of p.vendors){if(!v?.id||vids.has(String(v.id))||!String(v.name||'').trim())throw Error('Invalid vendor.');vids.add(String(v.id));if(!Array.isArray(v.options))throw Error('Invalid vendor options.');for(const o of v.options){if(!o?.id||oids.has(String(o.id))||!String(o.name||'').trim())throw Error('Invalid vendor option.');oids.add(String(o.id));if(Number(o.order)<1||Number(o.service_minutes)<0||Number(o.price)<0)throw Error('Invalid option values.')}}writeJsonCopies('maps/campus_vendors.json',p);res.statusCode=200;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true}))}catch(e){res.statusCode=400;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:false,error:e.message||'Vendor save failed'}))}})});
+    const sendJson=(res,status,payload)=>{
+      res.statusCode=status;
+      res.setHeader('Content-Type','application/json');
+      res.setHeader('Cache-Control','no-store');
+      res.end(JSON.stringify(payload));
+    };
+
+    const privateOrders=()=>{
+      const payload=readJsonFile('maps/campus_orders.json');
+      if(payload?.version!==1||!Array.isArray(payload?.orders))throw Error('Invalid order database.');
+      return payload;
+    };
+
+    server.middlewares.use('/__campusmaas/user-orders',(req,res,next)=>{
+      if(req.method!=='GET')return next();
+      try{
+        const parsed=new URL(req.url||'','http://localhost');
+        const userId=String(parsed.searchParams.get('user_id')||'').trim();
+        if(!userId)return sendJson(res,400,{ok:false,error:'User id is required.'});
+        const orders=privateOrders();
+        return sendJson(res,200,{version:1,orders:orders.orders.filter(o=>String(o.user_id||'')===userId)});
+      }catch(e){
+        return sendJson(res,500,{ok:false,error:e.message||'Orders unavailable.'});
+      }
+    });
+
+    server.middlewares.use('/__campusmaas/vendor-orders',(req,res,next)=>{
+      if(req.method!=='GET')return next();
+      try{
+        const parsed=new URL(req.url||'','http://localhost');
+        const vendorId=String(parsed.searchParams.get('vendor_id')||'').trim();
+        const optionId=String(parsed.searchParams.get('option_id')||'').trim();
+        const orders=privateOrders();
+        const filtered=orders.orders.filter(o=>{
+          if(vendorId&&String(o.vendor_id)!==vendorId)return false;
+          if(optionId&&String(o.option_id)!==optionId)return false;
+          return true;
+        });
+        return sendJson(res,200,{version:1,orders:filtered});
+      }catch(e){
+        return sendJson(res,500,{ok:false,error:e.message||'Vendor orders unavailable.'});
+      }
+    });
+
     server.middlewares.use('/__campusmaas/create-order',(req,res,next)=>{
       if(req.method!=='POST')return next();
       const chunks=[];
@@ -328,71 +372,40 @@ const pedestrianNetworkSavePlugin = () => ({
       req.on('end',()=>{
         try{
           const p=jsonBody(chunks);
-          const allowed=new Set(['placed','accepted','preparing','ready','completed','cancelled']);
+          const allowed=new Set(['placed','preparing','ready','completed','cancelled']);
           if(!p?.id||!allowed.has(p.status))throw Error('Invalid order update.');
 
-          const orders=readJsonFile('maps/campus_orders.json');
+          const orders=privateOrders();
           const o=orders.orders.find(x=>x.id===p.id);
           if(!o)throw Error('Order not found.');
 
-          const current=String(o.status||'').toLowerCase();
-          const actor=String(p.actor||'').toLowerCase();
-
-          if(actor==='user'){
-            if(p.status!=='completed'||String(p.user_id||'')!==String(o.user_id||'')){
-              throw Error('This order cannot be confirmed by this user.');
-            }
-          }else if(actor==='vendor'){
-            if(
-              String(p.vendor_id||'')!==String(o.vendor_id||'') ||
-              String(p.option_id||'')!==String(o.option_id||'')
-            ){
-              throw Error('This order does not belong to this service.');
-            }
-
-            if(p.status==='preparing' && !['placed','accepted'].includes(current)){
-              throw Error('Order cannot be accepted from its current state.');
-            }
-
-            if(p.status==='ready' && !['preparing','accepted'].includes(current)){
-              throw Error('Order cannot be marked ready from its current state.');
-            }
-
-            if(!['preparing','ready'].includes(p.status)){
-              throw Error('Vendor can only accept or mark an order ready.');
-            }
-          }else if(actor==='developer'){
-            // Developer tools may inspect/fix order state, subject to the same
-            // valid status vocabulary.
-          }else{
-            throw Error('Order update actor is required.');
+          const current=String(o.status||'');
+          if(p.status==='preparing'&&!['placed','accepted'].includes(current)){
+            throw Error('Order must be placed before preparation starts.');
           }
-
-          if(p.status==='completed' && current!=='ready'){
-            throw Error('Order must be ready before collection is confirmed.');
+          if(p.status==='ready'&&!['preparing','accepted'].includes(current)){
+            throw Error('Order must be preparing before it can be marked ready.');
           }
-
-          if(
-            p.status==='cancelled' &&
-            !['placed','accepted','preparing','ready'].includes(current)
-          ){
-            throw Error('Order cannot be cancelled from its current state.');
+          if(p.status==='completed'){
+            if(current!=='ready')throw Error('Order must be ready before collection is confirmed.');
+            if(!p.user_id||String(o.user_id||'')!==String(p.user_id)){
+              throw Error('Only the order owner can confirm collection.');
+            }
+          }
+          if(p.status==='cancelled'&&current==='completed'){
+            throw Error('Completed orders cannot be cancelled.');
           }
 
           o.status=p.status;
           o.updated_at=new Date().toISOString();
           writeJsonCopies('maps/campus_orders.json',orders);
-
-          res.statusCode=200;
-          res.setHeader('Content-Type','application/json');
-          res.end(JSON.stringify({ok:true}));
+          sendJson(res,200,{ok:true});
         }catch(e){
-          res.statusCode=400;
-          res.setHeader('Content-Type','application/json');
-          res.end(JSON.stringify({ok:false,error:e.message||'Order update failed'}));
+          sendJson(res,400,{ok:false,error:e.message||'Order update failed'});
         }
       });
     });
+
     server.middlewares.use('/__campusmaas/save-gates', (req, res, next) => {
       if (req.method !== 'POST') {
         next();
