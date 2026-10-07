@@ -240,15 +240,31 @@ const pedestrianNetworkSavePlugin = () => ({
           const validFeatures = payload.features.every((feature) => {
             const featureKeys = Object.keys(feature || {});
             const propertyKeys = Object.keys(feature?.properties || {});
+            const hasGroundShape = Object.prototype.hasOwnProperty.call(
+              feature?.properties || {},
+              'ground_shape'
+            );
 
             return (
               feature?.type === 'Feature' &&
               featureKeys.every((key) =>
-                key === 'type' || key === 'properties' || key === 'geometry'
+                key === 'type' || key === 'id' || key === 'properties' || key === 'geometry'
               ) &&
-              featureKeys.length === 3 &&
-              propertyKeys.length === 1 &&
-              propertyKeys[0] === 'category' &&
+              featureKeys.includes('type') &&
+              featureKeys.includes('properties') &&
+              featureKeys.includes('geometry') &&
+              (!Object.prototype.hasOwnProperty.call(feature, 'id') ||
+                typeof feature.id === 'string' ||
+                typeof feature.id === 'number') &&
+              propertyKeys.every((key) => key === 'category' || key === 'ground_shape') &&
+              propertyKeys.includes('category') &&
+              (!hasGroundShape ||
+                (
+                  typeof feature.properties.ground_shape === 'string' &&
+                  ['square', 'circle', 'free', 'polygon'].includes(
+                    feature.properties.ground_shape
+                  )
+                )) &&
               validPathCategories.has(feature.properties.category) &&
               feature?.geometry?.type === 'LineString' &&
               Array.isArray(feature.geometry.coordinates) &&
