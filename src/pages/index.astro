@@ -14,6 +14,7 @@ import DeletePointModal from '../components/campusmaas/DeletePointModal.astro';
 import DeletePathModal from '../components/campusmaas/DeletePathModal.astro';
 import DeveloperPanel from '../components/campusmaas/DeveloperPanel.astro';
 import AccessRulesCard from '../components/campusmaas/AccessRulesCard.astro';
+import VendorManagerCard from '../components/campusmaas/VendorManagerCard.astro';
 ---
 
 <MainLayout title="CampusMaaS · Map">
@@ -30,8 +31,63 @@ import AccessRulesCard from '../components/campusmaas/AccessRulesCard.astro';
     <DeletePointModal />
     <DeletePathModal />
     <DeveloperPanel />
-    <AccessRulesCard />
+    <div class="developer-side-workspace" aria-label="Developer workspace">
+      <VendorManagerCard />
+      <AccessRulesCard />
+    </div>
 
     <script src="../scripts/campusmaas/app.js"></script>
   </main>
 </MainLayout>
+
+<style>
+  .developer-side-workspace {
+    position: absolute;
+    z-index: 1800;
+    top: 58px;
+    right: 14px;
+    width: min(430px, calc(100vw - 28px));
+    max-height: calc(100dvh - 72px);
+    overflow: auto;
+    display: grid;
+    gap: 8px;
+    pointer-events: auto;
+    scrollbar-width: thin;
+  }
+
+  .developer-side-workspace > * {
+    min-width: 0;
+  }
+
+  :global(.developer-side-workspace .vendor-manager),
+  :global(.developer-side-workspace .access-rules-card) {
+    position: relative;
+    inset: auto;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    box-sizing: border-box;
+    margin: 0;
+  }
+
+  :global(.developer-side-workspace .vendor-manager) {
+    box-shadow: 0 16px 42px rgba(0, 0, 0, .28);
+  }
+
+  :global(.developer-side-workspace .access-rules-card) {
+    box-shadow: 0 16px 42px rgba(0, 0, 0, .28);
+  }
+
+  @media (max-width: 700px) {
+    .developer-side-workspace {
+      top: 50px;
+      right: 10px;
+      width: calc(100vw - 20px);
+      max-height: calc(100dvh - 60px);
+    }
+  }
+</style>
