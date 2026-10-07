@@ -805,28 +805,19 @@ const start = async () => {
     return read('hour') + ':' + read('minute');
   };
 
-  const gatePolicy = (gateId) =>
-    (accessPolicy?.policies || []).find(
+  const gatePoliciesFor = (gateId) =>
+    (accessPolicy?.policies || []).filter(
       (policy) =>
-        policy?.group === 'students' &&
         policy?.target?.type === 'gate' &&
-        String(policy?.target?.id) === String(gateId)
-    ) || null;
-
-  const policyWindowActive = (windows, time) => {
-    const current = minutesFromClock(time);
-
-    return (Array.isArray(windows) ? windows : []).some((window) => {
-      const start = minutesFromClock(window?.start);
-      const end = minutesFromClock(window?.end);
-      return current >= start && current <= end;
-    });
-  };
+        String(policy?.target?.id) === String(gateId) &&
+        policyAppliesToGroup(policy, 'students') &&
+        policy?.enabled !== false
+    );
 
   const evaluateStudentGate = (gate, time = campusClock()) => {
-    const policy = gatePolicy(gate?.id);
+    const policies = gatePoliciesFor(gate?.id);
 
-    if (!policy) {
+    if (!policies.length) {
       return {
         allowed: true,
         preferred: false,
@@ -835,30 +826,69 @@ const start = async () => {
       };
     }
 
-    if (policy.mode === 'preferred') {
+    const temporal = {
+      day: policyTemporalState(
+        accessPolicy?.timezone || 'Asia/Kolkata'
+      ).day,
+      time
+    };
+
+    const activePolicies = policies.filter((policy) =>
+      policyMatchesNow(policy, temporal)
+    );
+
+    const denyActive = activePolicies.some(
+      (policy) => policy.mode === 'deny' || policy.mode === 'deny_during'
+    );
+
+    if (denyActive) {
       return {
-        allowed: true,
-        preferred: true,
-        priority: Number(policy.priority) || 0,
-        policy
+        allowed: false,
+        preferred: false,
+        priority: null,
+        policy: activePolicies.find(
+          (policy) => policy.mode === 'deny' || policy.mode === 'deny_during'
+        ) || null
       };
     }
 
-    if (policy.mode === 'allow_only_during') {
-      const allowed = policyWindowActive(policy.windows, time);
+    const allowOnlyPolicies = policies.filter(
+      (policy) => policy.mode === 'allow_only_during'
+    );
+
+    if (allowOnlyPolicies.length) {
+      const allowed = activePolicies.some(
+        (policy) => policy.mode === 'allow_only_during'
+      );
+
       return {
         allowed,
         preferred: false,
         priority: null,
-        policy
+        policy: allowOnlyPolicies[0] || null
       };
     }
 
+    const preferredPolicies = activePolicies.filter(
+      (policy) => policy.mode === 'preferred'
+    );
+
+    const preferred = preferredPolicies.length > 0;
+    const priority = preferred
+      ? Math.max(
+          ...preferredPolicies.map((policy) =>
+            Number.isFinite(Number(policy?.priority))
+              ? Number(policy.priority)
+              : 0
+          )
+        )
+      : null;
+
     return {
       allowed: true,
-      preferred: false,
-      priority: null,
-      policy
+      preferred,
+      priority,
+      policy: preferredPolicies[0] || activePolicies[0] || policies[0]
     };
   };
 
