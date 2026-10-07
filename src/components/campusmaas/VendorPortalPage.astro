@@ -562,11 +562,9 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         const visibleOptions = (item.options || [])
           .filter((child) => child.enabled !== false);
 
-        const activeOrders = state.orders.orders.filter(
-          (order) =>
-            String(order.vendor_id) === String(item.id) &&
-            ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
-        ).length;
+        const activeOrders = state.orderSummary
+          .filter((entry) => String(entry.vendor_id) === String(item.id))
+          .reduce((sum, entry) => sum + (Number(entry.active) || 0), 0);
 
         append(
           card,
