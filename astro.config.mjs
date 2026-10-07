@@ -13,16 +13,78 @@ const pedestrianNetworkSavePlugin = () => ({
     server.middlewares.use('/__campusmaas/vendor-data',(req,res,next)=>{
       if(req.method!=='GET'){next();return;}
       try{
+        const parsed=new URL(req.url||'', 'http://localhost');
+        const vendorId=parsed.searchParams.get('vendor_id');
+        const optionId=parsed.searchParams.get('option_id');
         const catalogue=readJsonFile('maps/campus_vendors.json');
-        const orders=readJsonFile('maps/campus_orders.json');
+        const allOrders=readJsonFile('maps/campus_orders.json');
+        const activeStatuses=new Set(['placed','accepted','preparing']);
+
+        let scopedOrders=[];
+        if(vendorId){
+          scopedOrders=allOrders.orders.filter((order)=>{
+            if(String(order.vendor_id)!==String(vendorId)) return false;
+            return !optionId || String(order.option_id)===String(optionId);
+          });
+        }
+
+        const orderSummary=catalogue.vendors.flatMap((vendor)=>{
+          const vendorOrders=allOrders.orders.filter((order)=>
+            String(order.vendor_id)===String(vendor.id)
+          );
+          return (vendor.options||[]).map((option)=>({
+            vendor_id:vendor.id,
+            option_id:option.id,
+            active:vendorOrders.filter((order)=>
+              String(order.option_id)===String(option.id) &&
+              activeStatuses.has(String(order.status||'').toLowerCase())
+            ).length
+          }));
+        });
+
         res.statusCode=200;
         res.setHeader('Content-Type','application/json');
         res.setHeader('Cache-Control','no-store');
-        res.end(JSON.stringify({catalogue,orders}));
+        res.end(JSON.stringify({
+          catalogue,
+          orders:{
+            version:1,
+            orders:scopedOrders
+          },
+          order_summary:orderSummary
+        }));
       }catch(error){
         res.statusCode=500;
         res.setHeader('Content-Type','application/json');
         res.end(JSON.stringify({ok:false,error:error instanceof Error?error.message:'Vendor data unavailable'}));
+      }
+    });
+
+    server.middlewares.use('/__campusmaas/user-orders',(req,res,next)=>{
+      if(req.method!=='GET'){next();return;}
+      try{
+        const parsed=new URL(req.url||'', 'http://localhost');
+        const userId=String(parsed.searchParams.get('user_id')||'').trim();
+        if(!userId || userId.length>80){
+          res.statusCode=400;
+          res.setHeader('Content-Type','application/json');
+          res.end(JSON.stringify({ok:false,error:'Invalid user id.'}));
+          return;
+        }
+
+        const orders=readJsonFile('maps/campus_orders.json');
+        const mine=orders.orders.filter((order)=>
+          String(order.user_id||'')===userId
+        );
+
+        res.statusCode=200;
+        res.setHeader('Content-Type','application/json');
+        res.setHeader('Cache-Control','no-store');
+        res.end(JSON.stringify({version:1,orders:mine}));
+      }catch(error){
+        res.statusCode=500;
+        res.setHeader('Content-Type','application/json');
+        res.end(JSON.stringify({ok:false,error:error instanceof Error?error.message:'Orders unavailable'}));
       }
     });
 
@@ -259,7 +321,78 @@ const pedestrianNetworkSavePlugin = () => ({
       }
     });
 
-    server.middlewares.use('/__campusmaas/update-order',(req,res,next)=>{if(req.method!=='POST')return next();const chunks=[];req.on('data',c=>chunks.push(c));req.on('end',()=>{try{const p=jsonBody(chunks),allowed=new Set(['placed','preparing','ready','completed','cancelled']);if(!p?.id||!allowed.has(p.status))throw Error('Invalid order update.');const orders=readJsonFile('maps/campus_orders.json'),o=orders.orders.find(x=>x.id===p.id);if(!o)throw Error('Order not found.');const current=String(o.status||'');if(p.status==='preparing'&&!['placed','accepted'].includes(current))throw Error('Order cannot be accepted from its current state.');if(p.status==='ready'&&!['preparing','accepted'].includes(current))throw Error('Order cannot be marked ready from its current state.');if(p.status==='completed'&&current!=='ready')throw Error('Order must be ready before collection is confirmed.');o.status=p.status;o.updated_at=new Date().toISOString();writeJsonCopies('maps/campus_orders.json',orders);res.statusCode=200;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true}))}catch(e){res.statusCode=400;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:false,error:e.message||'Order update failed'}))}})});
+    server.middlewares.use('/__campusmaas/update-order',(req,res,next)=>{
+      if(req.method!=='POST')return next();
+      const chunks=[];
+      req.on('data',c=>chunks.push(c));
+      req.on('end',()=>{
+        try{
+          const p=jsonBody(chunks);
+          const allowed=new Set(['placed','accepted','preparing','ready','completed','cancelled']);
+          if(!p?.id||!allowed.has(p.status))throw Error('Invalid order update.');
+
+          const orders=readJsonFile('maps/campus_orders.json');
+          const o=orders.orders.find(x=>x.id===p.id);
+          if(!o)throw Error('Order not found.');
+
+          const current=String(o.status||'').toLowerCase();
+          const actor=String(p.actor||'').toLowerCase();
+
+          if(actor==='user'){
+            if(p.status!=='completed'||String(p.user_id||'')!==String(o.user_id||'')){
+              throw Error('This order cannot be confirmed by this user.');
+            }
+          }else if(actor==='vendor'){
+            if(
+              String(p.vendor_id||'')!==String(o.vendor_id||'') ||
+              String(p.option_id||'')!==String(o.option_id||'')
+            ){
+              throw Error('This order does not belong to this service.');
+            }
+
+            if(p.status==='preparing' && !['placed','accepted'].includes(current)){
+              throw Error('Order cannot be accepted from its current state.');
+            }
+
+            if(p.status==='ready' && !['preparing','accepted'].includes(current)){
+              throw Error('Order cannot be marked ready from its current state.');
+            }
+
+            if(!['preparing','ready'].includes(p.status)){
+              throw Error('Vendor can only accept or mark an order ready.');
+            }
+          }else if(actor==='developer'){
+            // Developer tools may inspect/fix order state, subject to the same
+            // valid status vocabulary.
+          }else{
+            throw Error('Order update actor is required.');
+          }
+
+          if(p.status==='completed' && current!=='ready'){
+            throw Error('Order must be ready before collection is confirmed.');
+          }
+
+          if(
+            p.status==='cancelled' &&
+            !['placed','accepted','preparing','ready'].includes(current)
+          ){
+            throw Error('Order cannot be cancelled from its current state.');
+          }
+
+          o.status=p.status;
+          o.updated_at=new Date().toISOString();
+          writeJsonCopies('maps/campus_orders.json',orders);
+
+          res.statusCode=200;
+          res.setHeader('Content-Type','application/json');
+          res.end(JSON.stringify({ok:true}));
+        }catch(e){
+          res.statusCode=400;
+          res.setHeader('Content-Type','application/json');
+          res.end(JSON.stringify({ok:false,error:e.message||'Order update failed'}));
+        }
+      });
+    });
     server.middlewares.use('/__campusmaas/save-gates', (req, res, next) => {
       if (req.method !== 'POST') {
         next();
@@ -360,6 +493,23 @@ const pedestrianNetworkSavePlugin = () => ({
             throw new Error('Invalid access rules root.');
           }
 
+          const gatesData = readJsonFile('maps/gates.geojson');
+          const pathsData = readJsonFile('maps/pedestrian_paths_edits.geojson');
+
+          const gateIds = new Set(
+            (gatesData?.features || []).map((feature) => String(feature?.id || '')).filter(Boolean)
+          );
+
+          const pathIds = new Set(
+            (pathsData?.features || []).map((feature, index) =>
+              String(
+                feature?.id ||
+                feature?.properties?.['@id'] ||
+                'path-' + (index + 1)
+              )
+            )
+          );
+
           const policyIds = new Set();
 
           const validPolicies = payload.policies.every((policy) => {
@@ -371,6 +521,11 @@ const pedestrianNetworkSavePlugin = () => ({
               policyIds.has(String(policy.id)) ||
               !target?.id ||
               !validTargetTypes.has(target?.type) ||
+              (
+                target.type === 'gate'
+                  ? !gateIds.has(String(target.id))
+                  : !pathIds.has(String(target.id))
+              ) ||
               !validGroups.has(policy.group) ||
               !validModes.has(policy.mode) ||
               !validDirections.has(policy.direction) ||
