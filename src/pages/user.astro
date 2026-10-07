@@ -123,6 +123,32 @@ const escapeHtml = (value) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
+const normalizeVendorStatus = (service) => {
+  const status = String(service?.status || 'online').toLowerCase();
+  return status === 'offline' || status === 'busy' ? status : 'online';
+};
+
+const vendorStatusLabel = (service) => {
+  const status = normalizeVendorStatus(service);
+  return status === 'offline' ? 'Offline' : status === 'busy' ? 'Busy' : 'Online';
+};
+
+const vendorStatusMessage = (service) => {
+  const status = normalizeVendorStatus(service);
+  return service?.status_message ||
+    (status === 'offline'
+      ? 'Currently unavailable'
+      : status === 'busy'
+        ? 'Currently serving customers'
+        : 'Accepting new orders');
+};
+
+const vendorStatusMarkup = (service) => {
+  const status = normalizeVendorStatus(service);
+  return '<span class="user-vendor-status user-vendor-status-' + status + '">' +
+    '<i aria-hidden="true"></i><span>' + vendorStatusLabel(service) + '</span></span>';
+};
+
 const distanceMeters = (a, b) =>
   L.latLng(Number(a[1]), Number(a[0]))
     .distanceTo(L.latLng(Number(b[1]), Number(b[0])));
@@ -1603,6 +1629,11 @@ const start = async () => {
 
       foodPopupVendor.textContent = vendor.name;
       foodPopupService.textContent = service.name;
+      const popupStatus = document.getElementById('foodPopupStatus');
+      if (popupStatus) {
+        popupStatus.className = 'food-popup-status food-popup-status-' + normalizeVendorStatus(service);
+        popupStatus.innerHTML = '<i aria-hidden="true"></i><span>' + vendorStatusLabel(service) + '</span><small>' + esc(vendorStatusMessage(service)) + '</small>';
+      }
       foodMenuList.innerHTML = '<div class="food-menu-empty">Loading menu…</div>';
       foodPopupError.hidden = true;
       foodPopup.hidden = false;
@@ -1693,16 +1724,22 @@ const start = async () => {
 
     const openPrinterComposer = (vendor, option) => {
       composer.hidden = false;
+      const serviceStatus = normalizeVendorStatus(option);
+      const serviceOffline = serviceStatus === 'offline';
       composer.innerHTML =
         '<div class="user-order-compose-head"><div><span>' + esc(vendor.name) +
         '</span><strong>' + esc(option.name) +
-        '</strong></div><button type="button" id="closeOrderComposer">×</button></div>' +
+        '</strong><div class="user-order-compose-status user-order-compose-status-' + serviceStatus + '">' +
+        '<i aria-hidden="true"></i><span>' + vendorStatusLabel(option) + '</span></div></div>' +
+        '<button type="button" id="closeOrderComposer">×</button></div>' +
+        '<div class="user-order-compose-message">' + esc(vendorStatusMessage(option)) + '</div>' +
         '<div class="user-order-compose-meta"><div><span>Service</span><strong>' +
         (Number(option.service_minutes) || 0) + ' min</strong></div><div><span>Price</span><strong>' +
         money(option.price) + '</strong></div></div>' +
-        '<div class="user-qty-row"><span>Quantity</span><div><button type="button" data-qty="-1">−</button>' +
-        '<strong id="userOrderQty">1</strong><button type="button" data-qty="1">+</button></div></div>' +
-        '<button type="button" class="user-place-order" id="placeUserOrder">PLACE ORDER</button>';
+        '<div class="user-qty-row"><span>Quantity</span><div><button type="button" data-qty="-1" ' + (serviceOffline ? 'disabled' : '') + '>−</button>' +
+        '<strong id="userOrderQty">1</strong><button type="button" data-qty="1" ' + (serviceOffline ? 'disabled' : '') + '>+</button></div></div>' +
+        '<button type="button" class="user-place-order" id="placeUserOrder" ' + (serviceOffline ? 'disabled' : '') + '>' +
+        (serviceOffline ? 'UNAVAILABLE' : 'PLACE ORDER') + '</button>';
 
       let quantity = 1;
       const qText = composer.querySelector('#userOrderQty');
@@ -1719,6 +1756,7 @@ const start = async () => {
       };
 
       composer.querySelector('#placeUserOrder').onclick = async () => {
+        if (normalizeVendorStatus(option) === 'offline') return;
         const button = composer.querySelector('#placeUserOrder');
         button.disabled = true;
         button.textContent = 'PLACING…';
@@ -1778,8 +1816,10 @@ const start = async () => {
             .sort((a, b) => Number(a.order) - Number(b.order))
             .forEach((service) => {
               const button = document.createElement('button');
+              const serviceStatus = normalizeVendorStatus(service);
+              const serviceOffline = serviceStatus === 'offline';
               button.type = 'button';
-              button.className = 'user-service-option';
+              button.className = 'user-service-option' + (serviceOffline ? ' is-offline' : '') + (serviceStatus === 'busy' ? ' is-busy' : '');
 
               const secondary =
                 Number(service.service_minutes) > 0
@@ -1788,17 +1828,24 @@ const start = async () => {
                   : (Number(service.price) === 0 ? 'Free' : money(service.price));
 
               button.innerHTML =
-                '<span><strong>' + esc(service.name) +
+                '<span class="user-service-main"><strong>' + esc(service.name) +
                 '</strong><small>' + esc(secondary) +
-                '</small></span><b>›</b>';
+                '</small></span><span class="user-service-tail">' + vendorStatusMarkup(service) +
+                '<b>›</b></span>';
 
-              button.onclick = () => {
-                if (vendor.id === 'food') {
-                  openFoodPopup(vendor, service);
-                } else {
-                  openPrinterComposer(vendor, service);
-                }
-              };
+              if (serviceOffline) {
+                button.disabled = true;
+                button.title = vendorStatusMessage(service);
+                button.setAttribute('aria-disabled', 'true');
+              } else {
+                button.onclick = () => {
+                  if (vendor.id === 'food') {
+                    openFoodPopup(vendor, service);
+                  } else {
+                    openPrinterComposer(vendor, service);
+                  }
+                };
+              }
 
               wrap.appendChild(button);
             });
@@ -2414,19 +2461,20 @@ void start().catch((error) => {
   border-color:rgba(83,168,255,.25);
   background:rgba(31,136,242,.09);
 }
-.user-service-option span strong,
-.user-service-option span small{display:block}
-.user-service-option span strong{
+ .user-service-main strong,
+.user-service-main small{display:block}
+.user-service-main strong{
   color:#edf6ff;
   font-size:10px;
   font-weight:650;
 }
-.user-service-option span small{
+ .user-service-main small{
   margin-top:3px;
   color:#728ba3;
   font-size:8px;
 }
-.user-service-option>b{
+ .user-service-tail{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.user-service-option .user-service-tail>b{
   display:grid;
   place-items:center;
   width:22px;
@@ -2436,6 +2484,18 @@ void start().catch((error) => {
   color:#67c6ff;
   font-size:15px;
 }
+.user-service-option.is-offline{opacity:.62;cursor:not-allowed}
+.user-service-option.is-offline:hover{transform:none;border-color:rgba(83,168,255,.09);background:rgba(255,255,255,.018)}
+.user-service-option.is-busy{border-color:rgba(245,158,11,.16)}
+.user-vendor-status{display:inline-flex;align-items:center;gap:5px;color:#68d391;font-size:6px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+.user-vendor-status i,.user-order-compose-status i{display:block;width:6px;height:6px;border-radius:50%;background:#35d27b;box-shadow:0 0 7px rgba(53,210,123,.45)}
+.user-vendor-status-busy,.user-order-compose-status-busy{color:#f6b84a}
+.user-vendor-status-busy i,.user-order-compose-status-busy i{background:#f59e0b;box-shadow:0 0 7px rgba(245,158,11,.4)}
+.user-vendor-status-offline,.user-order-compose-status-offline{color:#ff6f78}
+.user-vendor-status-offline i,.user-order-compose-status-offline i{background:#ef4444;box-shadow:0 0 7px rgba(239,68,68,.4)}
+.user-order-compose-status{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:7px;font-weight:800;text-transform:uppercase}
+.user-order-compose-message{margin-top:8px;padding:7px 8px;border:1px solid rgba(83,168,255,.08);border-radius:7px;background:rgba(255,255,255,.025);color:#7890a7;font-size:7px}
+.user-qty-row button:disabled{opacity:.4;cursor:not-allowed}
 .user-order-composer{
   padding:11px;
   border:1px solid rgba(83,168,255,.19);
