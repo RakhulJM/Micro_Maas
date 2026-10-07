@@ -1,8 +1,27 @@
 ---
+import fs from 'node:fs';
+import path from 'node:path';
+
 const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
+
+const readCampusJson = (relativePath, fallback) => {
+  try {
+    return JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), relativePath), 'utf8')
+    );
+  } catch {
+    return fallback;
+  }
+};
+
+const initialVendorData = {
+  catalogue: readCampusJson('maps/campus_vendors.json', { version: 1, vendors: [] }),
+  orders: readCampusJson('maps/campus_orders.json', { version: 1, orders: [] })
+};
 ---
 
 <main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId}>
+  <script type="application/json" id="vendorPortalInitialData" set:html={JSON.stringify(initialVendorData)}></script>
   <div class="vendor-portal-glow vendor-portal-glow-a" aria-hidden="true"></div>
   <div class="vendor-portal-glow vendor-portal-glow-b" aria-hidden="true"></div>
 
@@ -169,26 +188,22 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const loadData = async () => {
-      const loadJson = async (url) => {
-        const response = await fetch(url, { cache: 'no-store' });
-        if (!response.ok) throw new Error('Request failed: ' + url);
-        return response.json();
-      };
+      const initial = JSON.parse(
+        document.getElementById('vendorPortalInitialData')?.textContent || '{}'
+      );
 
-      let catalogue;
-      let orders;
+      let catalogue = initial?.catalogue;
+      let orders = initial?.orders;
 
       try {
-        [catalogue, orders] = await Promise.all([
-          loadJson('/maps/campus_vendors.json'),
-          loadJson('/maps/campus_orders.json')
-        ]);
-      } catch {
         const response = await fetch('/__campusmaas/vendor-data', { cache: 'no-store' });
-        if (!response.ok) throw new Error('Vendor data could not be loaded.');
-        const payload = await response.json();
-        catalogue = payload?.catalogue;
-        orders = payload?.orders;
+        if (response.ok) {
+          const payload = await response.json();
+          catalogue = payload?.catalogue;
+          orders = payload?.orders;
+        }
+      } catch {
+        // Keep the server-rendered snapshot as the reliable fallback.
       }
 
       if (
@@ -562,11 +577,10 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       subtitle.textContent = 'Service list and dedicated dashboards';
       back.href = '/vendor';
       headerServiceControl.hidden = true;
-      ordersVendorId = String(item.id);
-      ordersVendorName = String(item.name || 'Vendor');
+      ordersVendorId = '';
+      ordersVendorName = '';
       ordersOptionId = '';
-      printQueueButton.hidden = false;
-      updateOrdersButton();
+      printQueueButton.hidden = true;
       closePrintQueue();
 
       content.className = 'vendor-content-grid vendor-category-grid';
@@ -1311,6 +1325,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   }
 
   .vendor-header-actions{display:flex;align-items:center;gap:9px}
+  .vendor-print-queue-button[hidden],
+  .vendor-header-service-control[hidden]{display:none !important}
   .vendor-header-service-control{display:flex;align-items:center;gap:8px;position:relative;z-index:20}
   .vendor-header-status-toggle{display:flex;align-items:center;padding:3px;border:1px solid #d7dee7;border-radius:14px;background:#fff;box-shadow:0 8px 22px rgba(15,23,42,.08)}
   .vendor-header-status-choice{min-width:70px;height:42px;padding:0 11px;border:0;border-radius:10px;background:transparent;color:#64748b;font:700 9px/1 'Space Grotesk',sans-serif;letter-spacing:.05em;cursor:pointer;transition:background .15s ease,color .15s ease}
