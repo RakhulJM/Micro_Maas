@@ -1504,7 +1504,12 @@ const start = async () => {
               const response = await fetch('/__campusmaas/update-order', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: order.id, status: 'completed' })
+                body: JSON.stringify({
+                  id: order.id,
+                  status: 'completed',
+                  actor: 'user',
+                  user_id: userId
+                })
               });
 
               if (!response.ok) {
@@ -2232,11 +2237,54 @@ const start = async () => {
 
       renderCatalogue();
       renderOrders();
+      startUserOrderSync();
     } catch {
       vendorList.innerHTML = '<div class="user-services-empty">Services are unavailable.</div>';
     }
   };
   loadVendorOrders();
+
+  let userOrderSyncTimer = null;
+  let userOrderSyncBusy = false;
+
+  const refreshUserOrders = async () => {
+    if (userOrderSyncBusy) return;
+    userOrderSyncBusy = true;
+
+    try {
+      const response = await fetch('/maps/campus_orders.json', { cache: 'no-store' });
+      if (!response.ok) return;
+
+      const nextOrders = await response.json();
+      if (nextOrders?.version !== 1 || !Array.isArray(nextOrders?.orders)) return;
+
+      const nextMine = nextOrders.orders
+        .filter((order) => order.user_id === userId)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+
+      const currentMine = orders.orders
+        .filter((order) => order.user_id === userId)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+
+      if (JSON.stringify(nextMine) === JSON.stringify(currentMine)) return;
+
+      orders = nextOrders;
+      renderOrders();
+    } finally {
+      userOrderSyncBusy = false;
+    }
+  };
+
+  const startUserOrderSync = () => {
+    if (userOrderSyncTimer) window.clearInterval(userOrderSyncTimer);
+    userOrderSyncTimer = window.setInterval(() => {
+      void refreshUserOrders();
+    }, 3000);
+  };
+
+  window.addEventListener('pagehide', () => {
+    if (userOrderSyncTimer) window.clearInterval(userOrderSyncTimer);
+  }, { once: true });
 
   const resetTripSummary = () => {
     if (userTripFrom) userTripFrom.textContent = 'Point A';
