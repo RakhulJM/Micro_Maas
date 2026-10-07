@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "root": {
+    "printer": {
+      "number": "01",
+      "icon": "P",
+      "title": "Printer",
+      "description": "2 services available",
+      "action": "Open dashboard →"
+    },
+    "food": {
+      "number": "02",
+      "icon": "F",
+      "title": "Food",
+      "description": "2 services available",
+      "action": "Open dashboard →"
+    }
+  },
+  "categories": {
+    "printer": {
+      "kicker": "VENDOR",
+      "title": "Printer",
+      "subtitle": "Service list and dedicated dashboards",
+      "services": {
+        "printer-food-court": {
+          "number": "01",
+          "title": "Food Court",
+          "description": "Dedicated vendor dashboard"
+        },
+        "printer-amenity": {
+          "number": "02",
+          "title": "Amenity",
+          "description": "Dedicated vendor dashboard"
+        }
+      }
+    },
+    "food": {
+      "kicker": "VENDOR",
+      "title": "Food",
+      "subtitle": "Service list and dedicated dashboards",
+      "services": {
+        "food-court": {
+          "number": "01",
+          "title": "Food Court",
+          "description": "Dedicated vendor dashboard"
+        },
+        "singles": {
+          "number": "02",
+          "title": "Single's",
+          "description": "Dedicated vendor dashboard"
+        }
+      }
+    }
+  }
+}
