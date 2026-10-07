@@ -66,7 +66,7 @@ const pedestrianNetworkSavePlugin = () => ({
     server.middlewares.use('/__campusmaas/user-orders',(req,res,next)=>{
       if(req.method!=='GET'){next();return;}
       try{
-        const parsed=new URL(req.url||'', 'http://localhost');
+        const parsed=new URL(req.url||'','http://localhost');
         const userId=String(parsed.searchParams.get('user_id')||'').trim();
         if(!userId || userId.length>80){
           res.statusCode=400;
@@ -76,6 +76,8 @@ const pedestrianNetworkSavePlugin = () => ({
         }
 
         const orders=readJsonFile('maps/campus_orders.json');
+        if(orders?.version!==1||!Array.isArray(orders?.orders))throw Error('Invalid order database.');
+
         const mine=orders.orders.filter((order)=>
           String(order.user_id||'')===userId
         );
@@ -92,50 +94,6 @@ const pedestrianNetworkSavePlugin = () => ({
     });
 
     server.middlewares.use('/__campusmaas/save-vendors',(req,res,next)=>{if(req.method!=='POST')return next();const chunks=[];req.on('data',c=>chunks.push(c));req.on('end',()=>{try{const p=jsonBody(chunks);if(p?.version!==1||!Array.isArray(p.vendors))throw Error('Invalid vendor catalogue.');const vids=new Set(),oids=new Set();for(const v of p.vendors){if(!v?.id||vids.has(String(v.id))||!String(v.name||'').trim())throw Error('Invalid vendor.');vids.add(String(v.id));if(!Array.isArray(v.options))throw Error('Invalid vendor options.');for(const o of v.options){if(!o?.id||oids.has(String(o.id))||!String(o.name||'').trim())throw Error('Invalid vendor option.');oids.add(String(o.id));if(Number(o.order)<1||Number(o.service_minutes)<0||Number(o.price)<0)throw Error('Invalid option values.')}}writeJsonCopies('maps/campus_vendors.json',p);res.statusCode=200;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true}))}catch(e){res.statusCode=400;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:false,error:e.message||'Vendor save failed'}))}})});
-    const sendJson=(res,status,payload)=>{
-      res.statusCode=status;
-      res.setHeader('Content-Type','application/json');
-      res.setHeader('Cache-Control','no-store');
-      res.end(JSON.stringify(payload));
-    };
-
-    const privateOrders=()=>{
-      const payload=readJsonFile('maps/campus_orders.json');
-      if(payload?.version!==1||!Array.isArray(payload?.orders))throw Error('Invalid order database.');
-      return payload;
-    };
-
-    server.middlewares.use('/__campusmaas/user-orders',(req,res,next)=>{
-      if(req.method!=='GET')return next();
-      try{
-        const parsed=new URL(req.url||'','http://localhost');
-        const userId=String(parsed.searchParams.get('user_id')||'').trim();
-        if(!userId)return sendJson(res,400,{ok:false,error:'User id is required.'});
-        const orders=privateOrders();
-        return sendJson(res,200,{version:1,orders:orders.orders.filter(o=>String(o.user_id||'')===userId)});
-      }catch(e){
-        return sendJson(res,500,{ok:false,error:e.message||'Orders unavailable.'});
-      }
-    });
-
-    server.middlewares.use('/__campusmaas/vendor-orders',(req,res,next)=>{
-      if(req.method!=='GET')return next();
-      try{
-        const parsed=new URL(req.url||'','http://localhost');
-        const vendorId=String(parsed.searchParams.get('vendor_id')||'').trim();
-        const optionId=String(parsed.searchParams.get('option_id')||'').trim();
-        const orders=privateOrders();
-        const filtered=orders.orders.filter(o=>{
-          if(vendorId&&String(o.vendor_id)!==vendorId)return false;
-          if(optionId&&String(o.option_id)!==optionId)return false;
-          return true;
-        });
-        return sendJson(res,200,{version:1,orders:filtered});
-      }catch(e){
-        return sendJson(res,500,{ok:false,error:e.message||'Vendor orders unavailable.'});
-      }
-    });
-
     server.middlewares.use('/__campusmaas/create-order',(req,res,next)=>{
       if(req.method!=='POST')return next();
       const chunks=[];
@@ -375,36 +333,48 @@ const pedestrianNetworkSavePlugin = () => ({
       req.on('end',()=>{
         try{
           const p=jsonBody(chunks);
-          const allowed=new Set(['placed','preparing','ready','completed','cancelled']);
+          const allowed=new Set(['preparing','ready','completed','cancelled']);
           if(!p?.id||!allowed.has(p.status))throw Error('Invalid order update.');
 
-          const orders=privateOrders();
+          const orders=readJsonFile('maps/campus_orders.json');
+          if(orders?.version!==1||!Array.isArray(orders?.orders))throw Error('Invalid order database.');
+
           const o=orders.orders.find(x=>x.id===p.id);
           if(!o)throw Error('Order not found.');
 
-          const current=String(o.status||'');
+          const current=String(o.status||'').toLowerCase();
+
           if(p.status==='preparing'&&!['placed','accepted'].includes(current)){
             throw Error('Order must be placed before preparation starts.');
           }
+
           if(p.status==='ready'&&!['preparing','accepted'].includes(current)){
             throw Error('Order must be preparing before it can be marked ready.');
           }
+
           if(p.status==='completed'){
             if(current!=='ready')throw Error('Order must be ready before collection is confirmed.');
             if(!p.user_id||String(o.user_id||'')!==String(p.user_id)){
               throw Error('Only the order owner can confirm collection.');
             }
           }
-          if(p.status==='cancelled'&&current==='completed'){
-            throw Error('Completed orders cannot be cancelled.');
+
+          if(p.status==='cancelled'&&!['placed','preparing','ready'].includes(current)){
+            throw Error('This order cannot be cancelled from its current state.');
           }
 
           o.status=p.status;
           o.updated_at=new Date().toISOString();
           writeJsonCopies('maps/campus_orders.json',orders);
-          sendJson(res,200,{ok:true});
+
+          res.statusCode=200;
+          res.setHeader('Content-Type','application/json');
+          res.setHeader('Cache-Control','no-store');
+          res.end(JSON.stringify({ok:true}));
         }catch(e){
-          sendJson(res,400,{ok:false,error:e.message||'Order update failed'});
+          res.statusCode=400;
+          res.setHeader('Content-Type','application/json');
+          res.end(JSON.stringify({ok:false,error:e.message||'Order update failed'}));
         }
       });
     });
@@ -526,9 +496,40 @@ const pedestrianNetworkSavePlugin = () => ({
             )
           );
 
+          const gateData = readJsonFile('maps/gates.geojson');
+          const pathData = readJsonFile('maps/pedestrian_paths_edits.geojson');
+
+          const gateIds = new Set(
+            (gateData?.features || [])
+              .map((feature) => String(feature?.id || feature?.properties?.id || '').trim())
+              .filter(Boolean)
+          );
+
+          const pathIds = new Set(
+            (pathData?.features || [])
+              .map((feature, index) =>
+                String(
+                  feature?.id ||
+                  feature?.properties?.['@id'] ||
+                  feature?.properties?.id ||
+                  'path-' + (index + 1)
+                )
+              )
+              .filter(Boolean)
+          );
+
           const policyIds = new Set();
 
           const validPolicies = payload.policies.every((policy) => {
+            const target = policy?.target;
+            const targetId = String(target?.id || '').trim();
+
+            if (
+              target?.type === 'gate' && !gateIds.has(targetId) ||
+              target?.type === 'path' && !pathIds.has(targetId)
+            ) {
+              return false;
+            }
             const target = policy?.target;
             const windows = Array.isArray(policy?.windows) ? policy.windows : [];
 
