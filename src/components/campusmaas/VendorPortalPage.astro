@@ -169,31 +169,17 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const loadData = async () => {
-      const [catalogueResponse, ordersResponse] = await Promise.all([
+      const responses = await Promise.all([
         fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
         fetch('/maps/campus_orders.json', { cache: 'no-store' })
       ]);
 
-      if (!catalogueResponse.ok || !ordersResponse.ok) {
+      if (!responses[0].ok || !responses[1].ok) {
         throw new Error('Vendor data could not be loaded.');
       }
 
-      const [catalogue, orders] = await Promise.all([
-        catalogueResponse.json(),
-        ordersResponse.json()
-      ]);
-
-      if (
-        catalogue?.version !== 1 ||
-        !Array.isArray(catalogue?.vendors) ||
-        orders?.version !== 1 ||
-        !Array.isArray(orders?.orders)
-      ) {
-        throw new Error('Invalid CampusMaaS vendor data.');
-      }
-
-      state.catalogue = catalogue;
-      state.orders = orders;
+      state.catalogue = await responses[0].json();
+      state.orders = await responses[1].json();
     };
 
     const vendorOrders = (id, optionId = '', requireFiles = false) =>
@@ -558,7 +544,6 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       ordersVendorName = '';
       ordersOptionId = '';
       printQueueButton.hidden = true;
-      closePrintQueue();
 
       content.className = 'vendor-content-grid vendor-category-grid';
       content.innerHTML = '';
@@ -1301,9 +1286,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     50%,100%{opacity:.34;filter:brightness(.92)}
   }
 
-  .vendor-header-actions{display:flex;align-items:center;gap:9px}
   .vendor-print-queue-button[hidden],
   .vendor-header-service-control[hidden]{display:none !important}
+  .vendor-header-actions{display:flex;align-items:center;gap:9px}
   .vendor-header-service-control{display:flex;align-items:center;gap:8px;position:relative;z-index:20}
   .vendor-header-status-toggle{display:flex;align-items:center;padding:3px;border:1px solid #d7dee7;border-radius:14px;background:#fff;box-shadow:0 8px 22px rgba(15,23,42,.08)}
   .vendor-header-status-choice{min-width:70px;height:42px;padding:0 11px;border:0;border-radius:10px;background:transparent;color:#64748b;font:700 9px/1 'Space Grotesk',sans-serif;letter-spacing:.05em;cursor:pointer;transition:background .15s ease,color .15s ease}
