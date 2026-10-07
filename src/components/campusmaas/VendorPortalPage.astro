@@ -84,8 +84,11 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
     const route = (parentId, childId) => {
       const parent = routeParent(parentId);
-      return childId
-        ? '/vendor/' + encodeURIComponent(parent) + '/' + encodeURIComponent(childId)
+      const child = String(parentId) === 'printer'
+        ? String(childId || '').replace(/^printer-/, '')
+        : String(childId || '');
+      return child
+        ? '/vendor/' + encodeURIComponent(parent) + '/' + encodeURIComponent(child)
         : '/vendor/' + encodeURIComponent(parent);
     };
 
