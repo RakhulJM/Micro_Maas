@@ -793,7 +793,13 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
             const response = await fetch('/__campusmaas/update-order', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: order.id, status: next[1] })
+              body: JSON.stringify({
+                id: order.id,
+                status: next[1],
+                actor: 'vendor',
+                vendor_id: ordersVendorId,
+                option_id: ordersOptionId
+              })
             });
 
             if (!response.ok) throw new Error('Order update failed.');
