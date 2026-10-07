@@ -4342,6 +4342,11 @@
         closeDeveloperOverlay();
 
         if (editModeEnabled) {
+          // Keep the path-type chooser available throughout map edit mode.
+          // New-path and point-editor modes can then use the same four path types.
+          pathTypePalette?.classList.add('is-open');
+          pathTypePalette?.setAttribute('aria-hidden', 'false');
+
           pedestrianPathsActive = pedestrianNetworkVisible;
 
           if (pedestrianNetworkVisible) {
