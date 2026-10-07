@@ -737,6 +737,38 @@ const start = async () => {
     return best;
   };
 
+  const validateUserGateClick = (point) => {
+    const nearest = nearestGateForPoint(point);
+
+    if (!nearest || nearest.distance > USER_GATE_MATCH_RADIUS_M) {
+      return {
+        allowed: true,
+        nearest: null
+      };
+    }
+
+    const evaluation = evaluateStudentGate(nearest.gate);
+
+    if (!evaluation.allowed) {
+      if (userTripFrom) userTripFrom.textContent = 'Gate 09 is closed';
+      if (userTripTo) userTripTo.textContent = 'Students cannot use it now';
+      if (userTripTime) userTripTime.textContent = 'Unavailable';
+      if (userTripDistance) userTripDistance.textContent = 'Try Gate 06';
+
+      return {
+        allowed: false,
+        nearest,
+        evaluation
+      };
+    }
+
+    return {
+      allowed: true,
+      nearest,
+      evaluation
+    };
+  };
+
   const handleUserMapClick = (event) => {
     const clicked = event.latlng;
     const gateCheck = validateUserGateClick(clicked);
