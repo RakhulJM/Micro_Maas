@@ -753,6 +753,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       ordersVendorName = String(item.name || 'Vendor');
       ordersOptionId = String(child.id);
       printQueueButton.hidden = false;
+      updateOrdersButton();
       closePrintQueue();
 
       headerServiceControl.hidden = false;
