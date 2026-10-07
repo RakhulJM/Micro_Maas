@@ -999,12 +999,88 @@ const routeSummary = (
         };
       })
       .filter(Boolean)
+      .filter((entry) => entry.distance <= 80)
       .sort((a, b) =>
-        a.distance - b.distance ||
-        b.priority - a.priority
+        b.priority - a.priority ||
+        a.distance - b.distance
       );
 
-    return matches.find((entry) => entry.distance <= 80) || null;
+    return matches[0] || null;
+  };
+
+  const gateAccessAllowed = (gate, direction) => {
+    const policies = gatePoliciesForRoute(
+      gate,
+      accessPolicy,
+      userGroup,
+      direction
+    );
+
+    if (!policies.length) return true;
+
+    const activePolicies = policies.filter((policy) =>
+      policyMatchesNow(policy, temporal)
+    );
+
+    if (
+      activePolicies.some(
+        (policy) =>
+          policy.mode === 'deny' ||
+          policy.mode === 'deny_during'
+      )
+    ) {
+      return false;
+    }
+
+    const allowOnly = policies.filter(
+      (policy) => policy.mode === 'allow_only_during'
+    );
+
+    if (allowOnly.length) {
+      return allowOnly.some((policy) =>
+        activePolicies.includes(policy)
+      );
+    }
+
+    const conditionalAllow = policies.filter(
+      (policy) =>
+        policy.mode === 'allow' &&
+        policyHasCondition(policy)
+    );
+
+    if (conditionalAllow.length) {
+      return conditionalAllow.some((policy) =>
+        activePolicies.includes(policy)
+      );
+    }
+
+    return true;
+  };
+
+  const endpointGateFor = (point) => {
+    let best = null;
+
+    for (const gate of gates || []) {
+      const coordinate =
+        gate?.properties?.access_point ||
+        gate?.properties?.center;
+
+      if (!Array.isArray(coordinate) || coordinate.length < 2) continue;
+
+      const gatePoint = L.latLng(
+        Number(coordinate[1]),
+        Number(coordinate[0])
+      );
+
+      const distance = gatePoint.distanceTo(point);
+      if (!best || distance < best.distance) {
+        best = { gate, point: gatePoint, distance };
+      }
+    }
+
+    return best && best.distance <= USER_GATE_MATCH_RADIUS_M
+      ? best
+      : null;
   };
 
   const candidateAnchors = (point, direction) => {
@@ -1027,11 +1103,30 @@ const routeSummary = (
         projection.distance <=
         USER_ROUTE_CONNECT_RADIUS_M
       ) {
+        const preferredDistance = preferredGate
+          ? L.latLng(
+              Number(preferredGate.gate?.properties?.access_point?.[1] ??
+                preferredGate.gate?.properties?.center?.[1]),
+              Number(preferredGate.gate?.properties?.access_point?.[0] ??
+                preferredGate.gate?.properties?.center?.[0])
+            ).distanceTo(
+              L.latLng(
+                Number(projection.coordinate[1]),
+                Number(projection.coordinate[0])
+              )
+            )
+          : 0;
+
+        const preferenceWeight = preferredGate
+          ? 0.25 + (100 - Number(preferredGate.priority || 0)) / 200
+          : 0;
+
         candidates.push({
           segment,
           coordinate: projection.coordinate,
           distance: projection.distance,
-          fraction: projection.fraction
+          fraction: projection.fraction,
+          score: projection.distance + preferredDistance * preferenceWeight
         });
       }
     }
@@ -1045,6 +1140,23 @@ const routeSummary = (
      */
     return candidates.slice(0, 8);
   };
+
+  const startGate = endpointGateFor(startPoint);
+  const endGate = endpointGateFor(endPoint);
+
+  if (
+    startGate &&
+    !gateAccessAllowed(startGate.gate, 'in')
+  ) {
+    return null;
+  }
+
+  if (
+    endGate &&
+    !gateAccessAllowed(endGate.gate, 'out')
+  ) {
+    return null;
+  }
 
   const startCandidates = candidateAnchors(startPoint, 'in');
   const endCandidates = candidateAnchors(endPoint, 'out');
@@ -1400,13 +1512,17 @@ const start = async () => {
     throw new Error('CampusMaaS map or access-policy data could not be loaded.');
   }
 
-  const [places, pathData, gates, perimeter, accessPolicy] = await Promise.all([
+  const [places, loadedPathData, loadedGates, perimeter, loadedAccessPolicy] = await Promise.all([
     placesResponse.json(),
     pathResponse.json(),
     gatesResponse.json(),
     perimeterResponse.json(),
     accessRulesResponse.json()
   ]);
+
+  let pathData = loadedPathData;
+  let gates = loadedGates;
+  let accessPolicy = loadedAccessPolicy;
 
   const perimeterFeature = perimeter?.features?.[0];
   const perimeterCoordinates = perimeterFeature?.geometry?.coordinates?.[0];
@@ -2389,6 +2505,7 @@ const start = async () => {
       renderCatalogue();
       renderOrders();
       startUserOrderSync();
+      startPolicySync();
     } catch {
       vendorList.innerHTML = '<div class="user-services-empty">Services are unavailable.</div>';
     }
@@ -2453,8 +2570,68 @@ const start = async () => {
     }, 3000);
   };
 
+  let policySyncTimer = null;
+  let policySyncBusy = false;
+
+  const refreshAccessPolicy = async () => {
+    if (policySyncBusy) return;
+    policySyncBusy = true;
+
+    try {
+      const [policyResponse, pathResponse, gatesResponse] = await Promise.all([
+        fetch('/maps/campus_access_rules.json', { cache: 'no-store' }),
+        fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
+        fetch('/maps/gates.geojson', { cache: 'no-store' })
+      ]);
+
+      if (!policyResponse.ok || !pathResponse.ok || !gatesResponse.ok) return;
+
+      const [nextPolicy, nextPaths, nextGates] = await Promise.all([
+        policyResponse.json(),
+        pathResponse.json(),
+        gatesResponse.json()
+      ]);
+
+      if (
+        nextPolicy?.version !== 1 ||
+        !Array.isArray(nextPolicy?.policies) ||
+        nextPaths?.type !== 'FeatureCollection' ||
+        !Array.isArray(nextPaths?.features) ||
+        nextGates?.type !== 'FeatureCollection' ||
+        !Array.isArray(nextGates?.features)
+      ) return;
+
+      const changed =
+        JSON.stringify(nextPolicy) !== JSON.stringify(accessPolicy) ||
+        JSON.stringify(nextPaths) !== JSON.stringify(pathData) ||
+        JSON.stringify(nextGates) !== JSON.stringify(gates);
+
+      if (!changed) return;
+
+      accessPolicy = nextPolicy;
+      pathData = nextPaths;
+      gates = nextGates;
+
+      if (pointA && pointB) {
+        clearRouteRendering();
+        renderEndpointMarkers();
+        renderUserRoute();
+      }
+    } finally {
+      policySyncBusy = false;
+    }
+  };
+
+  const startPolicySync = () => {
+    if (policySyncTimer) window.clearInterval(policySyncTimer);
+    policySyncTimer = window.setInterval(() => {
+      void refreshAccessPolicy();
+    }, 5000);
+  };
+
   window.addEventListener('pagehide', () => {
     if (userOrderSyncTimer) window.clearInterval(userOrderSyncTimer);
+    if (policySyncTimer) window.clearInterval(policySyncTimer);
   }, { once: true });
 
   let accessPolicySyncBusy = false;
