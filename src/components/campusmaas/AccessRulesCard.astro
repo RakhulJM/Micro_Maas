@@ -11,7 +11,6 @@
 
     <div class="access-rules-header-actions">
       <span class="access-rules-status" id="accessRulesStatus">Loading</span>
-      <button type="button" class="access-rule-close" id="closeAccessRules" aria-label="Close access rules">×</button>
     </div>
   </header>
 
@@ -155,7 +154,6 @@
 
 <script>
   const initAccessRulesEditor = () => {
-    const card = document.getElementById('accessRulesCard');
     const list = document.getElementById('accessRulesList');
     const status = document.getElementById('accessRulesStatus');
     const editor = document.getElementById('accessRuleEditor');
@@ -786,10 +784,6 @@
       void saveRules();
     });
 
-    document.getElementById('closeAccessRules')?.addEventListener('click', () => {
-      card?.setAttribute('hidden', '');
-    });
-
     updateClock();
     window.setInterval(updateClock, 30000);
     void load();
@@ -901,7 +895,6 @@
     text-align: right;
   }
 
-  .access-rule-close,
   .access-rule-cancel-icon {
     width: 26px;
     height: 26px;
