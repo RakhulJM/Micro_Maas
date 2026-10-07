@@ -1180,8 +1180,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-print-queue-header small{display:block;margin-top:5px;color:#6b7280;font-size:11px}
   .vendor-print-queue-header-actions{display:flex;align-items:center;gap:8px}
   .vendor-print-queue-all,.vendor-print-order-all,.vendor-print-group-all,.vendor-print-file-button{border:1px solid #2563eb;border-radius:8px;background:#fff;color:#1d4ed8;font-size:11px;font-weight:700;cursor:pointer}
-  .vendor-print-queue-all{padding:9px 13px;background:#2563eb;color:#fff}
-  .vendor-print-queue-all:hover{background:#1d4ed8}
+  .vendor-print-queue-all,.vendor-print-group-all{background:#2563eb;color:#fff}
+  .vendor-print-queue-all{padding:9px 13px}
+  .vendor-print-queue-all:hover,.vendor-print-group-all:hover{background:#1d4ed8}
   .vendor-print-queue-all:disabled{opacity:.5;cursor:not-allowed}
   .vendor-print-queue-close{display:grid;place-items:center;width:34px;height:34px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;cursor:pointer;font-size:18px}
   .vendor-print-queue-close:hover{background:#f3f4f6}
