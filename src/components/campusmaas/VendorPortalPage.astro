@@ -324,7 +324,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       }
     };
 
-    const makeOrderCard = (order) => {
+    const makeOrderCard = (order, currentServiceStatus = 'online') => {
       const card = create('article', 'vendor-order-card');
       const main = create('div', 'vendor-order-card-main');
 
@@ -362,7 +362,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       };
 
       const next = actions[order.status];
-      if (next && serviceStatus !== 'offline') {
+      if (next && currentServiceStatus !== 'offline') {
         const action = create('button', 'vendor-order-action', next[0]);
         action.type = 'button';
         action.dataset.orderId = order.id;
@@ -546,7 +546,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       );
 
       const ordersGrid = create('div', 'vendor-orders-grid');
-      active.forEach((order) => ordersGrid.appendChild(makeOrderCard(order)));
+      active.forEach((order) => ordersGrid.appendChild(makeOrderCard(order, serviceStatus)));
       if (!active.length) {
         ordersGrid.appendChild(create('div', 'vendor-empty-card', 'No active orders for this service.'));
       }
