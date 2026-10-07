@@ -113,6 +113,7 @@
 </section>
 
 <script>
+  const initAccessRulesPanel = () => {
   const accessRuleClock = document.getElementById('accessRuleClock');
   const gate09RuleStatus = document.getElementById('gate09RuleStatus');
   const gate09RuleState = document.getElementById('gate09RuleState');
@@ -196,4 +197,139 @@
   window.setInterval(() => {
     void refreshAccessRuleUi();
   }, 30000);
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAccessRulesPanel, { once: true });
+  } else {
+    initAccessRulesPanel();
+  }
 </script>
+
+
+<style>
+  .access-rules-card {
+    grid-column: 1 / -1;
+  }
+
+  .access-rule-live {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(83, 168, 255, .1);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .025);
+  }
+
+  .access-rule-live span {
+    color: #7188a1;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  .access-rule-live strong {
+    color: #cfe5fa;
+    font: 600 10px 'Space Grotesk', sans-serif;
+  }
+
+  .access-rule-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px;
+    border: 1px solid rgba(114, 158, 203, .1);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .025);
+  }
+
+  .access-rule-row + .access-rule-row {
+    margin-top: 7px;
+  }
+
+  .access-rule-row > div {
+    min-width: 0;
+  }
+
+  .access-rule-row strong,
+  .access-rule-row small {
+    display: block;
+  }
+
+  .access-rule-row strong {
+    color: #e1ebf8;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .access-rule-row small {
+    margin-top: 3px;
+    color: #7188a1;
+    font-size: 9px;
+    line-height: 1.35;
+  }
+
+  .access-rule-priority,
+  .access-rule-state {
+    flex: 0 0 auto;
+    min-width: 40px;
+    padding: 5px 7px;
+    border-radius: 7px;
+    text-align: center;
+    font: 700 9px/1 'Space Grotesk', sans-serif;
+  }
+
+  .access-rule-priority {
+    background: rgba(31, 136, 242, .15);
+    color: #69b7ff;
+  }
+
+  .access-rule-state.is-open {
+    background: rgba(22, 163, 74, .14);
+    color: #61dc8a;
+  }
+
+  .access-rule-state.is-closed {
+    background: rgba(220, 38, 38, .14);
+    color: #ff7b7f;
+  }
+
+  .access-rule-windows {
+    margin-top: 7px;
+    padding: 9px 10px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .02);
+  }
+
+  .access-rule-windows > span {
+    display: block;
+    margin-bottom: 4px;
+    color: #6d839b;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+  }
+
+  .access-rule-windows > div {
+    color: #cfe2f7;
+    font: 600 10px/1.45 'Space Grotesk', sans-serif;
+  }
+
+  .access-rule-note {
+    margin: 8px 1px 0;
+    color: #627990;
+    font-size: 8.5px;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 700px) {
+    .access-rules-card {
+      grid-column: auto;
+    }
+  }
+</style>
