@@ -522,15 +522,6 @@ const pedestrianNetworkSavePlugin = () => ({
 
           const validPolicies = payload.policies.every((policy) => {
             const target = policy?.target;
-            const targetId = String(target?.id || '').trim();
-
-            if (
-              target?.type === 'gate' && !gateIds.has(targetId) ||
-              target?.type === 'path' && !pathIds.has(targetId)
-            ) {
-              return false;
-            }
-            const target = policy?.target;
             const windows = Array.isArray(policy?.windows) ? policy.windows : [];
 
             if (
