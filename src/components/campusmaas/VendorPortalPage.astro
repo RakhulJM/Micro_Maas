@@ -1,8 +1,9 @@
 ---
-const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
+const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = Astro.props;
 ---
 
 <main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId}>
+  <script type="application/json" id="vendorPortalInitialData" set:html={JSON.stringify(initialData || { catalogue: { version: 1, vendors: [] }, orders: { version: 1, orders: [] } })}></script>
   <div class="vendor-portal-glow vendor-portal-glow-a" aria-hidden="true"></div>
   <div class="vendor-portal-glow vendor-portal-glow-b" aria-hidden="true"></div>
 
@@ -169,17 +170,54 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const loadData = async () => {
-      const responses = await Promise.all([
-        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-        fetch('/maps/campus_orders.json', { cache: 'no-store' })
-      ]);
+      let catalogue = null;
+      let orders = null;
 
-      if (!responses[0].ok || !responses[1].ok) {
+      try {
+        const embedded = JSON.parse(
+          document.getElementById('vendorPortalInitialData')?.textContent || '{}'
+        );
+        catalogue = embedded?.catalogue;
+        orders = embedded?.orders;
+      } catch {
+        // Embedded route data will be validated below.
+      }
+
+      const valid = (nextCatalogue, nextOrders) =>
+        nextCatalogue?.version === 1 &&
+        Array.isArray(nextCatalogue?.vendors) &&
+        nextOrders?.version === 1 &&
+        Array.isArray(nextOrders?.orders);
+
+      if (!valid(catalogue, orders)) {
         throw new Error('Vendor data could not be loaded.');
       }
 
-      state.catalogue = await responses[0].json();
-      state.orders = await responses[1].json();
+      state.catalogue = catalogue;
+      state.orders = orders;
+
+      // Refresh when the public JSON files are available, but never blank the page
+      // when a dev-server/static-file refresh is unavailable.
+      try {
+        const responses = await Promise.all([
+          fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
+          fetch('/maps/campus_orders.json', { cache: 'no-store' })
+        ]);
+
+        if (responses[0].ok && responses[1].ok) {
+          const refreshed = await Promise.all([
+            responses[0].json(),
+            responses[1].json()
+          ]);
+
+          if (valid(refreshed[0], refreshed[1])) {
+            state.catalogue = refreshed[0];
+            state.orders = refreshed[1];
+          }
+        }
+      } catch {
+        // Keep the working route snapshot.
+      }
     };
 
     const vendorOrders = (id, optionId = '', requireFiles = false) =>
