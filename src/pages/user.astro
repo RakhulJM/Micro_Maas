@@ -2842,8 +2842,9 @@ const start = async () => {
     const evaluation = evaluateStudentGate(nearest.gate, campusClock(), direction);
 
     if (!evaluation.allowed) {
-      if (userTripFrom) userTripFrom.textContent = 'Gate 09 is closed';
-      if (userTripTo) userTripTo.textContent = 'Students cannot use it now';
+      const gateName = nearest.gate?.properties?.name || 'This gate';
+      if (userTripFrom) userTripFrom.textContent = gateName + ' is closed';
+      if (userTripTo) userTripTo.textContent = 'You cannot use it now';
       if (userTripTime) userTripTime.textContent = 'Unavailable';
       if (userTripDistance) userTripDistance.textContent = 'Try Gate 06';
 
