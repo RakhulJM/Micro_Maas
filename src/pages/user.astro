@@ -33,37 +33,6 @@ import 'leaflet/dist/leaflet.css';
       </div>
     </section>
 
-    <aside class="user-access-card" aria-label="Student gate access">
-      <div class="user-access-header">
-        <div>
-          <span class="user-access-kicker">STUDENT ACCESS</span>
-          <strong>Campus gate policy</strong>
-        </div>
-        <span class="user-access-clock" id="userAccessClock">—</span>
-      </div>
-
-      <div class="user-access-row user-access-row-preferred">
-        <div>
-          <strong>Gate 06</strong>
-          <span>Entry + exit · college preferred</span>
-        </div>
-        <b>85</b>
-      </div>
-
-      <div class="user-access-row">
-        <div>
-          <strong>Gate 09</strong>
-          <span id="userGate09Status">Checking current access…</span>
-        </div>
-        <b id="userGate09State">—</b>
-      </div>
-
-      <div class="user-access-windows">
-        <span>Allowed for students</span>
-        <strong id="userGate09Windows">07:00–08:45 · 12:25–13:25 · 16:15–18:00</strong>
-      </div>
-    </aside>
-
     <script>
       import L from 'leaflet';
 
@@ -478,13 +447,19 @@ const start = async () => {
   const mapElement = document.getElementById('map');
   if (!mapElement) return;
 
-  const [placesResponse, pathResponse, gatesResponse, perimeterResponse] =
-    await Promise.all([
-      fetch('/maps/export_places.geojson', { cache: 'no-store' }),
-      fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
-      fetch('/maps/gates.geojson', { cache: 'no-store' }),
-      fetch('/maps/perimeter.geojson', { cache: 'no-store' })
-    ]);
+  const [
+    placesResponse,
+    pathResponse,
+    gatesResponse,
+    perimeterResponse,
+    accessRulesResponse
+  ] = await Promise.all([
+    fetch('/maps/export_places.geojson', { cache: 'no-store' }),
+    fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
+    fetch('/maps/gates.geojson', { cache: 'no-store' }),
+    fetch('/maps/perimeter.geojson', { cache: 'no-store' }),
+    fetch('/maps/campus_access_rules.json', { cache: 'no-store' })
+  ]);
 
   if (
     !placesResponse.ok ||
@@ -663,11 +638,6 @@ const start = async () => {
   let gateLayer = null;
   let gateStyle = null;
 
-  const userAccessClock = document.getElementById('userAccessClock');
-  const userGate09Status = document.getElementById('userGate09Status');
-  const userGate09State = document.getElementById('userGate09State');
-  const userGate09Windows = document.getElementById('userGate09Windows');
-
   const minutesFromClock = (value) => {
     const [hours, minutes] = String(value || '00:00').split(':').map(Number);
     return hours * 60 + minutes;
@@ -770,36 +740,8 @@ const start = async () => {
     return best;
   };
 
-  const updateStudentAccessUi = () => {
+  const updateUserGateVisuals = () => {
     const time = campusClock();
-    const gate09 = (gates?.features || []).find(
-      (gate) => String(gate?.properties?.name || '').toLowerCase().replace(/\s/g, '') === 'gate-09'
-    );
-    const evaluation = evaluateStudentGate(gate09, time);
-    const policyWindows = evaluation.policy?.windows || [];
-    const windowsText = policyWindows
-      .map((window) => window.start + '–' + window.end)
-      .join(' · ');
-
-    if (userAccessClock) {
-      userAccessClock.textContent = time + ' IST';
-    }
-
-    if (userGate09Status) {
-      userGate09Status.textContent = evaluation.allowed
-        ? 'Open for students · in + out'
-        : 'Closed for students · time restricted';
-    }
-
-    if (userGate09State) {
-      userGate09State.textContent = evaluation.allowed ? 'OPEN' : 'CLOSED';
-      userGate09State.classList.toggle('is-open', evaluation.allowed);
-      userGate09State.classList.toggle('is-closed', !evaluation.allowed);
-    }
-
-    if (userGate09Windows && windowsText) {
-      userGate09Windows.textContent = windowsText;
-    }
 
     if (gateLayer && typeof gateLayer.eachLayer === 'function') {
       gateLayer.eachLayer((layer) => {
@@ -807,49 +749,8 @@ const start = async () => {
         if (!feature) return;
 
         layer.setStyle?.(gateStyle(feature, time));
-
-        const status = evaluateStudentGate(feature, time);
-        const name = escapeHtml(feature?.properties?.name || 'Gate');
-        const description = status.preferred
-          ? 'Preferred for students · priority ' + String(status.priority)
-          : status.allowed
-            ? 'Open for students now · entry + exit'
-            : 'Closed for students now · time restricted';
-
-        layer.setPopupContent(
-          '<strong>' + name + '</strong><br>' +
-          '<span>' + escapeHtml(description) + '</span>'
-        );
       });
     }
-  };
-
-  const validateUserGateClick = (point) => {
-    const nearest = nearestGateForPoint(point);
-
-    if (!nearest || nearest.distance > USER_GATE_MATCH_RADIUS_M) {
-      return { allowed: true, nearest: null };
-    }
-
-    const evaluation = evaluateStudentGate(nearest.gate);
-
-    if (!evaluation.allowed) {
-      if (userTripFrom) userTripFrom.textContent = 'Gate 09 is closed';
-      if (userTripTo) userTripTo.textContent = 'Students cannot use it now';
-      if (userTripTime) userTripTime.textContent = 'Unavailable';
-      if (userTripDistance) userTripDistance.textContent = 'Try Gate 06';
-      return {
-        allowed: false,
-        nearest,
-        evaluation
-      };
-    }
-
-    return {
-      allowed: true,
-      nearest,
-      evaluation
-    };
   };
 
   const handleUserMapClick = (event) => {
@@ -890,8 +791,7 @@ const start = async () => {
     renderUserRoute();
   };
 
-  updateStudentAccessUi();
-  window.setInterval(updateStudentAccessUi, 30000);
+  updateUserGateVisuals();
 
   resetTripSummary();
   map.on('click', handleUserMapClick);
@@ -1218,133 +1118,6 @@ void start().catch((error) => {
     font-weight: 650;
   }
 
-  .user-access-card {
-    position: absolute;
-    z-index: 1000;
-    top: clamp(14px, 2vw, 24px);
-    right: clamp(14px, 2vw, 24px);
-    width: min(326px, calc(100vw - 28px));
-    padding: 14px;
-    border: 1px solid rgba(83, 168, 255, .2);
-    border-radius: 16px;
-    background: rgba(7, 22, 38, .92);
-    color: #edf6ff;
-    box-shadow: 0 14px 38px rgba(0, 0, 0, .3);
-    backdrop-filter: blur(14px);
-  }
-
-  .user-access-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 11px;
-  }
-
-  .user-access-kicker {
-    display: block;
-    margin-bottom: 3px;
-    color: #27bfff;
-    font-size: 8px;
-    font-weight: 800;
-    letter-spacing: .14em;
-  }
-
-  .user-access-header strong {
-    display: block;
-    color: #f1f7ff;
-    font: 600 13px/1.1 'Space Grotesk', sans-serif;
-  }
-
-  .user-access-clock {
-    padding: 4px 7px;
-    border: 1px solid rgba(83, 168, 255, .14);
-    border-radius: 7px;
-    background: rgba(255, 255, 255, .035);
-    color: #8da7bf;
-    font: 600 9px/1 'Space Grotesk', sans-serif;
-    white-space: nowrap;
-  }
-
-  .user-access-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 0;
-    border-top: 1px solid rgba(117, 162, 206, .1);
-  }
-
-  .user-access-row > div {
-    min-width: 0;
-  }
-
-  .user-access-row strong,
-  .user-access-row span {
-    display: block;
-  }
-
-  .user-access-row strong {
-    color: #eaf4ff;
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .user-access-row span {
-    margin-top: 3px;
-    color: #7891aa;
-    font-size: 9px;
-    line-height: 1.35;
-  }
-
-  .user-access-row > b {
-    flex: 0 0 auto;
-    min-width: 38px;
-    padding: 5px 7px;
-    border-radius: 7px;
-    background: rgba(31, 136, 242, .12);
-    color: #7fc6ff;
-    font: 700 10px/1 'Space Grotesk', sans-serif;
-    text-align: center;
-  }
-
-  .user-access-row-preferred > b {
-    background: rgba(31, 136, 242, .16);
-    color: #59c9ff;
-  }
-
-  #userGate09State.is-open {
-    background: rgba(22, 163, 74, .14);
-    color: #61dc8a;
-  }
-
-  #userGate09State.is-closed {
-    background: rgba(220, 38, 38, .14);
-    color: #ff7b7f;
-  }
-
-  .user-access-windows {
-    margin-top: 4px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(117, 162, 206, .1);
-  }
-
-  .user-access-windows > span {
-    display: block;
-    margin-bottom: 4px;
-    color: #718aa3;
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: .07em;
-    text-transform: uppercase;
-  }
-
-  .user-access-windows > strong {
-    display: block;
-    color: #cfe2f7;
-    font: 600 10px/1.45 'Space Grotesk', sans-serif;
-  }
-
   @media (max-width: 820px) {
     .user-access-card {
       top: auto;
@@ -1371,12 +1144,5 @@ void start().catch((error) => {
       font-size: 15px;
     }
 
-    .user-access-card {
-      right: 10px;
-      bottom: 10px;
-      width: calc(100vw - 20px);
-      padding: 12px;
-      border-radius: 14px;
-    }
   }
 </style>
