@@ -488,9 +488,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     padding: 28px 30px 48px;
     color: #edf6ff;
     background:
-      radial-gradient(circle at 18% 8%, rgba(22, 135, 255, .14), transparent 28%),
-      radial-gradient(circle at 84% 22%, rgba(39, 191, 255, .09), transparent 26%),
-      linear-gradient(145deg, #040b15, #061321 54%, #030b14);
+      radial-gradient(circle at 18% 8%, rgba(22, 135, 255, .09), transparent 28%),
+      radial-gradient(circle at 84% 22%, rgba(39, 191, 255, .05), transparent 26%),
+      linear-gradient(145deg, #020812, #04101b 54%, #020710);
   }
 
   .vendor-portal::before {
@@ -586,10 +586,10 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-history-card {
     position:relative;
     overflow:hidden;
-    border:1px solid rgba(83,168,255,.30);
+    border:1px solid rgba(89,174,255,.42);
     border-radius:22px;
-    background:linear-gradient(145deg,rgba(16,42,67,.98),rgba(11,31,50,.98));
-    box-shadow:0 22px 58px rgba(0,0,0,.40),0 2px 0 rgba(255,255,255,.025) inset;
+    background:linear-gradient(145deg,rgba(24,58,89,.99),rgba(15,39,63,.99));
+    box-shadow:0 24px 64px rgba(0,0,0,.46),0 1px 0 rgba(255,255,255,.06) inset,0 0 0 1px rgba(43,143,235,.035);
     backdrop-filter:blur(15px);
   }
 
@@ -600,8 +600,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   }
   .vendor-large-card:hover {
     transform:translateY(-3px);
-    border-color:rgba(83,168,255,.52);
-    box-shadow:0 30px 90px rgba(0,0,0,.46),0 0 0 1px rgba(39,191,255,.08) inset;
+    border-color:rgba(103,198,255,.68);
+    box-shadow:0 30px 90px rgba(0,0,0,.52),0 0 0 1px rgba(39,191,255,.12) inset,0 10px 34px rgba(22,135,255,.10);
   }
   .vendor-large-card::after,.vendor-service-card::after {
     content:'';
