@@ -3141,6 +3141,7 @@
 
         pathTypePalette?.classList.add('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'false');
+        syncGroundShapePalette();
 
         pedestrianPathsActive = true;
         pedestrianPathCasing?.addTo(map);
