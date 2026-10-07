@@ -563,7 +563,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         const activeOrders = state.orders.orders.filter(
           (order) =>
             String(order.vendor_id) === String(item.id) &&
-            !['completed', 'cancelled'].includes(order.status)
+            ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
         ).length;
 
         append(
@@ -625,7 +625,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
           (order) =>
             String(order.vendor_id) === String(item.id) &&
             String(order.option_id) === String(child.id) &&
-            !['completed', 'cancelled'].includes(order.status)
+            ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
         ).length;
 
         append(
