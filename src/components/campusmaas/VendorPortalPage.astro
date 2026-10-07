@@ -15,9 +15,22 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         <strong id="portalHeaderTitle">Vendors</strong>
       </div>
     </div>
-    <div class="vendor-header-status">
-      <span class="vendor-live-dot"></span>
-      <span>Live workspace</span>
+    <div class="vendor-header-actions">
+      <div class="vendor-header-service-control" id="vendorHeaderServiceControl" hidden>
+        <button class="vendor-header-status-toggle" id="vendorHeaderStatusToggle" type="button" aria-expanded="false" aria-haspopup="true">
+          <span class="vendor-header-status-dot" id="vendorHeaderStatusDot"></span>
+          <span class="vendor-header-status-copy">
+            <strong id="vendorHeaderStatusLabel">ONLINE</strong>
+            <small id="vendorHeaderStatusMessage">Accepting new orders</small>
+          </span>
+          <span class="vendor-header-status-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div class="vendor-header-status-menu" id="vendorHeaderStatusMenu" hidden></div>
+      </div>
+      <div class="vendor-header-status">
+        <span class="vendor-live-dot"></span>
+        <span>Live workspace</span>
+      </div>
     </div>
   </header>
 
@@ -47,6 +60,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     const subtitle = document.getElementById('portalSubtitle');
     const kicker = document.getElementById('portalKicker');
     const back = document.getElementById('vendorBack');
+    const headerServiceControl = document.getElementById('vendorHeaderServiceControl');
+    const headerStatusToggle = document.getElementById('vendorHeaderStatusToggle');
+    const headerStatusDot = document.getElementById('vendorHeaderStatusDot');
+    const headerStatusLabel = document.getElementById('vendorHeaderStatusLabel');
+    const headerStatusMessage = document.getElementById('vendorHeaderStatusMessage');
+    const headerStatusMenu = document.getElementById('vendorHeaderStatusMenu');
 
     if (!root || !content) return;
 
@@ -143,6 +162,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       subtitle.textContent = 'Choose a service workspace';
       back.href = '/';
       back.setAttribute('aria-label', 'Back to map');
+      headerServiceControl.hidden = true;
+      headerStatusMenu.hidden = true;
+      headerStatusToggle.setAttribute('aria-expanded', 'false');
 
       content.className = 'vendor-content-grid vendor-root-grid';
       content.innerHTML = '';
@@ -202,6 +224,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       headerTitle.textContent = item.name;
       subtitle.textContent = 'Service list and dedicated dashboards';
       back.href = '/vendor';
+      headerServiceControl.hidden = true;
+      headerStatusMenu.hidden = true;
+      headerStatusToggle.setAttribute('aria-expanded', 'false');
 
       content.className = 'vendor-content-grid vendor-category-grid';
       content.innerHTML = '';
@@ -398,6 +423,50 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       subtitle.textContent = 'Vendor dashboard';
       back.href = route(item.id);
 
+      headerServiceControl.hidden = false;
+      headerStatusMenu.hidden = true;
+      headerStatusToggle.setAttribute('aria-expanded', 'false');
+      headerStatusLabel.textContent = serviceStatusLabel.toUpperCase();
+      headerStatusMessage.textContent = serviceStatusMessage;
+      headerStatusDot.className = 'vendor-header-status-dot status-' + serviceStatus;
+      headerStatusToggle.classList.remove('status-online', 'status-busy', 'status-offline');
+      headerStatusToggle.classList.add('status-' + serviceStatus);
+      headerStatusMenu.innerHTML = '';
+
+      ['online', 'busy', 'offline'].forEach((value) => {
+        const button = create('button', 'vendor-header-status-option', value[0].toUpperCase() + value.slice(1));
+        button.type = 'button';
+        button.classList.toggle('is-active', serviceStatus === value);
+        button.addEventListener('click', async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          button.disabled = true;
+          try {
+            const nextCatalogue = structuredClone(state.catalogue);
+            const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
+            const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
+            if (!target) throw new Error('Service not found.');
+            target.status = value;
+            target.status_message = value === 'offline'
+              ? 'Currently unavailable'
+              : value === 'busy'
+                ? 'Currently serving customers'
+                : 'Accepting new orders';
+            const response = await fetch('/__campusmaas/save-vendors', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(nextCatalogue)
+            });
+            if (!response.ok) throw new Error('Status update failed.');
+            state.catalogue = nextCatalogue;
+            render();
+          } catch {
+            button.disabled = false;
+          }
+        });
+        headerStatusMenu.appendChild(button);
+      });
+
       content.className = 'vendor-content-grid vendor-dashboard-grid';
       content.innerHTML = '';
 
@@ -513,6 +582,21 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       history.appendChild(historyList);
       content.appendChild(history);
     };
+
+    headerStatusToggle.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (headerServiceControl.hidden) return;
+      const open = headerStatusMenu.hidden;
+      headerStatusMenu.hidden = !open;
+      headerStatusToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!headerServiceControl.contains(event.target)) {
+        headerStatusMenu.hidden = true;
+        headerStatusToggle.setAttribute('aria-expanded', 'false');
+      }
+    });
 
     const render = () => {
       if (pageKind === 'root') {
@@ -845,6 +929,34 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-service-status.status-offline{border-color:rgba(239,68,68,.18)}.vendor-service-status.status-offline .vendor-service-status-dot{background:#ef4444;box-shadow:0 0 10px rgba(239,68,68,.4)}
   .vendor-service-status.status-offline strong{color:#ff9a9a}
   .vendor-service-status-controls{display:flex;gap:6px;margin:8px 0 10px}.vendor-status-button{border:1px solid rgba(83,168,255,.12);border-radius:7px;background:#0d2035;color:#91aac1;padding:6px 9px;font-size:8px;cursor:pointer}.vendor-status-button.is-active{background:#1687ff;border-color:#1687ff;color:#fff}
+  .vendor-header-actions{display:flex;align-items:center;gap:9px}
+  .vendor-header-service-control{position:relative;z-index:20}
+  .vendor-header-status-toggle{
+    display:flex;align-items:center;gap:9px;min-width:188px;min-height:54px;padding:8px 11px;
+    border:1px solid rgba(83,168,255,.22);border-radius:14px;background:rgba(8,27,45,.96);
+    color:#eaf6ff;cursor:pointer;box-shadow:0 12px 30px rgba(7,28,48,.20),0 1px 0 rgba(255,255,255,.07) inset;
+  }
+  .vendor-header-status-toggle:hover{border-color:rgba(83,168,255,.48);transform:translateY(-1px)}
+  .vendor-header-status-dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto;background:#22c55e;box-shadow:0 0 14px rgba(34,197,94,.55)}
+  .vendor-header-status-dot.status-busy{background:#f59e0b;box-shadow:0 0 14px rgba(245,158,11,.55)}
+  .vendor-header-status-dot.status-offline{background:#ef4444;box-shadow:0 0 14px rgba(239,68,68,.55)}
+  .vendor-header-status-copy{display:flex;flex-direction:column;align-items:flex-start;min-width:0;text-align:left}
+  .vendor-header-status-copy strong{font:800 10px/1 'Space Grotesk',sans-serif;letter-spacing:.12em;color:#eff8ff}
+  .vendor-header-status-copy small{margin-top:4px;color:#7791a8;font-size:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:118px}
+  .vendor-header-status-toggle.status-busy{border-color:rgba(245,158,11,.28)}
+  .vendor-header-status-toggle.status-offline{border-color:rgba(239,68,68,.28)}
+  .vendor-header-status-chevron{margin-left:auto;color:#74bdf1;font-size:16px;line-height:1;transform:translateY(-1px)}
+  .vendor-header-status-menu{
+    position:absolute;right:0;top:calc(100% + 7px);width:188px;padding:6px;
+    border:1px solid rgba(83,168,255,.22);border-radius:13px;background:#0a2035;
+    box-shadow:0 20px 45px rgba(3,16,28,.38);backdrop-filter:blur(16px)
+  }
+  .vendor-header-status-option{
+    display:flex;width:100%;align-items:center;justify-content:space-between;padding:10px 11px;
+    border:0;border-radius:8px;background:transparent;color:#9db4c7;font-size:9px;font-weight:700;cursor:pointer;text-align:left
+  }
+  .vendor-header-status-option:hover{background:rgba(83,168,255,.09);color:#e7f5ff}
+  .vendor-header-status-option.is-active{background:rgba(22,135,255,.14);color:#6fc5ff}
   @media(max-width:850px){
     .vendor-portal{padding:22px 16px 34px}
     .vendor-hero{padding-top:38px}
@@ -855,6 +967,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
   @media(max-width:560px){
     .vendor-portal-header{align-items:flex-start}
+    .vendor-header-actions{align-items:flex-start}
+    .vendor-header-service-control{max-width:54px}
+    .vendor-header-status-toggle{min-width:54px;width:54px;height:54px;padding:0;justify-content:center}
+    .vendor-header-status-copy,.vendor-header-status-chevron{display:none}
+    .vendor-header-status{display:none}
+    .vendor-header-status-menu{right:0;width:170px}
     .vendor-header-status{padding:6px 8px}
     .vendor-hero{padding:32px 0 21px}
     .vendor-large-card{min-height:245px;padding:20px}
