@@ -21,15 +21,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         <span>Order's</span>
       </button>
       <div class="vendor-header-service-control" id="vendorHeaderServiceControl" hidden>
-        <button class="vendor-header-status-toggle" id="vendorHeaderStatusToggle" type="button" aria-expanded="false" aria-haspopup="true">
-          <span class="vendor-header-status-dot" id="vendorHeaderStatusDot"></span>
-          <span class="vendor-header-status-copy">
-            <strong id="vendorHeaderStatusLabel">ONLINE</strong>
-            <small id="vendorHeaderStatusMessage">Accepting new orders</small>
-          </span>
-          <span class="vendor-header-status-chevron" aria-hidden="true">⌄</span>
-        </button>
-        <div class="vendor-header-status-menu" id="vendorHeaderStatusMenu" hidden></div>
+        <div class="vendor-header-status-toggle" id="vendorHeaderStatusToggle" role="group" aria-label="Service status">
+          <button type="button" class="vendor-header-status-choice status-online" data-status="online">Online</button>
+          <button type="button" class="vendor-header-status-choice status-busy" data-status="busy">Busy</button>
+          <button type="button" class="vendor-header-status-choice status-offline" data-status="offline">Offline</button>
+        </div>
+        <span class="vendor-header-status-message" id="vendorHeaderStatusMessage">Accepting new orders</span>
       </div>
       <div class="vendor-header-status">
         <span class="vendor-live-dot"></span>
@@ -87,10 +84,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     const back = document.getElementById('vendorBack');
     const headerServiceControl = document.getElementById('vendorHeaderServiceControl');
     const headerStatusToggle = document.getElementById('vendorHeaderStatusToggle');
-    const headerStatusDot = document.getElementById('vendorHeaderStatusDot');
-    const headerStatusLabel = document.getElementById('vendorHeaderStatusLabel');
     const headerStatusMessage = document.getElementById('vendorHeaderStatusMessage');
-    const headerStatusMenu = document.getElementById('vendorHeaderStatusMenu');
+    const headerStatusChoices = Array.from(document.querySelectorAll('.vendor-header-status-choice'));
     const printQueueButton = document.getElementById('vendorPrintQueueButton');
     const printQueue = document.getElementById('vendorPrintQueue');
     const printQueueBackdrop = document.getElementById('vendorPrintQueueBackdrop');
@@ -479,8 +474,6 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       back.href = '/';
       back.setAttribute('aria-label', 'Back to map');
       headerServiceControl.hidden = true;
-      headerStatusMenu.hidden = true;
-      headerStatusToggle.setAttribute('aria-expanded', 'false');
       printQueueButton.hidden = true;
       ordersVendorId = '';
       ordersVendorName = '';
@@ -546,8 +539,6 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       subtitle.textContent = 'Service list and dedicated dashboards';
       back.href = '/vendor';
       headerServiceControl.hidden = true;
-      headerStatusMenu.hidden = true;
-      headerStatusToggle.setAttribute('aria-expanded', 'false');
       ordersVendorId = String(item.id);
       ordersVendorName = String(item.name || 'Vendor');
       ordersOptionId = '';
@@ -601,48 +592,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         );
         append(card, info);
 
-        const statusControls = create('div', 'vendor-category-status-controls');
-        ['online', 'busy', 'offline'].forEach((value) => {
-          const button = create('button', 'vendor-status-button vendor-category-status-button', value[0].toUpperCase() + value.slice(1));
-          button.type = 'button';
-          button.classList.toggle('is-active', serviceStatus === value);
-          button.addEventListener('click', async (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            button.disabled = true;
-            try {
-              const nextCatalogue = structuredClone(state.catalogue);
-              const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
-              const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
-              if (!target) throw new Error('Service not found.');
-              target.status = value;
-              target.status_message = value === 'offline'
-                ? 'Currently unavailable'
-                : value === 'busy'
-                  ? 'Currently serving customers'
-                  : 'Accepting new orders';
-              const response = await fetch('/__campusmaas/save-vendors', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(nextCatalogue)
-              });
-              if (!response.ok) throw new Error('Status update failed.');
-              state.catalogue = nextCatalogue;
-              render();
-            } catch {
-              button.disabled = false;
-            }
-          });
-          statusControls.appendChild(button);
-        });
-
-        const footer = create('div', 'vendor-service-footer');
-        append(
-          footer,
-          create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
-          create('span', '', 'Open →')
-        );
-        append(card, statusControls, footer);
+        append(card, footer);
         content.appendChild(card);
       });
 
@@ -720,6 +670,22 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       return card;
     };
 
+    const saveServiceStatus = async (item, child, value) => {
+      const nextCatalogue = structuredClone(state.catalogue);
+      const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
+      const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
+      if (!target) throw new Error('Service not found.');
+      target.status = value;
+      target.status_message = value === 'offline' ? 'Currently unavailable' : value === 'busy' ? 'Currently serving customers' : 'Accepting new orders';
+      const response = await fetch('/__campusmaas/save-vendors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextCatalogue)
+      });
+      if (!response.ok) throw new Error('Status update failed.');
+      state.catalogue = nextCatalogue;
+    };
+
     const renderDetail = (item, child) => {
       const allOrders = state.orders.orders.filter(
         (order) =>
@@ -757,47 +723,10 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       closePrintQueue();
 
       headerServiceControl.hidden = false;
-      headerStatusMenu.hidden = true;
-      headerStatusToggle.setAttribute('aria-expanded', 'false');
-      headerStatusLabel.textContent = serviceStatusLabel.toUpperCase();
       headerStatusMessage.textContent = serviceStatusMessage;
-      headerStatusDot.className = 'vendor-header-status-dot status-' + serviceStatus;
-      headerStatusToggle.classList.remove('status-online', 'status-busy', 'status-offline');
-      headerStatusToggle.classList.add('status-' + serviceStatus);
-      headerStatusMenu.innerHTML = '';
-
-      ['online', 'busy', 'offline'].forEach((value) => {
-        const button = create('button', 'vendor-header-status-option', value[0].toUpperCase() + value.slice(1));
-        button.type = 'button';
-        button.classList.toggle('is-active', serviceStatus === value);
-        button.addEventListener('click', async (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          button.disabled = true;
-          try {
-            const nextCatalogue = structuredClone(state.catalogue);
-            const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
-            const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
-            if (!target) throw new Error('Service not found.');
-            target.status = value;
-            target.status_message = value === 'offline'
-              ? 'Currently unavailable'
-              : value === 'busy'
-                ? 'Currently serving customers'
-                : 'Accepting new orders';
-            const response = await fetch('/__campusmaas/save-vendors', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(nextCatalogue)
-            });
-            if (!response.ok) throw new Error('Status update failed.');
-            state.catalogue = nextCatalogue;
-            render();
-          } catch {
-            button.disabled = false;
-          }
-        });
-        headerStatusMenu.appendChild(button);
+      headerStatusChoices.forEach((button) => {
+        button.classList.toggle('is-active', String(button.dataset.status) === serviceStatus);
+        button.disabled = false;
       });
 
       content.className = 'vendor-content-grid vendor-dashboard-grid';
@@ -844,32 +773,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         create('span', '', 'Price ' + formatPrice(child.price))
       );
 
-      const statusControls = create('div', 'vendor-service-status-controls');
-      ['online', 'busy', 'offline'].forEach((value) => {
-        const button = create('button', 'vendor-status-button', value[0].toUpperCase() + value.slice(1));
-        button.type = 'button';
-        button.classList.toggle('is-active', serviceStatus === value);
-        button.addEventListener('click', async () => {
-          button.disabled = true;
-          try {
-            const nextCatalogue = structuredClone(state.catalogue);
-            const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
-            const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
-            if (!target) throw new Error('Service not found.');
-            target.status = value;
-            target.status_message = value === 'offline' ? 'Currently unavailable' : value === 'busy' ? 'Currently serving customers' : 'Accepting new orders';
-            const response = await fetch('/__campusmaas/save-vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nextCatalogue) });
-            if (!response.ok) throw new Error('Status update failed.');
-            state.catalogue = nextCatalogue;
-            render();
-          } catch {
-            button.disabled = false;
-          }
-        });
-        statusControls.appendChild(button);
-      });
-
-      append(overview, dashboardTitle, statusCard, statusControls, statGrid, facts);
+      append(overview, dashboardTitle, statusCard, statGrid, facts);
       content.appendChild(overview);
 
       const live = create('section', 'vendor-dashboard-orders');
@@ -916,19 +820,22 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       content.appendChild(history);
     };
 
-    headerStatusToggle.addEventListener('click', (event) => {
-      event.preventDefault();
-      if (headerServiceControl.hidden) return;
-      const open = headerStatusMenu.hidden;
-      headerStatusMenu.hidden = !open;
-      headerStatusToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-
-    document.addEventListener('click', (event) => {
-      if (!headerServiceControl.contains(event.target)) {
-        headerStatusMenu.hidden = true;
-        headerStatusToggle.setAttribute('aria-expanded', 'false');
-      }
+    headerStatusChoices.forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+        if (headerServiceControl.hidden || button.classList.contains('is-active')) return;
+        const value = String(button.dataset.status || '').toLowerCase();
+        const item = vendor(vendorId);
+        const child = option(item, optionId);
+        if (!item || !child) return;
+        headerStatusChoices.forEach((choice) => { choice.disabled = true; });
+        try {
+          await saveServiceStatus(item, child, value);
+          render();
+        } catch {
+          headerStatusChoices.forEach((choice) => { choice.disabled = false; });
+        }
+      });
     });
 
     const render = () => {
@@ -1351,33 +1258,15 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   }
 
   .vendor-header-actions{display:flex;align-items:center;gap:9px}
-  .vendor-header-service-control{position:relative;z-index:20}
-  .vendor-header-status-toggle{
-    display:flex;align-items:center;gap:9px;min-width:188px;min-height:54px;padding:8px 11px;
-    border:1px solid rgba(83,168,255,.22);border-radius:14px;background:rgba(8,27,45,.96);
-    color:#eaf6ff;cursor:pointer;box-shadow:0 12px 30px rgba(7,28,48,.20),0 1px 0 rgba(255,255,255,.07) inset;
-  }
-  .vendor-header-status-toggle:hover{border-color:rgba(83,168,255,.48);transform:translateY(-1px)}
-  .vendor-header-status-dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto;background:#22c55e;box-shadow:0 0 14px rgba(34,197,94,.55)}
-  .vendor-header-status-dot.status-busy{background:#f59e0b;box-shadow:0 0 14px rgba(245,158,11,.55)}
-  .vendor-header-status-dot.status-offline{background:#ef4444;box-shadow:0 0 14px rgba(239,68,68,.55)}
-  .vendor-header-status-copy{display:flex;flex-direction:column;align-items:flex-start;min-width:0;text-align:left}
-  .vendor-header-status-copy strong{font:800 10px/1 'Space Grotesk',sans-serif;letter-spacing:.12em;color:#eff8ff}
-  .vendor-header-status-copy small{margin-top:4px;color:#7791a8;font-size:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:118px}
-  .vendor-header-status-toggle.status-busy{border-color:rgba(245,158,11,.28)}
-  .vendor-header-status-toggle.status-offline{border-color:rgba(239,68,68,.28)}
-  .vendor-header-status-chevron{margin-left:auto;color:#74bdf1;font-size:16px;line-height:1;transform:translateY(-1px)}
-  .vendor-header-status-menu{
-    position:absolute;right:0;top:calc(100% + 7px);width:188px;padding:6px;
-    border:1px solid rgba(83,168,255,.22);border-radius:13px;background:#0a2035;
-    box-shadow:0 20px 45px rgba(3,16,28,.38);backdrop-filter:blur(16px)
-  }
-  .vendor-header-status-option{
-    display:flex;width:100%;align-items:center;justify-content:space-between;padding:10px 11px;
-    border:0;border-radius:8px;background:transparent;color:#9db4c7;font-size:9px;font-weight:700;cursor:pointer;text-align:left
-  }
-  .vendor-header-status-option:hover{background:rgba(83,168,255,.09);color:#e7f5ff}
-  .vendor-header-status-option.is-active{background:rgba(22,135,255,.14);color:#6fc5ff}
+  .vendor-header-service-control{display:flex;align-items:center;gap:8px;position:relative;z-index:20}
+  .vendor-header-status-toggle{display:flex;align-items:center;padding:3px;border:1px solid #d7dee7;border-radius:14px;background:#fff;box-shadow:0 8px 22px rgba(15,23,42,.08)}
+  .vendor-header-status-choice{min-width:70px;height:42px;padding:0 11px;border:0;border-radius:10px;background:transparent;color:#64748b;font:700 9px/1 'Space Grotesk',sans-serif;letter-spacing:.05em;cursor:pointer;transition:background .15s ease,color .15s ease}
+  .vendor-header-status-choice:hover{background:#f1f5f9;color:#0f172a}
+  .vendor-header-status-choice.is-active.status-online{background:#dcfce7;color:#15803d;box-shadow:inset 0 0 0 1px #86efac}
+  .vendor-header-status-choice.is-active.status-busy{background:#fef3c7;color:#b45309;box-shadow:inset 0 0 0 1px #fcd34d}
+  .vendor-header-status-choice.is-active.status-offline{background:#fee2e2;color:#b91c1c;box-shadow:inset 0 0 0 1px #fca5a5}
+  .vendor-header-status-choice:disabled{opacity:.55;cursor:wait}
+  .vendor-header-status-message{max-width:130px;color:#64748b;font-size:7px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   @media(max-width:850px){
     .vendor-portal{padding:22px 16px 34px}
     .vendor-hero{padding-top:38px}
@@ -1391,12 +1280,11 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     .vendor-header-actions{align-items:flex-start}
     .vendor-print-queue-button{height:54px;padding:0 12px;font-size:10px}
     .vendor-print-queue-button .vendor-print-queue-icon{font-size:13px}
-    .vendor-header-service-control{max-width:54px}
-    .vendor-header-status-toggle{min-width:54px;width:54px;height:54px;padding:0;justify-content:center}
-    .vendor-header-status-copy,.vendor-header-status-chevron{display:none}
+    .vendor-header-service-control{max-width:100%;gap:4px}
+    .vendor-header-status-toggle{padding:2px;border-radius:11px}
+    .vendor-header-status-choice{min-width:54px;height:40px;padding:0 8px;font-size:8px}
+    .vendor-header-status-message{display:none}
     .vendor-header-status{display:none}
-    .vendor-header-status-menu{right:0;width:170px}
-    .vendor-header-status{padding:6px 8px}
     .vendor-print-queue{padding:10px}
     .vendor-print-queue-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:14px}
     .vendor-print-queue-header{padding:14px}
