@@ -20,28 +20,36 @@ Windows:
 .venv\Scripts\activate
 ```
 
-## Python Dependencies
-
-```bash
-pip install pandas networkx geopy
-```
-
-## Astro
+## Install
 
 ```bash
 npm install
+```
+
+## Development
+
+```bash
 npm run dev
 ```
 
-Build:
+## Build
 
 ```bash
 npm run build
 ```
 
-Preview:
+## Preview
 
 ```bash
 npm run preview
 ```
 
+## Project
+
+Campus MaaS map with:
+
+- Campus map
+- Pedestrian paths
+- Gates
+- Access rules
+- User routing
