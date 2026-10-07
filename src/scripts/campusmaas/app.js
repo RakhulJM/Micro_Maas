@@ -621,6 +621,7 @@
       let pedestrianGraph = new Map();
       let coordinateByKey = new Map();
       let gateRoutingNodes = new Map();
+      let groundRoutingAreas = [];
 
       const graphKey = (coordinate) =>
         Number(coordinate[0]).toFixed(7) + ',' +
@@ -789,17 +790,122 @@
         return fractions;
       };
 
+      const pointInPolygon = (coordinate, ring) => {
+        if (!Array.isArray(ring) || ring.length < 4) return false;
+
+        const x = Number(coordinate[0]);
+        const y = Number(coordinate[1]);
+        let inside = false;
+
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const xi = Number(ring[i][0]);
+          const yi = Number(ring[i][1]);
+          const xj = Number(ring[j][0]);
+          const yj = Number(ring[j][1]);
+
+          const intersects =
+            ((yi > y) !== (yj > y)) &&
+            x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+
+          if (intersects) inside = !inside;
+        }
+
+        return inside;
+      };
+
+      const polygonInteriorAnchor = (ring) => {
+        const unique = ring.slice(0, -1);
+        if (!unique.length) return null;
+
+        let area = 0;
+        let cx = 0;
+        let cy = 0;
+
+        for (let i = 0; i < unique.length; i += 1) {
+          const a = unique[i];
+          const b = unique[(i + 1) % unique.length];
+          const cross = Number(a[0]) * Number(b[1]) - Number(b[0]) * Number(a[1]);
+          area += cross;
+          cx += (Number(a[0]) + Number(b[0])) * cross;
+          cy += (Number(a[1]) + Number(b[1])) * cross;
+        }
+
+        let candidate = null;
+
+        if (Math.abs(area) > 1e-12) {
+          candidate = [
+            cx / (3 * area),
+            cy / (3 * area)
+          ];
+        }
+
+        if (!candidate || !pointInPolygon(candidate, ring)) {
+          candidate = unique.reduce(
+            (sum, point) => [
+              sum[0] + Number(point[0]),
+              sum[1] + Number(point[1])
+            ],
+            [0, 0]
+          ).map((value) => value / unique.length);
+        }
+
+        if (pointInPolygon(candidate, ring)) {
+          return candidate;
+        }
+
+        const bounds = unique.reduce(
+          (acc, point) => ({
+            minX: Math.min(acc.minX, Number(point[0])),
+            maxX: Math.max(acc.maxX, Number(point[0])),
+            minY: Math.min(acc.minY, Number(point[1])),
+            maxY: Math.max(acc.maxY, Number(point[1]))
+          }),
+          { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
+        );
+
+        const center = [
+          (bounds.minX + bounds.maxX) / 2,
+          (bounds.minY + bounds.maxY) / 2
+        ];
+
+        if (pointInPolygon(center, ring)) return center;
+
+        for (let i = 0; i < unique.length; i += 1) {
+          const a = unique[i];
+          const b = unique[(i + 1) % unique.length];
+          const midpoint = [
+            (Number(a[0]) + Number(b[0])) / 2,
+            (Number(a[1]) + Number(b[1])) / 2
+          ];
+
+          for (const weight of [0.25, 0.5, 0.75]) {
+            const probe = [
+              midpoint[0] * weight + center[0] * (1 - weight),
+              midpoint[1] * weight + center[1] * (1 - weight)
+            ];
+
+            if (pointInPolygon(probe, ring)) return probe;
+          }
+        }
+
+        return unique[0];
+      };
+
       const rebuildPedestrianRouting = () => {
         pedestrianSegments = [];
         pedestrianGraph = new Map();
         coordinateByKey = new Map();
         gateRoutingNodes = new Map();
+        groundRoutingAreas = [];
 
         const rawSegments = [];
 
-        for (const feature of pedestrianPathData.features || []) {
+        for (let featureIndex = 0; featureIndex < (pedestrianPathData.features || []).length; featureIndex += 1) {
+          const feature = pedestrianPathData.features[featureIndex];
           const geometry = feature?.geometry;
           if (!geometry) continue;
+
+          const category = normalizePathCategory(feature);
 
           const lines = geometry.type === 'LineString'
             ? [geometry.coordinates]
@@ -819,13 +925,49 @@
               if (distance <= 0) continue;
 
               rawSegments.push({
-                featureId: String(feature.id ?? ''),
+                featureId: String(feature.id ?? ('feature-' + featureIndex)),
                 lineIndex,
                 segmentIndex: index,
                 a,
                 b,
                 distance
               });
+            }
+          }
+
+          if (category === 'Ground' && geometry.type === 'Polygon') {
+            const ring = Array.isArray(geometry.coordinates?.[0])
+              ? geometry.coordinates[0]
+              : [];
+
+            if (ring.length >= 4 && pointInPolygon(ring[0], ring)) {
+              const featureId = String(feature.id ?? ('feature-' + featureIndex));
+              for (let index = 0; index < ring.length - 1; index += 1) {
+                const a = ring[index];
+                const b = ring[index + 1];
+                const distance = distanceBetween(a, b);
+
+                if (distance <= 0) continue;
+
+                rawSegments.push({
+                  featureId,
+                  lineIndex: -1,
+                  segmentIndex: index,
+                  a,
+                  b,
+                  distance,
+                  groundBoundary: true
+                });
+              }
+
+              const anchor = polygonInteriorAnchor(ring);
+              if (anchor) {
+                groundRoutingAreas.push({
+                  featureId,
+                  ring,
+                  anchor
+                });
+              }
             }
           }
         }
@@ -891,6 +1033,27 @@
               lineIndex: segment.lineIndex,
               segmentIndex: segment.segmentIndex
             });
+          }
+        }
+
+        for (const area of groundRoutingAreas) {
+          const anchorKey = 'ground:' + area.featureId + ':anchor';
+          area.anchorKey = anchorKey;
+
+          pedestrianGraph.set(anchorKey, []);
+          coordinateByKey.set(anchorKey, area.anchor);
+
+          const seenBoundaryKeys = new Set();
+
+          for (const point of area.ring) {
+            const key = graphKey(point);
+            if (seenBoundaryKeys.has(key) || !pedestrianGraph.has(key)) continue;
+            seenBoundaryKeys.add(key);
+
+            const distance = distanceBetween(area.anchor, point);
+            if (distance <= 0) continue;
+
+            addGraphEdge(anchorKey, key, distance);
           }
         }
 
@@ -1096,6 +1259,24 @@
           return bestGate;
         }
 
+        const coordinate = [
+          Number(latlng.lng),
+          Number(latlng.lat)
+        ];
+
+        for (const area of groundRoutingAreas) {
+          if (!pointInPolygon(coordinate, area.ring)) continue;
+
+          return {
+            type: 'ground',
+            coordinate,
+            latlng,
+            distance: 0,
+            groundAreaId: area.featureId,
+            groundAnchorKey: area.anchorKey
+          };
+        }
+
         let bestVertex = null;
         let bestSegment = null;
 
@@ -1175,6 +1356,31 @@
         const connectSnap = (snapKey, snap) => {
           if (snap.type === 'gate') {
             return snap.nodeKey;
+          }
+
+          if (snap.type === 'ground') {
+            graph.set(snapKey, []);
+
+            const anchor = snap.groundAnchorKey;
+            const anchorCoordinate = coordinateByKey.get(anchor);
+            if (!anchor || !anchorCoordinate) return snapKey;
+
+            const distance = distanceBetween(snap.coordinate, anchorCoordinate);
+
+            graph.get(snapKey).push({
+              node: anchor,
+              distance
+            });
+
+            if (graph.has(anchor)) {
+              graph.get(anchor).push({
+                node: snapKey,
+                distance
+              });
+            }
+
+            coordinateByKey.set(snapKey, snap.coordinate);
+            return snapKey;
           }
 
           graph.set(snapKey, []);
@@ -4717,8 +4923,6 @@
           const firstPoint = drawingPoints[0];
 
           if (clicked.distanceTo(firstPoint) <= snapToleranceMeters) {
-            const first = snapDrawingPoint(firstPoint);
-            drawingPoints = drawingPoints.slice(0, -0);
             drawingClosed = true;
             renderDrawingLine();
             finishCustomPath();
