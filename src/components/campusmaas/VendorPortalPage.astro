@@ -3,7 +3,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 ---
 
 <main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId}>
-  <script type="application/json" id="vendorPortalInitialData" set:html={JSON.stringify(initialData || { catalogue: { version: 1, vendors: [] }, orders: { version: 1, orders: [] } })}></script>
+  <script type="application/json" id="vendorPortalInitialData" set:html={JSON.stringify(initialData || { catalogue: { version: 1, vendors: [] }, orders: { version: 1, orders: [] }, pageCards: { version: 1, root: {}, categories: {} } })}></script>
   <div class="vendor-portal-glow vendor-portal-glow-a" aria-hidden="true"></div>
   <div class="vendor-portal-glow vendor-portal-glow-b" aria-hidden="true"></div>
 
@@ -104,7 +104,8 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 
     const state = {
       catalogue: { version: 1, vendors: [] },
-      orders: { version: 1, orders: [] }
+      orders: { version: 1, orders: [] },
+      pageCards: { version: 1, root: {}, categories: {} }
     };
     let ordersVendorId = '';
     let ordersVendorName = '';
@@ -172,6 +173,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
     const loadData = async () => {
       let catalogue = null;
       let orders = null;
+      let pageCards = null;
 
       try {
         const embedded = JSON.parse(
@@ -179,6 +181,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         );
         catalogue = embedded?.catalogue;
         orders = embedded?.orders;
+        pageCards = embedded?.pageCards;
       } catch {
         // Embedded route data will be validated below.
       }
@@ -195,6 +198,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 
       state.catalogue = catalogue;
       state.orders = orders;
+      state.pageCards = pageCards?.version === 1 ? pageCards : { version: 1, root: {}, categories: {} };
 
       // Refresh when the public JSON files are available, but never blank the page
       // when a dev-server/static-file refresh is unavailable.
@@ -526,14 +530,15 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         const card = create('a', 'vendor-large-card');
         card.href = route(item.id);
 
+        const cardData = state.pageCards.root[String(item.id)] || {};
         const top = create('div', 'vendor-large-card-top');
         append(
           top,
-          create('span', 'vendor-card-number', String(item.order || 1).padStart(2, '0')),
+          create('span', 'vendor-card-number', String(cardData.number || item.order || 1).padStart(2, '0')),
           create('span', 'vendor-open-icon', '↗')
         );
 
-        const largeIcon = create('div', 'vendor-large-icon', iconLetter(item.id));
+        const largeIcon = create('div', 'vendor-large-icon', cardData.icon || iconLetter(item.id));
 
         const visibleOptions = (item.options || [])
           .filter((child) => child.enabled !== false);
@@ -548,7 +553,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
           card,
           top,
           largeIcon,
-          create('div', 'vendor-large-title', item.name),
+          create('div', 'vendor-large-title', cardData.title || item.name),
           create('p', '', visibleOptions.length + (visibleOptions.length === 1 ? ' service available' : ' services available'))
         );
 
@@ -556,7 +561,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         append(
           footer,
           create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
-          create('span', '', 'Open dashboard →')
+          create('span', '', cardData.action || 'Open dashboard →')
         );
         append(card, footer);
         content.appendChild(card);
@@ -568,14 +573,15 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
     };
 
     const renderCategory = (item) => {
+      const pageData = state.pageCards.categories[String(item.id)] || {};
       const options = (item.options || [])
         .filter((child) => child.enabled !== false)
         .sort((a, b) => Number(a.order) - Number(b.order));
 
       kicker.textContent = 'VENDOR';
-      title.textContent = item.name;
-      headerTitle.textContent = item.name;
-      subtitle.textContent = 'Service list and dedicated dashboards';
+      title.textContent = pageData.title || item.name;
+      headerTitle.textContent = pageData.title || item.name;
+      subtitle.textContent = pageData.subtitle || 'Service list and dedicated dashboards';
       back.href = '/vendor';
       headerServiceControl.hidden = true;
       ordersVendorId = '';
@@ -587,6 +593,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       content.innerHTML = '';
 
       options.forEach((child) => {
+        const serviceData = pageData.services?.[String(child.id)] || {};
         const card = create('a', 'vendor-service-card');
         card.href = route(item.id, child.id);
 
@@ -607,9 +614,9 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         append(
           card,
           top,
-          create('div', 'vendor-service-number', String(child.order || 1).padStart(2, '0')),
-          create('h2', '', child.name),
-          create('p', '', 'Dedicated vendor dashboard')
+          create('div', 'vendor-service-number', String(serviceData.number || child.order || 1).padStart(2, '0')),
+          create('h2', '', serviceData.title || child.name),
+          create('p', '', serviceData.description || 'Dedicated vendor dashboard')
         );
 
         const serviceStatus = String(child.status || 'online').toLowerCase();
@@ -629,6 +636,12 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         );
         append(card, info);
 
+        const footer = create('div', 'vendor-large-footer');
+        append(
+          footer,
+          create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
+          create('span', '', 'Open dashboard →')
+        );
         append(card, footer);
         content.appendChild(card);
       });
