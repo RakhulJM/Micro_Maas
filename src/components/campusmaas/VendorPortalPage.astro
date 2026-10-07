@@ -110,6 +110,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       catalogue: { version: 1, vendors: [] },
       orders: { version: 1, orders: [] }
     };
+    let ordersVendorId = '';
+    let ordersVendorName = '';
 
     const create = (tag, className, text) => {
       const node = document.createElement(tag);
@@ -184,13 +186,14 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       state.orders = await responses[1].json();
     };
 
-    const printableOrders = () =>
-      state.orders.orders.filter((order) =>
-        String(order.vendor_id) === 'printer' &&
-        !['completed', 'cancelled'].includes(String(order.status || '').toLowerCase()) &&
-        Array.isArray(order.files) &&
-        order.files.length
-      );
+    const vendorOrders = (id, requireFiles = false) =>
+      state.orders.orders.filter((order) => {
+        if (String(order.vendor_id) !== String(id)) return false;
+        if (['completed', 'cancelled'].includes(String(order.status || '').toLowerCase())) return false;
+        return !requireFiles || (Array.isArray(order.files) && order.files.length);
+      });
+
+    const printableOrders = () => vendorOrders('printer', true);
 
     const printGroupKey = (file) =>
       String(file?.color || 'bw').toLowerCase() + '-' +
@@ -224,8 +227,74 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       window.open(url, '_blank', 'noopener,noreferrer');
     };
 
+    const renderVendorOrderList = () => {
+      const isPrinter = String(ordersVendorId) === 'printer';
+      if (isPrinter) {
+        renderPrintQueue();
+        return;
+      }
+
+      const orders = vendorOrders(ordersVendorId);
+      printQueueList.innerHTML = '';
+      printQueueSummary.textContent =
+        orders.length + (orders.length === 1 ? ' active order' : ' active orders');
+
+      printQueueAll.hidden = true;
+
+      if (!orders.length) {
+        printQueueList.appendChild(
+          create('div', 'vendor-empty-card', 'No active orders for ' + (ordersVendorName || 'this vendor') + '.')
+        );
+        printQueueFooterText.textContent = 'New orders for this vendor will appear here automatically.';
+        return;
+      }
+
+      const grouped = new Map();
+      orders.forEach((order) => {
+        const key = String(order.option_name || 'Service');
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(order);
+      });
+
+      let totalQuantity = 0;
+
+      grouped.forEach((serviceOrders, serviceName) => {
+        const serviceSection = create('section', 'vendor-print-order-section');
+        const serviceHeader = create('header', 'vendor-print-order-header');
+        const heading = create('div');
+
+        append(
+          heading,
+          create('span', 'vendor-print-order-kicker', ordersVendorName.toUpperCase()),
+          create('strong', '', serviceName),
+          create('small', '', serviceOrders.length + (serviceOrders.length === 1 ? ' active order' : ' active orders'))
+        );
+
+        append(serviceHeader, heading);
+        serviceSection.appendChild(serviceHeader);
+
+        const list = create('div', 'vendor-orders-grid');
+        serviceOrders.forEach((order) => {
+          totalQuantity += Number(order.quantity) || 1;
+          const service = option(vendor(ordersVendorId), order.option_id);
+          list.appendChild(
+            makeOrderCard(order, String(service?.status || 'online').toLowerCase())
+          );
+        });
+
+        serviceSection.appendChild(list);
+        printQueueList.appendChild(serviceSection);
+      });
+
+      printQueueFooterText.textContent =
+        orders.length + (orders.length === 1 ? ' order · ' : ' orders · ') +
+        totalQuantity + (totalQuantity === 1 ? ' item' : ' items') +
+        ' waiting.';
+    };
+
     const renderPrintQueue = () => {
       const orders = printableOrders();
+      printQueueAll.hidden = false;
 
       printQueueList.innerHTML = '';
       printQueueSummary.textContent =
@@ -236,7 +305,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
       if (!orders.length) {
         printQueueList.appendChild(
-          create('div', 'vendor-empty-card', 'No active print orders in the queue.')
+          create('div', 'vendor-empty-card', 'No active print orders.')
         );
         printQueueFooterText.textContent = 'New print orders will appear here automatically.';
         return;
@@ -349,7 +418,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const openPrintQueue = () => {
-      renderPrintQueue();
+      printQueue.querySelector('.vendor-print-queue-kicker').textContent = ordersVendorName.toUpperCase() + ' ORDERS';
+      document.getElementById('vendorPrintQueueTitle').textContent = ordersVendorName + ' orders';
+      renderVendorOrderList();
       printQueue.hidden = false;
       printQueue.setAttribute('aria-hidden', 'false');
       document.body.classList.add('vendor-print-queue-open');
@@ -376,6 +447,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       headerStatusMenu.hidden = true;
       headerStatusToggle.setAttribute('aria-expanded', 'false');
       printQueueButton.hidden = true;
+      ordersVendorId = '';
+      ordersVendorName = '';
       closePrintQueue();
 
       content.className = 'vendor-content-grid vendor-root-grid';
@@ -439,7 +512,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       headerServiceControl.hidden = true;
       headerStatusMenu.hidden = true;
       headerStatusToggle.setAttribute('aria-expanded', 'false');
-      printQueueButton.hidden = String(item.id) !== 'printer';
+      ordersVendorId = String(item.id);
+      ordersVendorName = String(item.name || 'Vendor');
+      printQueueButton.hidden = false;
       closePrintQueue();
 
       content.className = 'vendor-content-grid vendor-category-grid';
@@ -636,7 +711,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       headerTitle.textContent = child.name;
       subtitle.textContent = 'Vendor dashboard';
       back.href = route(item.id);
-      printQueueButton.hidden = String(item.id) !== 'printer';
+      ordersVendorId = String(item.id);
+      ordersVendorName = String(item.name || 'Vendor');
+      printQueueButton.hidden = false;
       closePrintQueue();
 
       headerServiceControl.hidden = false;
