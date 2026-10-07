@@ -639,7 +639,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       headerTitle.textContent = child.name;
       subtitle.textContent = 'Vendor dashboard';
       back.href = route(item.id);
-      printQueueButton.hidden = true;
+      printQueueButton.hidden = String(item.id) !== 'printer';
       closePrintQueue();
 
       headerServiceControl.hidden = false;
