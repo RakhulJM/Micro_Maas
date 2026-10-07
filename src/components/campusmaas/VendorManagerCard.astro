@@ -35,7 +35,7 @@ const updateOrder=async(id,value)=>{status.textContent='Saving order…';const r
 document.getElementById('addVendor').onclick=()=>openEditor(-1);document.getElementById('addVendorOption').onclick=()=>addOption();document.getElementById('saveVendor').onclick=saveEditor;document.getElementById('cancelVendor').onclick=closeEditor;document.getElementById('closeVendorModal').onclick=closeEditor;document.getElementById('deleteVendor').onclick=async()=>{if(editingVendorIndex<0)return;catalogue.vendors.splice(editingVendorIndex,1);try{await saveCatalogue();closeEditor()}catch(e){status.textContent=e.message}};modal.onclick=e=>{if(e.target===modal)closeEditor()};load()
 };initVendorManager();
 </script>
-<style>
+<style is:global>
 .vendor-manager{position:absolute;z-index:1900;right:14px;top:58px;width:min(470px,calc(100vw - 28px));max-height:min(80vh,760px);overflow:auto;padding:14px;border:1px solid rgba(83,168,255,.18);border-radius:17px;background:linear-gradient(180deg,rgba(8,20,35,.98),rgba(6,17,29,.96));color:#e8eef8;box-shadow:0 22px 60px rgba(0,0,0,.32);backdrop-filter:blur(16px)}
 .vendor-manager-header,.vendor-section-head,.vendor-card-head,.vendor-dialog-head,.vendor-options-head,.vendor-dialog-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .vendor-manager-header{padding:2px 2px 12px;border-bottom:1px solid rgba(117,162,206,.12)}.vendor-manager-header strong{display:block;margin-top:4px;font:600 16px/1 'Space Grotesk',sans-serif}.vendor-manager-header small{display:block;margin-top:3px;color:#71849a;font-size:9px}
