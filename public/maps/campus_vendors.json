@@ -13,7 +13,9 @@
           "order": 1,
           "enabled": true,
           "service_minutes": 5,
-          "price": 0
+          "price": 0,
+          "status": "online",
+          "status_message": "Accepting new orders"
         },
         {
           "id": "printer-amenity",
@@ -21,7 +23,9 @@
           "order": 2,
           "enabled": true,
           "service_minutes": 5,
-          "price": 0
+          "price": 0,
+          "status": "online",
+          "status_message": "Accepting new orders"
         }
       ]
     },
@@ -37,7 +41,9 @@
           "order": 1,
           "enabled": true,
           "service_minutes": 5,
-          "price": 0
+          "price": 0,
+          "status": "online",
+          "status_message": "Accepting new orders"
         },
         {
           "id": "singles",
@@ -45,7 +51,9 @@
           "order": 2,
           "enabled": true,
           "service_minutes": 5,
-          "price": 0
+          "price": 0,
+          "status": "online",
+          "status_message": "Accepting new orders"
         }
       ]
     }
