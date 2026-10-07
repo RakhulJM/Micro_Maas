@@ -75,6 +75,8 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 </main>
 
 <script>
+  let vendorLiveSyncTimer = null;
+
   const initVendorPortal = () => {
     const root = document.querySelector('.vendor-portal');
     const content = document.getElementById('portalContent');
@@ -1071,7 +1073,6 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       }
     });
 
-    let liveSyncTimer = null;
     let liveSyncBusy = false;
 
     const refreshLiveState = async () => {
@@ -1136,8 +1137,8 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
     };
 
     const startLiveSync = () => {
-      if (liveSyncTimer) window.clearInterval(liveSyncTimer);
-      liveSyncTimer = window.setInterval(() => {
+      if (vendorLiveSyncTimer) window.clearInterval(vendorLiveSyncTimer);
+      vendorLiveSyncTimer = window.setInterval(() => {
         void refreshLiveState();
       }, 3000);
     };
@@ -1160,7 +1161,10 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
   };
 
   window.addEventListener('pagehide', () => {
-    // Portal polling is tied to the current page instance.
+    if (vendorLiveSyncTimer) {
+      window.clearInterval(vendorLiveSyncTimer);
+      vendorLiveSyncTimer = null;
+    }
   }, { once: true });
 
   if (document.readyState === 'loading') {
