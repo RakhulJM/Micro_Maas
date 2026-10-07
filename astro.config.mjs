@@ -496,28 +496,6 @@ const pedestrianNetworkSavePlugin = () => ({
             )
           );
 
-          const gateData = readJsonFile('maps/gates.geojson');
-          const pathData = readJsonFile('maps/pedestrian_paths_edits.geojson');
-
-          const gateIds = new Set(
-            (gateData?.features || [])
-              .map((feature) => String(feature?.id || feature?.properties?.id || '').trim())
-              .filter(Boolean)
-          );
-
-          const pathIds = new Set(
-            (pathData?.features || [])
-              .map((feature, index) =>
-                String(
-                  feature?.id ||
-                  feature?.properties?.['@id'] ||
-                  feature?.properties?.id ||
-                  'path-' + (index + 1)
-                )
-              )
-              .filter(Boolean)
-          );
-
           const policyIds = new Set();
 
           const validPolicies = payload.policies.every((policy) => {
