@@ -11,14 +11,14 @@ import 'leaflet/dist/leaflet.css';
     <section class="user-trip-card" aria-label="Campus trip">
       <div class="user-trip-field">
         <span>From</span>
-        <strong id="userTripFrom">KEC Main Gate</strong>
+        <strong id="userTripFrom">Point A</strong>
       </div>
 
       <div class="user-trip-divider" aria-hidden="true"></div>
 
       <div class="user-trip-field">
         <span>To</span>
-        <strong id="userTripTo">Mechanical Block</strong>
+        <strong id="userTripTo">Point B</strong>
       </div>
 
       <div class="user-trip-summary">
@@ -32,6 +32,37 @@ import 'leaflet/dist/leaflet.css';
         </div>
       </div>
     </section>
+
+    <aside class="user-access-card" aria-label="Student gate access">
+      <div class="user-access-header">
+        <div>
+          <span class="user-access-kicker">STUDENT ACCESS</span>
+          <strong>Campus gate policy</strong>
+        </div>
+        <span class="user-access-clock" id="userAccessClock">—</span>
+      </div>
+
+      <div class="user-access-row user-access-row-preferred">
+        <div>
+          <strong>Gate 06</strong>
+          <span>Entry + exit · college preferred</span>
+        </div>
+        <b>85</b>
+      </div>
+
+      <div class="user-access-row">
+        <div>
+          <strong>Gate 09</strong>
+          <span id="userGate09Status">Checking current access…</span>
+        </div>
+        <b id="userGate09State">—</b>
+      </div>
+
+      <div class="user-access-windows">
+        <span>Allowed for students</span>
+        <strong id="userGate09Windows">07:00–08:45 · 12:25–13:25 · 16:15–18:00</strong>
+      </div>
+    </aside>
 
     <script>
       import L from 'leaflet';
@@ -138,6 +169,7 @@ const findBuildingCenter = (places, nameFragment) => {
 };
 
 const USER_ROUTE_CONNECT_RADIUS_M = 40;
+const USER_GATE_MATCH_RADIUS_M = 25;
 
 const projectPointToPath = (pathData, latlng) => {
   let best = null;
@@ -458,16 +490,18 @@ const start = async () => {
     !placesResponse.ok ||
     !pathResponse.ok ||
     !gatesResponse.ok ||
-    !perimeterResponse.ok
+    !perimeterResponse.ok ||
+    !accessRulesResponse.ok
   ) {
     throw new Error('CampusMaaS user map data could not be loaded.');
   }
 
-  const [places, pathData, gates, perimeter] = await Promise.all([
+  const [places, pathData, gates, perimeter, accessPolicy] = await Promise.all([
     placesResponse.json(),
     pathResponse.json(),
     gatesResponse.json(),
-    perimeterResponse.json()
+    perimeterResponse.json(),
+    accessRulesResponse.json()
   ]);
 
   const perimeterFeature = perimeter?.features?.[0];
@@ -626,8 +660,200 @@ const start = async () => {
     if (userTripDistance) userTripDistance.textContent = formatDistance(summary.distance);
   };
 
+  const userAccessClock = document.getElementById('userAccessClock');
+  const userGate09Status = document.getElementById('userGate09Status');
+  const userGate09State = document.getElementById('userGate09State');
+  const userGate09Windows = document.getElementById('userGate09Windows');
+
+  const minutesFromClock = (value) => {
+    const [hours, minutes] = String(value || '00:00').split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
+  const campusClock = () => {
+    const parts = new Intl.DateTimeFormat('en-IN', {
+      timeZone: accessPolicy?.timezone || 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(new Date());
+
+    const read = (type) => parts.find((part) => part.type === type)?.value || '00';
+    return read('hour') + ':' + read('minute');
+  };
+
+  const gatePolicy = (gateId) =>
+    (accessPolicy?.policies || []).find(
+      (policy) =>
+        policy?.group === 'students' &&
+        policy?.target?.type === 'gate' &&
+        String(policy?.target?.id) === String(gateId)
+    ) || null;
+
+  const policyWindowActive = (windows, time) => {
+    const current = minutesFromClock(time);
+
+    return (Array.isArray(windows) ? windows : []).some((window) => {
+      const start = minutesFromClock(window?.start);
+      const end = minutesFromClock(window?.end);
+      return current >= start && current <= end;
+    });
+  };
+
+  const evaluateStudentGate = (gate, time = campusClock()) => {
+    const policy = gatePolicy(gate?.id);
+
+    if (!policy) {
+      return {
+        allowed: true,
+        preferred: false,
+        priority: null,
+        policy: null
+      };
+    }
+
+    if (policy.mode === 'preferred') {
+      return {
+        allowed: true,
+        preferred: true,
+        priority: Number(policy.priority) || 0,
+        policy
+      };
+    }
+
+    if (policy.mode === 'allow_only_during') {
+      const allowed = policyWindowActive(policy.windows, time);
+      return {
+        allowed,
+        preferred: false,
+        priority: null,
+        policy
+      };
+    }
+
+    return {
+      allowed: true,
+      preferred: false,
+      priority: null,
+      policy
+    };
+  };
+
+  const nearestGateForPoint = (point) => {
+    let best = null;
+
+    for (const gate of gates?.features || []) {
+      const coordinate =
+        gate?.properties?.access_point ||
+        gate?.properties?.center;
+
+      if (!Array.isArray(coordinate) || coordinate.length < 2) continue;
+
+      const gatePoint = L.latLng(
+        Number(coordinate[1]),
+        Number(coordinate[0])
+      );
+      const distance = point.distanceTo(gatePoint);
+
+      if (!best || distance < best.distance) {
+        best = {
+          gate,
+          point: gatePoint,
+          distance
+        };
+      }
+    }
+
+    return best;
+  };
+
+  const updateStudentAccessUi = () => {
+    const time = campusClock();
+    const gate09 = (gates?.features || []).find(
+      (gate) => String(gate?.properties?.name || '').toLowerCase().replace(/\s/g, '') === 'gate-09'
+    );
+    const evaluation = evaluateStudentGate(gate09, time);
+    const policyWindows = evaluation.policy?.windows || [];
+    const windowsText = policyWindows
+      .map((window) => window.start + '–' + window.end)
+      .join(' · ');
+
+    if (userAccessClock) {
+      userAccessClock.textContent = time + ' IST';
+    }
+
+    if (userGate09Status) {
+      userGate09Status.textContent = evaluation.allowed
+        ? 'Open for students · in + out'
+        : 'Closed for students · time restricted';
+    }
+
+    if (userGate09State) {
+      userGate09State.textContent = evaluation.allowed ? 'OPEN' : 'CLOSED';
+      userGate09State.classList.toggle('is-open', evaluation.allowed);
+      userGate09State.classList.toggle('is-closed', !evaluation.allowed);
+    }
+
+    if (userGate09Windows && windowsText) {
+      userGate09Windows.textContent = windowsText;
+    }
+
+    if (gateLayer && typeof gateLayer.eachLayer === 'function') {
+      gateLayer.eachLayer((layer) => {
+        const feature = layer?.feature;
+        if (!feature) return;
+
+        layer.setStyle?.(gateStyle(feature, time));
+
+        const status = evaluateStudentGate(feature, time);
+        const name = escapeHtml(feature?.properties?.name || 'Gate');
+        const description = status.preferred
+          ? 'Preferred for students · priority ' + String(status.priority)
+          : status.allowed
+            ? 'Open for students now · entry + exit'
+            : 'Closed for students now · time restricted';
+
+        layer.setPopupContent(
+          '<strong>' + name + '</strong><br>' +
+          '<span>' + escapeHtml(description) + '</span>'
+        );
+      });
+    }
+  };
+
+  const validateUserGateClick = (point) => {
+    const nearest = nearestGateForPoint(point);
+
+    if (!nearest || nearest.distance > USER_GATE_MATCH_RADIUS_M) {
+      return { allowed: true, nearest: null };
+    }
+
+    const evaluation = evaluateStudentGate(nearest.gate);
+
+    if (!evaluation.allowed) {
+      if (userTripFrom) userTripFrom.textContent = 'Gate 09 is closed';
+      if (userTripTo) userTripTo.textContent = 'Students cannot use it now';
+      if (userTripTime) userTripTime.textContent = 'Unavailable';
+      if (userTripDistance) userTripDistance.textContent = 'Try Gate 06';
+      return {
+        allowed: false,
+        nearest,
+        evaluation
+      };
+    }
+
+    return {
+      allowed: true,
+      nearest,
+      evaluation
+    };
+  };
+
   const handleUserMapClick = (event) => {
     const clicked = event.latlng;
+    const gateCheck = validateUserGateClick(clicked);
+
+    if (!gateCheck.allowed) return;
 
     /*
      * User endpoints are the exact coordinates of the click.
@@ -638,16 +864,31 @@ const start = async () => {
       pointA = clicked;
       pointB = null;
       resetTripSummary();
-      if (userTripFrom) userTripFrom.textContent = 'Point A selected';
+
+      const gateName = gateCheck.nearest?.gate?.properties?.name;
+      if (userTripFrom) {
+        userTripFrom.textContent = gateName
+          ? gateName + ' selected'
+          : 'Point A selected';
+      }
       if (userTripTo) userTripTo.textContent = 'Select Point B';
       renderEndpointMarkers();
       return;
     }
 
     pointB = clicked;
+    if (userTripTo) {
+      const gateName = gateCheck.nearest?.gate?.properties?.name;
+      userTripTo.textContent = gateName
+        ? gateName + ' selected'
+        : 'Point B selected';
+    }
     renderEndpointMarkers();
     renderUserRoute();
   };
+
+  updateStudentAccessUi();
+  window.setInterval(updateStudentAccessUi, 30000);
 
   resetTripSummary();
   map.on('click', handleUserMapClick);
@@ -750,15 +991,63 @@ const start = async () => {
     interactive: false
   }).addTo(map);
 
-  const gateLayer = L.geoJSON(gates, {
-    style: {
+  let gateLayer = null;
+
+  const gateStyle = (feature, time = campusClock()) => {
+    const name = String(feature?.properties?.name || '').toLowerCase();
+    const evaluation = evaluateStudentGate(feature, time);
+
+    if (name.replace(/\s/g, '') === 'gate-06') {
+      return {
+        color: '#1687ff',
+        weight: 2.4,
+        opacity: 1,
+        fillColor: '#1687ff',
+        fillOpacity: 0.34
+      };
+    }
+
+    if (name.replace(/\s/g, '') === 'gate-09') {
+      return {
+        color: evaluation.allowed ? '#16a34a' : '#dc2626',
+        weight: 2.4,
+        opacity: 1,
+        fillColor: evaluation.allowed ? '#16a34a' : '#dc2626',
+        fillOpacity: 0.28
+      };
+    }
+
+    return {
       color: '#475569',
       weight: 2,
       opacity: 0.95,
       fillColor: '#ffffff',
       fillOpacity: 0.18
-    },
-    interactive: false
+    };
+  };
+
+  gateLayer = L.geoJSON(gates, {
+    style: (feature) => gateStyle(feature),
+    interactive: true,
+    onEachFeature: (feature, layer) => {
+      const evaluation = evaluateStudentGate(feature);
+      const name = escapeHtml(feature?.properties?.name || 'Gate');
+      const description = evaluation.preferred
+        ? 'Preferred for students · priority ' + String(evaluation.priority)
+        : evaluation.allowed
+          ? 'Open for students now · entry + exit'
+          : 'Closed for students now · time restricted';
+
+      layer.bindPopup(
+        '<strong>' + name + '</strong><br>' +
+        '<span>' + escapeHtml(description) + '</span>'
+      );
+
+      layer.on('click', (event) => {
+        L.DomEvent.stopPropagation(event);
+        layer.openPopup();
+      });
+    }
   }).addTo(map);
 
   const buildingLabels = [];
@@ -828,8 +1117,6 @@ const start = async () => {
   void roads;
   void pedestrianCasing;
   void pedestrianPaths;
-  void gateLayer;
-
   const updateLabels = buildingLabelSizing(map, buildingLabels);
 
   map.on('zoomend', updateLabels);
