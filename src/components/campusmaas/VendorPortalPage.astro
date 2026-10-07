@@ -704,7 +704,13 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
             const response = await fetch('/__campusmaas/update-order', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: order.id, status: next[1] })
+              body: JSON.stringify({
+              id: order.id,
+              status: next[1],
+              actor: 'vendor',
+              vendor_id: ordersVendorId,
+              option_id: ordersOptionId
+            })
             });
 
             if (!response.ok) throw new Error('Order update failed.');
@@ -818,11 +824,15 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
       );
 
+      const readyOrders = allOrders.filter(
+        (order) => String(order.status || '').toLowerCase() === 'ready'
+      );
+
       const stats = {
         active: active.length,
         placed: active.filter((order) => order.status === 'placed').length,
         preparing: active.filter((order) => ['accepted', 'preparing'].includes(order.status)).length,
-        ready: active.filter((order) => order.status === 'ready').length
+        ready: readyOrders.length
       };
       const serviceStatus = String(child.status || 'online').toLowerCase();
       const serviceStatusMessage = child.status_message || (
@@ -1045,10 +1055,67 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       }
     });
 
+    let liveSyncTimer = null;
+    let liveSyncBusy = false;
+
+    const refreshLiveState = async () => {
+      if (liveSyncBusy) return;
+      liveSyncBusy = true;
+
+      try {
+        const [catalogueResponse, ordersResponse] = await Promise.all([
+          fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
+          fetch('/maps/campus_orders.json', { cache: 'no-store' })
+        ]);
+
+        if (!catalogueResponse.ok || !ordersResponse.ok) return;
+
+        const nextCatalogue = await catalogueResponse.json();
+        const nextOrders = await ordersResponse.json();
+        if (
+          nextCatalogue?.version !== 1 ||
+          !Array.isArray(nextCatalogue?.vendors) ||
+          nextOrders?.version !== 1 ||
+          !Array.isArray(nextOrders?.orders)
+        ) return;
+
+        const catalogueChanged =
+          JSON.stringify(nextCatalogue) !== JSON.stringify(state.catalogue);
+        const ordersChanged =
+          JSON.stringify(nextOrders) !== JSON.stringify(state.orders);
+
+        if (!catalogueChanged && !ordersChanged) return;
+
+        state.catalogue = nextCatalogue;
+        state.orders = nextOrders;
+
+        const queueWasOpen = printQueue && !printQueue.hidden;
+        render();
+
+        if (
+          queueWasOpen &&
+          pageKind === 'detail' &&
+          ordersVendorId
+        ) {
+          openPrintQueue();
+        }
+      } finally {
+        liveSyncBusy = false;
+      }
+    };
+
+    const startLiveSync = () => {
+      if (liveSyncTimer) window.clearInterval(liveSyncTimer);
+      liveSyncTimer = window.setInterval(() => {
+        void refreshLiveState();
+      }, 3000);
+    };
+
     const start = async () => {
       try {
         await loadData();
         render();
+        startLiveSync();
       } catch {
         title.textContent = 'Vendor portal unavailable';
         subtitle.textContent = 'Check the CampusMaaS vendor data.';
@@ -1060,6 +1127,10 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 
     void start();
   };
+
+  window.addEventListener('pagehide', () => {
+    if (liveSyncTimer) window.clearInterval(liveSyncTimer);
+  }, { once: true });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initVendorPortal, { once: true });
