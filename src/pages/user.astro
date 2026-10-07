@@ -33,6 +33,31 @@ import 'leaflet/dist/leaflet.css';
       </div>
     </section>
 
+    <div class="user-gender-toggle" role="group" aria-label="User gender">
+      <button
+        type="button"
+        class="user-gender-button is-active"
+        id="userGenderMale"
+        data-user-group="boys"
+        aria-pressed="true"
+        aria-label="Male"
+      >
+        <span class="user-gender-icon" aria-hidden="true">♂</span>
+        <span>Male</span>
+      </button>
+      <button
+        type="button"
+        class="user-gender-button"
+        id="userGenderFemale"
+        data-user-group="girls"
+        aria-pressed="false"
+        aria-label="Female"
+      >
+        <span class="user-gender-icon" aria-hidden="true">♀</span>
+        <span>Female</span>
+      </button>
+    </div>
+
     <script>
       import L from 'leaflet';
 
@@ -201,7 +226,24 @@ const minutesFromClockValue = (value) => {
 
 const policyAppliesToGroup = (policy, group) => {
   const policyGroup = String(policy?.group || 'all');
-  return policyGroup === 'all' || policyGroup === group;
+  const userGroup = String(group || 'students');
+
+  if (policyGroup === 'all' || policyGroup === userGroup) {
+    return true;
+  }
+
+  /*
+   * Boys/girls/hostellers/day scholars are student sub-groups.
+   * A generic "students" policy therefore applies to all of them.
+   */
+  if (
+    policyGroup === 'students' &&
+    ['boys', 'girls', 'hostellers', 'day_scholars'].includes(userGroup)
+  ) {
+    return true;
+  }
+
+  return false;
 };
 
 const policyHasCondition = (policy) => {
@@ -359,7 +401,13 @@ const projectPointToPath = (pathData, latlng) => {
  * User clicks remain exact endpoints. Multiple nearby path candidates are
  * connected to each endpoint; Dijkstra then chooses the best complete route.
  */
-const routeSummary = (pathData, startPoint, endPoint, accessPolicy) => {
+const routeSummary = (
+  pathData,
+  startPoint,
+  endPoint,
+  accessPolicy,
+  userGroup = 'boys'
+) => {
   const routablePathData = {
     ...pathData,
     features: (pathData?.features || [])
@@ -373,7 +421,7 @@ const routeSummary = (pathData, startPoint, endPoint, accessPolicy) => {
         )
       }))
       .filter((feature) =>
-        pathFeatureAllowed(feature, accessPolicy, 'students')
+        pathFeatureAllowed(feature, accessPolicy, userGroup)
       )
   };
 
@@ -1251,6 +1299,10 @@ const start = async () => {
   const userTripTime = document.getElementById('userTripTime');
   const userTripDistance = document.getElementById('userTripDistance');
 
+  const userGenderMale = document.getElementById('userGenderMale');
+  const userGenderFemale = document.getElementById('userGenderFemale');
+  let selectedUserGroup = 'boys';
+
   let pointA = null;
   let pointB = null;
   let pointAMarker = null;
@@ -1311,6 +1363,41 @@ const start = async () => {
     }
   };
 
+  const setUserGender = (group) => {
+    const nextGroup =
+      group === 'girls'
+        ? 'girls'
+        : 'boys';
+
+    selectedUserGroup = nextGroup;
+
+    const isMale = nextGroup === 'boys';
+
+    userGenderMale?.classList.toggle('is-active', isMale);
+    userGenderFemale?.classList.toggle('is-active', !isMale);
+
+    userGenderMale?.setAttribute('aria-pressed', String(isMale));
+    userGenderFemale?.setAttribute('aria-pressed', String(!isMale));
+
+    /*
+     * Keep A/B exactly where the user placed them, but recalculate the
+     * available route immediately for the selected student group.
+     */
+    if (pointA && pointB) {
+      clearRouteRendering();
+      renderEndpointMarkers();
+      renderUserRoute();
+    }
+  };
+
+  userGenderMale?.addEventListener('click', () => {
+    setUserGender('boys');
+  });
+
+  userGenderFemale?.addEventListener('click', () => {
+    setUserGender('girls');
+  });
+
   const resetTripSummary = () => {
     if (userTripFrom) userTripFrom.textContent = 'Point A';
     if (userTripTo) userTripTo.textContent = 'Point B';
@@ -1321,7 +1408,13 @@ const start = async () => {
   const renderUserRoute = () => {
     if (!pointA || !pointB) return;
 
-    const summary = routeSummary(pathData, pointA, pointB, accessPolicy);
+    const summary = routeSummary(
+      pathData,
+      pointA,
+      pointB,
+      accessPolicy,
+      selectedUserGroup
+    );
 
     if (!summary) {
       if (userTripFrom) userTripFrom.textContent = 'Point A selected';
@@ -1384,7 +1477,7 @@ const start = async () => {
       (policy) =>
         policy?.target?.type === 'gate' &&
         String(policy?.target?.id) === String(gateId) &&
-        policyAppliesToGroup(policy, 'students') &&
+        policyAppliesToGroup(policy, selectedUserGroup) &&
         policy?.enabled !== false
     );
 
@@ -1797,6 +1890,58 @@ void start().catch((error) => {
     height: 100%;
   }
 
+  .user-gender-toggle {
+    position: absolute;
+    z-index: 1000;
+    top: clamp(14px, 2vw, 24px);
+    right: clamp(14px, 2vw, 24px);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid rgba(83, 168, 255, .2);
+    border-radius: 13px;
+    background: rgba(7, 22, 38, .92);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, .25);
+    backdrop-filter: blur(14px);
+  }
+
+  .user-gender-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 78px;
+    justify-content: center;
+    padding: 7px 9px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    color: #7891aa;
+    cursor: pointer;
+    font-size: 9px;
+    font-weight: 700;
+    transition:
+      background .15s ease,
+      color .15s ease,
+      border-color .15s ease;
+  }
+
+  .user-gender-button:hover {
+    color: #cce8ff;
+    background: rgba(255, 255, 255, .035);
+  }
+
+  .user-gender-button.is-active {
+    border-color: rgba(39, 174, 255, .28);
+    background: rgba(31, 136, 242, .16);
+    color: #67c6ff;
+  }
+
+  .user-gender-icon {
+    font-size: 13px;
+    line-height: 1;
+  }
+
   .user-trip-card {
     position: absolute;
     z-index: 1000;
@@ -1863,6 +2008,13 @@ void start().catch((error) => {
   }
 
   @media (max-width: 560px) {
+    .user-gender-toggle {
+      top: auto;
+      right: 10px;
+      bottom: 10px;
+    }
+
+
     .user-trip-card {
       top: 10px;
       left: 10px;
