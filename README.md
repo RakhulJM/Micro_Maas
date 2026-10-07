@@ -20,28 +20,46 @@ Windows:
 .venv\Scripts\activate
 ```
 
-## Python Dependencies
-
-```bash
-pip install pandas networkx geopy
-```
-
-## Astro
+## Install
 
 ```bash
 npm install
+```
+
+## Development
+
+```bash
 npm run dev
 ```
 
-Build:
+## Build
 
 ```bash
 npm run build
 ```
 
-Preview:
+## Preview
 
 ```bash
 npm run preview
 ```
 
+## Project
+
+Campus MaaS map with:
+
+- Campus map
+- Pedestrian paths
+- Gates
+- Access rules
+- User routing
+
+## /user
+
+The `/user` page is the end-user campus map. It provides:
+
+- Point A and Point B selection
+- Walking route calculation on the active pedestrian network
+- Campus gate access-rule checking
+- Male/Female selection for gender-specific access rules
+- No developer or map-editing controls

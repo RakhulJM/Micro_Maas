@@ -1,0 +1,249 @@
+---
+---
+
+<aside class="food-order-popup" id="foodOrderPopup" hidden aria-hidden="true">
+  <div class="food-order-popup-backdrop" id="foodOrderPopupBackdrop"></div>
+
+  <section class="food-order-dialog" role="dialog" aria-modal="true" aria-labelledby="foodPopupService">
+    <header class="food-order-header">
+      <div>
+        <span class="food-popup-kicker">FOOD ORDER</span>
+        <strong id="foodPopupVendor">Food</strong>
+        <h2 id="foodPopupService">Select a service</h2>
+      </div>
+      <button type="button" class="food-order-close" id="foodOrderPopupClose" aria-label="Close food order">×</button>
+    </header>
+
+    <div class="food-order-summary-bar">
+      <span id="foodPopupItemSummary">0 items</span>
+      <span id="foodPopupPrepSummary">Select items to continue</span>
+    </div>
+
+    <div class="food-menu-list" id="foodMenuList">
+      <div class="food-menu-empty">Loading menu…</div>
+    </div>
+
+    <footer class="food-order-footer">
+      <div>
+        <span>Total</span>
+        <strong id="foodPopupTotal">₹0.00</strong>
+      </div>
+      <button type="button" class="food-place-order" id="foodPopupPlaceOrder" disabled>PLACE ORDER</button>
+    </footer>
+
+    <div class="food-order-error" id="foodPopupError" role="alert" hidden></div>
+  </section>
+</aside>
+
+<style is:global>
+  .food-order-popup{
+    position:fixed;
+    inset:0;
+    z-index:5000;
+    display:grid;
+    place-items:center;
+    padding:18px;
+  }
+  .food-order-popup[hidden]{display:none}
+  .food-order-popup-backdrop{
+    position:absolute;
+    inset:0;
+    background:rgba(2,8,14,.66);
+    backdrop-filter:blur(7px);
+  }
+  .food-order-dialog{
+    position:relative;
+    z-index:1;
+    width:min(520px,calc(100vw - 28px));
+    max-height:min(760px,calc(100dvh - 28px));
+    overflow:hidden;
+    display:grid;
+    grid-template-rows:auto auto minmax(0,1fr) auto auto;
+    border:1px solid rgba(90,178,255,.34);
+    border-radius:22px;
+    background:linear-gradient(150deg,#f6faff 0%,#edf5fc 100%);
+    color:#102132;
+    box-shadow:0 32px 90px rgba(0,0,0,.48),0 0 0 1px rgba(255,255,255,.36) inset;
+  }
+  .food-order-header{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+    padding:20px 20px 16px;
+    background:linear-gradient(135deg,rgba(255,255,255,.98),rgba(232,242,251,.96));
+    border-bottom:1px solid rgba(31,91,138,.11);
+  }
+  .food-popup-kicker{
+    display:block;
+    color:#1687ff;
+    font-size:8px;
+    font-weight:900;
+    letter-spacing:.16em;
+  }
+  .food-order-header>div>strong{
+    display:block;
+    margin-top:6px;
+    color:#627991;
+    font-size:9px;
+    font-weight:700;
+  }
+  .food-order-header h2{
+    margin:3px 0 0;
+    color:#0a1b2e;
+    font:650 22px/1 'Space Grotesk',sans-serif;
+    letter-spacing:-.02em;
+  }
+  .food-order-close{
+    width:34px;
+    height:34px;
+    border:1px solid rgba(26,73,108,.13);
+    border-radius:10px;
+    background:#fff;
+    color:#5e7387;
+    cursor:pointer;
+    font-size:20px;
+    line-height:1;
+  }
+  .food-order-close:hover{background:#edf5fc;color:#17324a}
+  .food-order-summary-bar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:10px 20px;
+    background:#e4eef7;
+    color:#567087;
+    font-size:8px;
+  }
+  .food-order-summary-bar span:first-child{
+    color:#1d4e76;
+    font-weight:800;
+  }
+  .food-order-summary-bar span:last-child{
+    text-align:right;
+  }
+  .food-menu-list{
+    min-height:150px;
+    overflow:auto;
+    padding:12px 14px;
+    display:grid;
+    gap:8px;
+  }
+  .food-menu-item{
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:14px;
+    align-items:center;
+    padding:12px 13px;
+    border:1px solid rgba(55,105,143,.12);
+    border-radius:13px;
+    background:rgba(255,255,255,.80);
+    box-shadow:0 6px 16px rgba(29,73,106,.06);
+  }
+  .food-menu-item-main{min-width:0}
+  .food-menu-item-name{
+    color:#13283c;
+    font:600 11px/1.1 'Space Grotesk',sans-serif;
+  }
+  .food-menu-item-description{
+    margin-top:4px;
+    color:#71869a;
+    font-size:8px;
+    line-height:1.35;
+  }
+  .food-menu-item-price{
+    margin-top:7px;
+    color:#1687ff;
+    font-size:9px;
+    font-weight:800;
+  }
+  .food-menu-item-actions{
+    display:flex;
+    align-items:center;
+    gap:7px;
+  }
+  .food-menu-qty{
+    min-width:22px;
+    text-align:center;
+    color:#17324b;
+    font-size:9px;
+    font-weight:800;
+  }
+  .food-menu-qty-button{
+    width:27px;
+    height:27px;
+    border:1px solid rgba(26,92,138,.15);
+    border-radius:8px;
+    background:#edf5fc;
+    color:#1687ff;
+    cursor:pointer;
+    font-size:15px;
+    line-height:1;
+  }
+  .food-menu-qty-button:hover{background:#e0eef9;border-color:rgba(22,135,255,.26)}
+  .food-menu-item.is-unavailable{opacity:.48}
+  .food-menu-item.is-unavailable .food-menu-qty-button{display:none}
+  .food-menu-unavailable{font-size:8px;color:#8799a9}
+  .food-menu-empty{
+    display:grid;
+    place-items:center;
+    min-height:180px;
+    color:#778da1;
+    font-size:9px;
+    text-align:center;
+  }
+  .food-order-footer{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    padding:14px 20px 16px;
+    border-top:1px solid rgba(31,91,138,.12);
+    background:#f5f9fd;
+  }
+  .food-order-footer>div span{
+    display:block;
+    color:#73879a;
+    font-size:8px;
+    text-transform:uppercase;
+    letter-spacing:.1em;
+  }
+  .food-order-footer>div strong{
+    display:block;
+    margin-top:3px;
+    color:#0b1e31;
+    font:650 20px/1 'Space Grotesk',sans-serif;
+  }
+  .food-place-order{
+    min-width:150px;
+    padding:11px 14px;
+    border:0;
+    border-radius:10px;
+    background:#1687ff;
+    color:#fff;
+    cursor:pointer;
+    font-size:8px;
+    font-weight:900;
+    letter-spacing:.08em;
+    box-shadow:0 9px 22px rgba(22,135,255,.22);
+  }
+  .food-place-order:hover{background:#0f78e7}
+  .food-place-order:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+  .food-order-error{
+    padding:9px 20px 13px;
+    color:#c23b45;
+    background:#fff3f4;
+    border-top:1px solid rgba(194,59,69,.12);
+    font-size:8px;
+  }
+  @media(max-width:560px){
+    .food-order-popup{padding:10px}
+    .food-order-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:18px}
+    .food-order-header{padding:16px 16px 13px}
+    .food-order-summary-bar{padding:9px 16px}
+    .food-menu-list{padding:10px}
+    .food-order-footer{padding:12px 16px 14px}
+    .food-place-order{min-width:132px}
+  }
+</style>

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "vendor_id": "food",
+  "service_id": "food-court",
+  "service_name": "Food Court",
+  "menu": [
+    {
+      "id": "food-court-meals",
+      "name": "South Indian Meals",
+      "description": "Campus-style lunch meal",
+      "price": 70,
+      "available": true
+    },
+    {
+      "id": "food-court-fried-rice",
+      "name": "Veg Fried Rice",
+      "description": "Vegetable fried rice",
+      "price": 60,
+      "available": true
+    },
+    {
+      "id": "food-court-noodles",
+      "name": "Veg Noodles",
+      "description": "Stir-fried noodles with vegetables",
+      "price": 60,
+      "available": true
+    },
+    {
+      "id": "food-court-juice",
+      "name": "Fresh Juice",
+      "description": "Freshly prepared fruit juice",
+      "price": 35,
+      "available": true
+    }
+  ]
+}

@@ -1,0 +1,1363 @@
+---
+---
+
+<aside class="access-rules-card" id="accessRulesCard" aria-label="Campus access rules">
+  <header class="access-rules-header">
+    <div>
+      <span class="access-rules-kicker">ACCESS RULES</span>
+      <strong>Campus policy engine</strong>
+      <small>Independent of Edit Mode</small>
+    </div>
+
+    <div class="access-rules-header-actions">
+      <span class="access-rules-status" id="accessRulesStatus">Loading</span>
+    </div>
+  </header>
+
+  <section class="access-rules-list-section">
+    <div class="access-rules-list-head">
+      <span>Rules</span>
+      <button type="button" class="access-rule-add-top" id="addAccessRule">+ Add rule</button>
+    </div>
+
+    <div class="access-rules-list" id="accessRulesList">
+      <div class="access-rules-empty">Loading rules…</div>
+    </div>
+  </section>
+
+  <section class="access-rule-editor" id="accessRuleEditor" hidden>
+    <div class="access-rule-editor-title">
+      <div>
+        <span class="access-rule-kicker">RULE EDITOR</span>
+        <strong id="accessRuleEditorTitle">Add access rule</strong>
+      </div>
+      <button type="button" class="access-rule-cancel-icon" id="cancelAccessRule" aria-label="Close rule editor">×</button>
+    </div>
+
+    <div class="access-rule-form-grid">
+      <label class="access-rule-field access-rule-span-2">
+        <span>Rule name</span>
+        <input id="accessRuleName" type="text" placeholder="e.g. Girls Gate 05" maxlength="80" />
+      </label>
+
+      <label class="access-rule-field">
+        <span>Target type</span>
+        <select id="accessRuleTargetType">
+          <option value="gate">Gate</option>
+          <option value="path">Pedestrian path</option>
+        </select>
+      </label>
+
+      <label class="access-rule-field">
+        <span>Target</span>
+        <select id="accessRuleTarget"></select>
+      </label>
+
+      <label class="access-rule-field">
+        <span>Who</span>
+        <select id="accessRuleGroup">
+          <option value="all">Everyone</option>
+          <option value="students" selected>Students</option>
+          <option value="boys">Boys</option>
+          <option value="girls">Girls</option>
+          <option value="hostellers">Hostellers</option>
+          <option value="day_scholars">Day scholars</option>
+          <option value="staff">Staff</option>
+          <option value="faculty">Faculty</option>
+          <option value="visitors">Visitors</option>
+        </select>
+      </label>
+
+      <label class="access-rule-field">
+        <span>Direction</span>
+        <select id="accessRuleDirection">
+          <option value="in_out">In + Out</option>
+          <option value="in">Entry only</option>
+          <option value="out">Exit only</option>
+        </select>
+      </label>
+
+      <label class="access-rule-field">
+        <span>Rule type</span>
+        <select id="accessRuleMode">
+          <option value="preferred">Preferred</option>
+          <option value="allow">Allow</option>
+          <option value="deny">Deny</option>
+          <option value="allow_only_during">Allow only during</option>
+          <option value="deny_during">Deny during</option>
+        </select>
+      </label>
+
+      <label class="access-rule-field access-rule-priority">
+        <span>Priority</span>
+        <input id="accessRulePriority" type="number" min="0" max="100" step="1" value="0" inputmode="numeric" />
+      </label>
+
+      <label class="access-rule-toggle access-rule-span-2">
+        <span>
+          <strong>Rule enabled</strong>
+          <small>Disabled rules remain saved but do not affect routing.</small>
+        </span>
+        <input id="accessRuleEnabled" type="checkbox" checked />
+      </label>
+    </div>
+
+    <div class="access-rule-condition">
+      <div class="access-rule-condition-head">
+        <div>
+          <span class="access-rule-kicker">CONDITIONS</span>
+          <strong>When does this rule apply?</strong>
+        </div>
+        <button type="button" class="access-rule-clear-days" id="setAllDays">All days</button>
+      </div>
+
+      <div class="access-rule-days" id="accessRuleDays">
+        <label><input type="checkbox" value="mon" checked /><span>Mon</span></label>
+        <label><input type="checkbox" value="tue" checked /><span>Tue</span></label>
+        <label><input type="checkbox" value="wed" checked /><span>Wed</span></label>
+        <label><input type="checkbox" value="thu" checked /><span>Thu</span></label>
+        <label><input type="checkbox" value="fri" checked /><span>Fri</span></label>
+        <label><input type="checkbox" value="sat" checked /><span>Sat</span></label>
+        <label><input type="checkbox" value="sun" checked /><span>Sun</span></label>
+      </div>
+
+      <div class="access-rule-window-title">
+        <span>Time windows</span>
+        <button type="button" class="access-rule-add-small" id="addRuleWindow">+ Add window</button>
+      </div>
+
+      <div class="access-rule-window-list" id="accessRuleWindows"></div>
+
+      <div class="access-rule-condition-hint">
+        <span id="accessRuleConditionHint">No time restriction.</span>
+      </div>
+    </div>
+
+    <label class="access-rule-field access-rule-description">
+      <span>Description</span>
+      <textarea id="accessRuleDescription" rows="3" maxlength="240" placeholder="Explain the campus rule for administrators."></textarea>
+    </label>
+
+    <div class="access-rule-editor-actions">
+      <button type="button" class="access-rule-secondary" id="deleteEditingRule" hidden>Delete rule</button>
+      <span></span>
+      <button type="button" class="access-rule-secondary" id="cancelAccessRuleBottom">Cancel</button>
+      <button type="button" class="access-rule-save" id="saveAccessRule">Save rule</button>
+    </div>
+  </section>
+
+  <footer class="access-rules-footer">
+    <span>Campus time · <strong id="accessRuleClock">—</strong></span>
+    <span id="accessRulesTargetCount">—</span>
+  </footer>
+</aside>
+
+<script>
+  const initAccessRulesEditor = () => {
+    const list = document.getElementById('accessRulesList');
+    const status = document.getElementById('accessRulesStatus');
+    const editor = document.getElementById('accessRuleEditor');
+    const editorTitle = document.getElementById('accessRuleEditorTitle');
+    const nameInput = document.getElementById('accessRuleName');
+    const targetType = document.getElementById('accessRuleTargetType');
+    const targetSelect = document.getElementById('accessRuleTarget');
+    const groupSelect = document.getElementById('accessRuleGroup');
+    const directionSelect = document.getElementById('accessRuleDirection');
+    const modeSelect = document.getElementById('accessRuleMode');
+    const priorityInput = document.getElementById('accessRulePriority');
+    const enabledInput = document.getElementById('accessRuleEnabled');
+    const daysContainer = document.getElementById('accessRuleDays');
+    const windowsContainer = document.getElementById('accessRuleWindows');
+    const conditionHint = document.getElementById('accessRuleConditionHint');
+    const descriptionInput = document.getElementById('accessRuleDescription');
+    const deleteEditingRule = document.getElementById('deleteEditingRule');
+    const targetCount = document.getElementById('accessRulesTargetCount');
+
+    let rules = {
+      version: 1,
+      timezone: 'Asia/Kolkata',
+      description: 'Campus gate and path access rules',
+      policies: []
+    };
+    let gates = [];
+    let paths = [];
+    let editingRuleId = null;
+    let saving = false;
+
+    const weekdays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+    const escapeHtml = (value) =>
+      String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    const getClock = () => {
+      const parts = new Intl.DateTimeFormat('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).formatToParts(new Date());
+
+      const read = (type) =>
+        parts.find((part) => part.type === type)?.value || '00';
+
+      return read('hour') + ':' + read('minute');
+    };
+
+    const targetItems = (type) =>
+      type === 'gate'
+        ? gates.map((feature) => ({
+            id: String(feature?.id || ''),
+            name: String(feature?.properties?.name || feature?.id || 'Unnamed gate')
+          }))
+        : paths.map((feature, index) => ({
+            id: String(feature?.id || feature?.properties?.['@id'] || 'path-' + (index + 1)),
+            name: String(feature?.properties?.name || 'Path ' + String(index + 1))
+          }));
+
+    const targetDisplay = (policy) => {
+      const target = policy?.target;
+      return String(target?.name || target?.id || 'Unknown target');
+    };
+
+    const groupDisplay = {
+      all: 'Everyone',
+      students: 'Students',
+      boys: 'Boys',
+      girls: 'Girls',
+      hostellers: 'Hostellers',
+      day_scholars: 'Day scholars',
+      staff: 'Staff',
+      faculty: 'Faculty',
+      visitors: 'Visitors'
+    };
+
+    const modeDisplay = {
+      preferred: 'Preferred',
+      allow: 'Allow',
+      deny: 'Deny',
+      allow_only_during: 'Allow only during',
+      deny_during: 'Deny during'
+    };
+
+    const directionDisplay = {
+      in_out: 'In + out',
+      in: 'Entry only',
+      out: 'Exit only'
+    };
+
+    const minutesFromTime = (value) => {
+      const [hour, minute] = String(value || '00:00').split(':').map(Number);
+      return hour * 60 + minute;
+    };
+
+    const timeText = (windows) =>
+      (Array.isArray(windows) ? windows : [])
+        .map((window) => String(window?.start || '') + '–' + String(window?.end || ''))
+        .join(' · ');
+
+    const updateConditionHint = () => {
+      if (!conditionHint) return;
+
+      const hasWindows = windowsContainer?.querySelector('.access-rule-window-row');
+      const mode = modeSelect?.value;
+
+      if (mode === 'preferred' || mode === 'allow' || mode === 'deny') {
+        conditionHint.textContent =
+          hasWindows
+            ? 'The rule applies only inside the selected days and time windows.'
+            : 'No time restriction.';
+        return;
+      }
+
+      conditionHint.textContent = hasWindows
+        ? (mode === 'allow_only_during'
+          ? 'Outside these windows, the targeted gate/path is unavailable for this group.'
+          : 'Inside these windows, the targeted gate/path is unavailable for this group.')
+        : 'Add at least one time window for this rule type.';
+    };
+
+    const renderWindow = (windowData = { start: '07:00', end: '08:45' }) => {
+      if (!windowsContainer) return;
+
+      const row = document.createElement('div');
+      row.className = 'access-rule-window-row';
+
+      const startLabel = document.createElement('label');
+      const startCaption = document.createElement('span');
+      startCaption.textContent = 'From';
+
+      const startInput = document.createElement('input');
+      startInput.type = 'time';
+      startInput.value = String(windowData.start || '07:00');
+      startInput.setAttribute('data-window-start', 'true');
+
+      const endLabel = document.createElement('label');
+      const endCaption = document.createElement('span');
+      endCaption.textContent = 'To';
+
+      const endInput = document.createElement('input');
+      endInput.type = 'time';
+      endInput.value = String(windowData.end || '08:45');
+      endInput.setAttribute('data-window-end', 'true');
+
+      const arrow = document.createElement('span');
+      arrow.className = 'access-rule-arrow';
+      arrow.textContent = '→';
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'access-rule-remove';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', 'Remove time window');
+      remove.addEventListener('click', () => {
+        row.remove();
+        updateConditionHint();
+      });
+
+      startLabel.append(startCaption, startInput);
+      endLabel.append(endCaption, endInput);
+      row.append(startLabel, arrow, endLabel, remove);
+      windowsContainer.appendChild(row);
+      updateConditionHint();
+    };
+
+    const setDays = (values = weekdays) => {
+      const selected = new Set(Array.isArray(values) && values.length ? values : weekdays);
+
+      daysContainer?.querySelectorAll('input[type="checkbox"]').forEach((input) => {
+        input.checked = selected.has(input.value);
+      });
+    };
+
+    const getDays = () =>
+      Array.from(
+        daysContainer?.querySelectorAll('input[type="checkbox"]:checked') || []
+      ).map((input) => input.value);
+
+    const renderWindows = (windows = []) => {
+      if (!windowsContainer) return;
+      windowsContainer.innerHTML = '';
+      for (const windowData of windows) {
+        renderWindow(windowData);
+      }
+      updateConditionHint();
+    };
+
+    const refreshTargets = () => {
+      if (!targetSelect) return;
+
+      const currentValue = targetSelect.value;
+      const items = targetItems(targetType?.value || 'gate');
+
+      targetSelect.innerHTML = '';
+
+      for (const item of items) {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = item.name + ' · ' + item.id;
+        targetSelect.appendChild(option);
+      }
+
+      if (items.some((item) => item.id === currentValue)) {
+        targetSelect.value = currentValue;
+      }
+    };
+
+    const refreshModeUi = () => {
+      const needsWindows =
+        modeSelect?.value === 'allow_only_during' ||
+        modeSelect?.value === 'deny_during';
+
+      const windowsTitle =
+        document.querySelector('.access-rule-window-title');
+
+      windowsTitle?.classList.toggle('is-required', needsWindows);
+
+      if (addWindowButton) {
+        addWindowButton.textContent =
+          needsWindows ? '+ Add required window' : '+ Add window';
+      }
+
+      updateConditionHint();
+    };
+
+    const clearEditor = () => {
+      editingRuleId = null;
+      if (editorTitle) editorTitle.textContent = 'Add access rule';
+      if (nameInput) nameInput.value = '';
+      if (targetType) targetType.value = 'gate';
+      refreshTargets();
+      if (targetSelect && gates.length) {
+        targetSelect.value = String(gates[0]?.id || '');
+      }
+      if (groupSelect) groupSelect.value = 'students';
+      if (directionSelect) directionSelect.value = 'in_out';
+      if (modeSelect) modeSelect.value = 'allow';
+      if (priorityInput) priorityInput.value = '0';
+      if (enabledInput) enabledInput.checked = true;
+      setDays(weekdays);
+      renderWindows([]);
+      if (descriptionInput) descriptionInput.value = '';
+      deleteEditingRule?.setAttribute('hidden', '');
+      editor?.removeAttribute('hidden');
+      refreshModeUi();
+      nameInput?.focus();
+    };
+
+    const editRule = (policy) => {
+      editingRuleId = String(policy?.id || '');
+      if (editorTitle) editorTitle.textContent = 'Edit access rule';
+      if (nameInput) nameInput.value = String(policy?.name || policy?.description || '');
+      if (targetType) targetType.value = String(policy?.target?.type || 'gate');
+      refreshTargets();
+      if (targetSelect) targetSelect.value = String(policy?.target?.id || '');
+      if (groupSelect) groupSelect.value = String(policy?.group || 'students');
+      if (directionSelect) directionSelect.value = String(policy?.direction || 'in_out');
+      if (modeSelect) modeSelect.value = String(policy?.mode || 'allow');
+      if (priorityInput) priorityInput.value = String(Number(policy?.priority) || 0);
+      if (enabledInput) enabledInput.checked = policy?.enabled !== false;
+      setDays(policy?.days || weekdays);
+      renderWindows(policy?.windows || policy?.condition?.time_windows || []);
+      if (descriptionInput) {
+        descriptionInput.value = String(policy?.description || '');
+      }
+      deleteEditingRule?.removeAttribute('hidden');
+      editor?.removeAttribute('hidden');
+      refreshModeUi();
+      editor?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    const renderRules = () => {
+      if (!list) return;
+
+      const policies = Array.isArray(rules?.policies) ? rules.policies : [];
+
+      if (targetCount) {
+        targetCount.textContent =
+          targetItems('gate').length + targetItems('path').length + ' targets';
+      }
+
+      if (!policies.length) {
+        list.innerHTML =
+          '<div class="access-rules-empty">No access rules yet. Add the first campus rule.</div>';
+        return;
+      }
+
+      list.innerHTML = '';
+
+      for (const policy of policies) {
+        const row = document.createElement('article');
+        row.className = 'access-rule-item';
+        if (policy?.enabled === false) row.classList.add('is-disabled');
+
+        const days = Array.isArray(policy?.days) && policy.days.length
+          ? policy.days.map((day) => String(day).toUpperCase()).join(' ')
+          : 'ALL DAYS';
+
+        const windows = policy?.windows || policy?.condition?.time_windows || [];
+        const windowLabel = windows.length ? timeText(windows) : 'All day';
+
+        row.innerHTML =
+          '<div class="access-rule-item-main">' +
+            '<div class="access-rule-item-title">' +
+              '<strong>' + escapeHtml(policy?.name || targetDisplay(policy)) + '</strong>' +
+              (policy?.enabled === false ? '<span class="access-rule-disabled">OFF</span>' : '') +
+            '</div>' +
+            '<div class="access-rule-item-meta">' +
+              escapeHtml(groupDisplay[policy?.group] || policy?.group || 'Group') +
+              ' · ' +
+              escapeHtml(targetDisplay(policy)) +
+              ' · ' +
+              escapeHtml(modeDisplay[policy?.mode] || policy?.mode || 'Allow') +
+            '</div>' +
+            '<div class="access-rule-item-detail">' +
+              escapeHtml(directionDisplay[policy?.direction] || 'In + out') +
+              ' · ' +
+              escapeHtml(days) +
+              ' · ' +
+              escapeHtml(windowLabel) +
+              (Number.isInteger(Number(policy?.priority)) && Number(policy?.priority) > 0
+                ? ' · P' + escapeHtml(policy.priority)
+                : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="access-rule-item-actions">' +
+            '<button type="button" class="access-rule-edit" data-edit-rule="' + escapeHtml(policy?.id || '') + '">Edit</button>' +
+          '</div>';
+
+        list.appendChild(row);
+      }
+
+      list.querySelectorAll('[data-edit-rule]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const policy = policies.find(
+            (item) => String(item?.id) === String(button.getAttribute('data-edit-rule'))
+          );
+
+          if (policy) editRule(policy);
+        });
+      });
+    };
+
+    const collectRule = () => {
+      const selectedTarget = targetItems(targetType?.value || 'gate')
+        .find((item) => item.id === targetSelect?.value);
+
+      if (!selectedTarget) {
+        throw new Error('Select a valid rule target.');
+      }
+
+      const ruleName = String(nameInput?.value || '').trim();
+      const parsedPriority = Number(priorityInput?.value);
+
+      if (!ruleName) {
+        throw new Error('Give the rule a name.');
+      }
+
+      if (!Number.isInteger(parsedPriority) || parsedPriority < 0 || parsedPriority > 100) {
+        throw new Error('Priority must be between 0 and 100.');
+      }
+
+      const days = getDays();
+
+      if (!days.length) {
+        throw new Error('Select at least one day.');
+      }
+
+      const mode = modeSelect?.value || 'allow';
+      const windowRows = Array.from(
+        windowsContainer?.querySelectorAll('.access-rule-window-row') || []
+      );
+
+      const windows = windowRows.map((row) => {
+        const start = row.querySelector('[data-window-start]')?.value || '';
+        const end = row.querySelector('[data-window-end]')?.value || '';
+
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(start) ||
+            !/^([01]\d|2[0-3]):[0-5]\d$/.test(end)) {
+          throw new Error('Every time window needs a valid start and end time.');
+        }
+
+        if (minutesFromTime(start) >= minutesFromTime(end)) {
+          throw new Error('Each time window must end after it starts.');
+        }
+
+        return { start, end };
+      });
+
+      if (
+        (mode === 'allow_only_during' || mode === 'deny_during') &&
+        !windows.length
+      ) {
+        throw new Error('This rule type needs at least one time window.');
+      }
+
+      const id =
+        editingRuleId ||
+        'rule-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+
+      return {
+        id,
+        name: ruleName,
+        target: {
+          type: targetType?.value || 'gate',
+          id: selectedTarget.id,
+          name: selectedTarget.name
+        },
+        group: groupSelect?.value || 'students',
+        direction: directionSelect?.value || 'in_out',
+        mode,
+        days,
+        windows,
+        priority: parsedPriority,
+        enabled: enabledInput?.checked !== false,
+        description: String(descriptionInput?.value || '').trim()
+      };
+    };
+
+    const saveRules = async () => {
+      if (saving) return;
+
+      try {
+        const nextRule = collectRule();
+        const nextPolicies = Array.isArray(rules?.policies)
+          ? rules.policies.map((policy) => (
+              String(policy?.id) === String(nextRule.id)
+                ? nextRule
+                : policy
+            ))
+          : [];
+
+        if (!editingRuleId) {
+          nextPolicies.push(nextRule);
+        }
+
+        const payload = {
+          ...rules,
+          version: 1,
+          timezone: 'Asia/Kolkata',
+          policies: nextPolicies
+        };
+
+        saving = true;
+        if (status) {
+          status.textContent = 'Saving…';
+          status.className = 'access-rules-status is-saving';
+        }
+        if (saveButton) saveButton.disabled = true;
+
+        const response = await fetch('/__campusmaas/save-access-rules', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.error || 'Access rules could not be saved.');
+        }
+
+        rules = payload;
+        renderRules();
+        closeEditor();
+
+        if (status) {
+          status.textContent = 'Saved';
+          status.className = 'access-rules-status is-saved';
+          window.setTimeout(() => {
+            if (status) status.className = 'access-rules-status';
+            if (status) status.textContent = 'Loaded';
+          }, 1600);
+        }
+      } catch (error) {
+        if (status) {
+          status.textContent = error instanceof Error ? error.message : 'Save failed';
+          status.className = 'access-rules-status is-error';
+        }
+      } finally {
+        saving = false;
+        if (saveButton) saveButton.disabled = false;
+      }
+    };
+
+    const deleteRule = async () => {
+      if (!editingRuleId || saving) return;
+
+      const remaining = (rules.policies || []).filter(
+        (policy) => String(policy?.id) !== String(editingRuleId)
+      );
+
+      if (!remaining.length) {
+        if (!window.confirm('Delete the last access rule?')) return;
+      }
+
+      saving = true;
+      if (status) {
+        status.textContent = 'Saving…';
+        status.className = 'access-rules-status is-saving';
+      }
+
+      try {
+        const payload = {
+          ...rules,
+          policies: remaining
+        };
+
+        const response = await fetch('/__campusmaas/save-access-rules', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.error || 'Rule could not be deleted.');
+        }
+
+        rules = payload;
+        closeEditor();
+        renderRules();
+
+        if (status) {
+          status.textContent = 'Saved';
+          status.className = 'access-rules-status is-saved';
+        }
+      } catch (error) {
+        if (status) {
+          status.textContent = error instanceof Error ? error.message : 'Delete failed';
+          status.className = 'access-rules-status is-error';
+        }
+      } finally {
+        saving = false;
+      }
+    };
+
+    const closeEditor = () => {
+      editingRuleId = null;
+      editor?.setAttribute('hidden', '');
+      if (deleteEditingRule) deleteEditingRule.setAttribute('hidden', '');
+    };
+
+    const load = async () => {
+      try {
+        const [rulesResponse, gatesResponse, pathsResponse] = await Promise.all([
+          fetch('/maps/campus_access_rules.json', { cache: 'no-store' }),
+          fetch('/maps/gates.geojson', { cache: 'no-store' }),
+          fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' })
+        ]);
+
+        if (rulesResponse.ok) {
+          const loaded = await rulesResponse.json();
+          if (Array.isArray(loaded?.policies)) {
+            rules = loaded;
+          }
+        }
+
+        gates = gatesResponse.ok
+          ? (await gatesResponse.json())?.features || []
+          : [];
+
+        paths = pathsResponse.ok
+          ? (await pathsResponse.json())?.features || []
+          : [];
+
+        refreshTargets();
+        renderRules();
+
+        if (status) {
+          status.textContent = 'Loaded';
+          status.className = 'access-rules-status';
+        }
+      } catch (error) {
+        if (status) {
+          status.textContent = error instanceof Error ? error.message : 'Load failed';
+          status.className = 'access-rules-status is-error';
+        }
+      }
+    };
+
+    const updateClock = () => {
+      const clock = document.getElementById('accessRuleClock');
+      if (clock) clock.textContent = getClock() + ' IST';
+    };
+
+    targetType?.addEventListener('change', () => {
+      refreshTargets();
+      refreshModeUi();
+    });
+
+    modeSelect?.addEventListener('change', refreshModeUi);
+
+    daysContainer?.addEventListener('change', () => {
+      const checked = getDays();
+      if (checked.length === weekdays.length) {
+        // keep the UI compact; "All days" remains the quick action.
+      }
+    });
+
+    document.getElementById('setAllDays')?.addEventListener('click', () => {
+      setDays(weekdays);
+    });
+
+    document.getElementById('addAccessRule')?.addEventListener('click', clearEditor);
+    document.getElementById('cancelAccessRule')?.addEventListener('click', closeEditor);
+    document.getElementById('cancelAccessRuleBottom')?.addEventListener('click', closeEditor);
+    document.getElementById('deleteEditingRule')?.addEventListener('click', () => {
+      void deleteRule();
+    });
+
+    document.getElementById('addRuleWindow')?.addEventListener('click', () => {
+      renderWindow({ start: '07:00', end: '08:45' });
+    });
+
+    document.getElementById('saveAccessRule')?.addEventListener('click', () => {
+      void saveRules();
+    });
+
+    updateClock();
+    window.setInterval(updateClock, 30000);
+    void load();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAccessRulesEditor, { once: true });
+  } else {
+    initAccessRulesEditor();
+  }
+</script>
+
+<style is:global>
+  .access-rules-card {
+    position: absolute;
+    z-index: 1150;
+    top: 86px;
+    right: 14px;
+    width: min(410px, calc(100vw - 28px));
+    max-height: calc(100dvh - 104px);
+    overflow: auto;
+    box-sizing: border-box;
+    padding: 13px;
+    border: 1px solid rgba(83, 168, 255, .2);
+    border-radius: 15px;
+    background: rgba(7, 22, 38, .95);
+    color: #edf6ff;
+    box-shadow: 0 18px 46px rgba(0, 0, 0, .34);
+    backdrop-filter: blur(15px);
+  }
+
+  .access-rules-card[hidden],
+  .access-rule-editor[hidden] {
+    display: none;
+  }
+
+  .access-rules-header,
+  .access-rules-list-head,
+  .access-rule-editor-title,
+  .access-rule-condition-head,
+  .access-rule-window-title,
+  .access-rule-editor-actions,
+  .access-rules-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .access-rules-header {
+    align-items: flex-start;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(117, 162, 206, .12);
+  }
+
+  .access-rules-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .access-rules-kicker,
+  .access-rule-kicker {
+    display: block;
+    margin-bottom: 3px;
+    color: #27bfff;
+    font-size: 7px;
+    font-weight: 800;
+    letter-spacing: .14em;
+  }
+
+  .access-rules-header strong {
+    display: block;
+    color: #f1f7ff;
+    font: 600 14px/1.1 'Space Grotesk', sans-serif;
+  }
+
+  .access-rules-header small {
+    display: block;
+    margin-top: 3px;
+    color: #7188a1;
+    font-size: 8px;
+  }
+
+  .access-rules-status {
+    padding: 5px 7px;
+    border-radius: 7px;
+    background: rgba(31, 136, 242, .12);
+    color: #7fc6ff;
+    font: 700 8px/1.2 'Space Grotesk', sans-serif;
+  }
+
+  .access-rules-status.is-saving {
+    background: rgba(234, 177, 58, .12);
+    color: #f1c76c;
+  }
+
+  .access-rules-status.is-saved {
+    background: rgba(22, 163, 74, .14);
+    color: #61dc8a;
+  }
+
+  .access-rules-status.is-error {
+    max-width: 180px;
+    background: rgba(220, 38, 38, .14);
+    color: #ff8b8f;
+    line-height: 1.25;
+    white-space: normal;
+    text-align: right;
+  }
+
+  .access-rule-cancel-icon {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid rgba(83, 168, 255, .15);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .035);
+    color: #7e9ab5;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+  }
+
+  .access-rules-list-section {
+    margin-top: 10px;
+  }
+
+  .access-rules-list-head > span {
+    color: #829ab2;
+    font: 700 8px 'Space Grotesk', sans-serif;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .access-rule-add-top,
+  .access-rule-add-small {
+    border: 1px solid rgba(39, 174, 255, .24);
+    border-radius: 7px;
+    background: rgba(31, 136, 242, .1);
+    color: #68c4ff;
+    cursor: pointer;
+    font-size: 8px;
+    font-weight: 750;
+  }
+
+  .access-rule-add-top {
+    padding: 6px 8px;
+  }
+
+  .access-rule-add-small {
+    padding: 5px 7px;
+  }
+
+  .access-rules-list {
+    display: grid;
+    gap: 7px;
+    margin-top: 7px;
+  }
+
+  .access-rules-empty {
+    padding: 14px 10px;
+    border: 1px dashed rgba(114, 158, 203, .14);
+    border-radius: 9px;
+    color: #688199;
+    font-size: 9px;
+    line-height: 1.45;
+    text-align: center;
+  }
+
+  .access-rule-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 10px;
+    border: 1px solid rgba(114, 158, 203, .1);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .025);
+  }
+
+  .access-rule-item.is-disabled {
+    opacity: .55;
+  }
+
+  .access-rule-item-main {
+    min-width: 0;
+  }
+
+  .access-rule-item-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .access-rule-item-title strong {
+    overflow: hidden;
+    color: #e6f0fb;
+    font-size: 10px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .access-rule-disabled {
+    flex: 0 0 auto;
+    padding: 2px 4px;
+    border-radius: 4px;
+    background: rgba(220, 38, 38, .13);
+    color: #ff8588;
+    font-size: 6px;
+    font-weight: 800;
+  }
+
+  .access-rule-item-meta,
+  .access-rule-item-detail {
+    margin-top: 3px;
+    color: #748da5;
+    font-size: 8px;
+    line-height: 1.4;
+  }
+
+  .access-rule-item-detail {
+    color: #637b93;
+  }
+
+  .access-rule-item-actions {
+    flex: 0 0 auto;
+  }
+
+  .access-rule-edit {
+    padding: 5px 7px;
+    border: 1px solid rgba(83, 168, 255, .12);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, .03);
+    color: #7fb9e8;
+    cursor: pointer;
+    font-size: 8px;
+    font-weight: 700;
+  }
+
+  .access-rule-editor {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(117, 162, 206, .12);
+  }
+
+  .access-rule-editor-title strong {
+    display: block;
+    color: #eaf4ff;
+    font: 600 12px 'Space Grotesk', sans-serif;
+  }
+
+  .access-rule-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 9px;
+  }
+
+  .access-rule-field {
+    display: block;
+    min-width: 0;
+  }
+
+  .access-rule-span-2 {
+    grid-column: 1 / -1;
+  }
+
+  .access-rule-field > span,
+  .access-rule-description > span {
+    display: block;
+    margin-bottom: 4px;
+    color: #7188a1;
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .access-rule-field input,
+  .access-rule-field select,
+  .access-rule-field textarea,
+  .access-rule-priority input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(83, 168, 255, .16);
+    border-radius: 7px;
+    padding: 7px 8px;
+    background: #0b1d31;
+    color: #edf6ff;
+    outline: none;
+    font: 600 9px 'Space Grotesk', sans-serif;
+  }
+
+  .access-rule-field select {
+    cursor: pointer;
+  }
+
+  .access-rule-field textarea {
+    min-height: 58px;
+    resize: vertical;
+    line-height: 1.4;
+  }
+
+  .access-rule-field input:focus,
+  .access-rule-field select:focus,
+  .access-rule-field textarea:focus {
+    border-color: rgba(52, 160, 255, .62);
+    box-shadow: 0 0 0 3px rgba(36, 145, 255, .1);
+  }
+
+  .access-rule-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 9px;
+    border: 1px solid rgba(114, 158, 203, .1);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .02);
+  }
+
+  .access-rule-toggle strong,
+  .access-rule-toggle small {
+    display: block;
+  }
+
+  .access-rule-toggle strong {
+    color: #dbe8f7;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .access-rule-toggle small {
+    margin-top: 2px;
+    color: #657e96;
+    font-size: 7px;
+  }
+
+  .access-rule-toggle input {
+    width: 32px;
+    height: 18px;
+    margin: 0;
+    accent-color: #2fa8ff;
+  }
+
+  .access-rule-condition {
+    margin-top: 8px;
+    padding: 9px;
+    border: 1px solid rgba(114, 158, 203, .1);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .02);
+  }
+
+  .access-rule-condition-head strong {
+    display: block;
+    color: #dce8f6;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .access-rule-clear-days {
+    padding: 4px 6px;
+    border: 1px solid rgba(83, 168, 255, .12);
+    border-radius: 6px;
+    background: transparent;
+    color: #6fb4e3;
+    cursor: pointer;
+    font-size: 7px;
+  }
+
+  .access-rule-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .access-rule-days label {
+    position: relative;
+    display: block;
+  }
+
+  .access-rule-days input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .access-rule-days span {
+    display: block;
+    padding: 6px 2px;
+    border: 1px solid rgba(114, 158, 203, .1);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, .02);
+    color: #70889f;
+    cursor: pointer;
+    font-size: 7px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .access-rule-days input:checked + span {
+    border-color: rgba(39, 174, 255, .28);
+    background: rgba(31, 136, 242, .13);
+    color: #72c6ff;
+  }
+
+  .access-rule-window-title {
+    margin-top: 9px;
+  }
+
+  .access-rule-window-title.is-required > span::after {
+    content: ' · required';
+    color: #ff999d;
+  }
+
+  .access-rule-window-title > span {
+    color: #748ca4;
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .access-rule-window-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 7px;
+  }
+
+  .access-rule-window-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr) 28px;
+    align-items: end;
+    gap: 5px;
+  }
+
+  .access-rule-window-row label {
+    min-width: 0;
+  }
+
+  .access-rule-window-row label > span {
+    display: block;
+    margin-bottom: 3px;
+    color: #667e96;
+    font-size: 6px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+
+  .access-rule-window-row input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(83, 168, 255, .16);
+    border-radius: 6px;
+    padding: 6px 7px;
+    background: #0b1d31;
+    color: #edf6ff;
+    outline: none;
+    font: 600 9px 'Space Grotesk', sans-serif;
+  }
+
+  .access-rule-arrow {
+    padding-bottom: 7px;
+    color: #68819a;
+    font-size: 10px;
+    text-align: center;
+  }
+
+  .access-rule-remove {
+    width: 28px;
+    height: 29px;
+    padding: 0;
+    border: 1px solid rgba(255, 92, 98, .18);
+    border-radius: 6px;
+    background: rgba(108, 25, 34, .2);
+    color: #ff7b7f;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .access-rule-condition-hint {
+    margin-top: 7px;
+    color: #617a92;
+    font-size: 7px;
+    line-height: 1.35;
+  }
+
+  .access-rule-description {
+    margin-top: 8px;
+  }
+
+  .access-rule-editor-actions {
+    margin-top: 9px;
+  }
+
+  .access-rule-secondary,
+  .access-rule-save {
+    border-radius: 7px;
+    padding: 7px 9px;
+    cursor: pointer;
+    font-size: 8px;
+    font-weight: 750;
+  }
+
+  .access-rule-secondary {
+    border: 1px solid rgba(114, 158, 203, .13);
+    background: rgba(255, 255, 255, .03);
+    color: #7792aa;
+  }
+
+  #deleteEditingRule {
+    border-color: rgba(255, 92, 98, .18);
+    background: rgba(108, 25, 34, .16);
+    color: #ff8589;
+  }
+
+  .access-rule-save {
+    border: 1px solid rgba(39, 174, 255, .32);
+    background: rgba(31, 136, 242, .14);
+    color: #60c5ff;
+  }
+
+  .access-rule-save:disabled {
+    cursor: wait;
+    opacity: .55;
+  }
+
+  .access-rules-footer {
+    margin-top: 9px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(117, 162, 206, .1);
+    color: #607993;
+    font-size: 7px;
+  }
+
+  .access-rules-footer strong {
+    color: #8aa4bc;
+  }
+
+  @media (max-width: 700px) {
+    .access-rules-card {
+      top: auto;
+      right: 10px;
+      bottom: 10px;
+      width: min(410px, calc(100vw - 20px));
+      max-height: calc(100dvh - 20px);
+    }
+  }
+
+  @media (max-width: 480px) {
+    .access-rule-form-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .access-rule-span-2 {
+      grid-column: auto;
+    }
+
+    .access-rule-window-row {
+      grid-template-columns: 1fr;
+      gap: 5px;
+    }
+
+    .access-rule-arrow {
+      display: none;
+    }
+
+    .access-rule-remove {
+      width: 100%;
+      height: 27px;
+    }
+  }
+</style>
