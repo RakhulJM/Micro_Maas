@@ -35,7 +35,13 @@
       const editModeToggle = document.getElementById('editModeToggle');
       const editToggle = document.getElementById('editToggle');
       const gateToggle = document.getElementById('gateToggle');
+      const vendorColumn = document.querySelector('.developer-vendor-column');
       const visible = Boolean(editModeToggle?.checked);
+
+      if (vendorColumn) {
+        vendorColumn.style.display = visible ? 'none' : '';
+        vendorColumn.setAttribute('aria-hidden', String(visible));
+      }
 
       for (const button of [editToggle, gateToggle]) {
         if (!button) continue;
