@@ -204,6 +204,21 @@ const policyAppliesToGroup = (policy, group) => {
   return policyGroup === 'all' || policyGroup === group;
 };
 
+const policyHasCondition = (policy) => {
+  const windows =
+    Array.isArray(policy?.windows)
+      ? policy.windows
+      : Array.isArray(policy?.condition?.time_windows)
+        ? policy.condition.time_windows
+        : [];
+
+  const days = Array.isArray(policy?.days) ? policy.days : ALL_POLICY_DAYS;
+
+  return windows.length > 0 ||
+    days.length !== ALL_POLICY_DAYS.length ||
+    days.some((day, index) => day !== ALL_POLICY_DAYS[index]);
+};
+
 const pathFeatureAllowed = (feature, accessPolicy, group = 'students') => {
   const temporal = policyTemporalState(accessPolicy?.timezone || 'Asia/Kolkata');
   const policies = (accessPolicy?.policies || []).filter(
@@ -220,24 +235,36 @@ const pathFeatureAllowed = (feature, accessPolicy, group = 'students') => {
     policyMatchesNow(policy, temporal)
   );
 
-  if (policies.some((policy) => policy.mode === 'deny' && activePolicies.includes(policy))) {
+  if (
+    activePolicies.some(
+      (policy) =>
+        policy.mode === 'deny' ||
+        policy.mode === 'deny_during'
+    )
+  ) {
     return false;
   }
 
-  const denyDuring = policies.some(
-    (policy) =>
-      policy.mode === 'deny_during' &&
-      activePolicies.includes(policy)
-  );
-
-  if (denyDuring) return false;
-
-  const allowOnly = policies.filter(
+  const allowOnlyPolicies = policies.filter(
     (policy) => policy.mode === 'allow_only_during'
   );
 
-  if (allowOnly.length) {
-    return allowOnly.some((policy) => activePolicies.includes(policy));
+  if (allowOnlyPolicies.length) {
+    return allowOnlyPolicies.some((policy) =>
+      activePolicies.includes(policy)
+    );
+  }
+
+  const conditionalAllowPolicies = policies.filter(
+    (policy) =>
+      policy.mode === 'allow' &&
+      policyHasCondition(policy)
+  );
+
+  if (conditionalAllowPolicies.length) {
+    return conditionalAllowPolicies.some((policy) =>
+      activePolicies.includes(policy)
+    );
   }
 
   return true;
@@ -826,10 +853,12 @@ const start = async () => {
       };
     }
 
+    const currentTemporal = policyTemporalState(
+      accessPolicy?.timezone || 'Asia/Kolkata'
+    );
+
     const temporal = {
-      day: policyTemporalState(
-        accessPolicy?.timezone || 'Asia/Kolkata'
-      ).day,
+      day: currentTemporal.day,
       time
     };
 
@@ -847,7 +876,9 @@ const start = async () => {
         preferred: false,
         priority: null,
         policy: activePolicies.find(
-          (policy) => policy.mode === 'deny' || policy.mode === 'deny_during'
+          (policy) =>
+            policy.mode === 'deny' ||
+            policy.mode === 'deny_during'
         ) || null
       };
     }
@@ -857,15 +888,30 @@ const start = async () => {
     );
 
     if (allowOnlyPolicies.length) {
-      const allowed = activePolicies.some(
-        (policy) => policy.mode === 'allow_only_during'
-      );
-
       return {
-        allowed,
+        allowed: allowOnlyPolicies.some((policy) =>
+          activePolicies.includes(policy)
+        ),
         preferred: false,
         priority: null,
         policy: allowOnlyPolicies[0] || null
+      };
+    }
+
+    const conditionalAllowPolicies = policies.filter(
+      (policy) =>
+        policy.mode === 'allow' &&
+        policyHasCondition(policy)
+    );
+
+    if (conditionalAllowPolicies.length) {
+      return {
+        allowed: conditionalAllowPolicies.some((policy) =>
+          activePolicies.includes(policy)
+        ),
+        preferred: false,
+        priority: null,
+        policy: conditionalAllowPolicies[0] || null
       };
     }
 
