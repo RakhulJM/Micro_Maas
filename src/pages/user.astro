@@ -1519,14 +1519,56 @@ const start = async () => {
       mine.forEach((order) => {
         const el = document.createElement('article');
         el.className = 'user-order-item';
-        el.innerHTML =
-          '<div><strong>#' + esc(order.id) +
+
+        const details = document.createElement('div');
+        const quantityText = Array.isArray(order.files)
+          ? ('Files ' + order.files.length + ' · Copies ' + (Number(order.quantity) || 0))
+          : ('Qty ' + (Number(order.quantity) || 1));
+
+        details.innerHTML =
+          '<strong>#' + esc(order.id) +
           '</strong><span>' + esc(order.vendor_name) + ' · ' + esc(order.option_name) +
-          '</span><small>' +
-          (Array.isArray(order.files)
-            ? ('Files ' + order.files.length + ' · Copies ' + (Number(order.quantity) || 0))
-            : ('Qty ' + (Number(order.quantity) || 1))) +
-          ' · ' + esc(order.status) + '</small></div><b>' + money(order.total_price) + '</b>';
+          '</span><small>' + quantityText + ' · ' + esc(order.status) + '</small>';
+
+        const side = document.createElement('div');
+        side.className = 'user-order-side';
+        side.innerHTML = '<b>' + money(order.total_price) + '</b>';
+
+        if (String(order.status || '').toLowerCase() === 'ready') {
+          const confirm = document.createElement('button');
+          confirm.type = 'button';
+          confirm.className = 'user-order-confirm';
+          confirm.textContent = 'CONFIRM COLLECTED';
+          confirm.addEventListener('click', async () => {
+            confirm.disabled = true;
+            confirm.textContent = 'CONFIRMING…';
+
+            try {
+              const response = await fetch('/__campusmaas/update-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: order.id, status: 'completed' })
+              });
+
+              if (!response.ok) {
+                const data = await response.json().catch(() => null);
+                throw new Error(data?.error || 'Order could not be updated.');
+              }
+
+              orders = await (
+                await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+              ).json();
+
+              renderOrders();
+            } catch {
+              confirm.disabled = false;
+              confirm.textContent = 'CONFIRM COLLECTED';
+            }
+          });
+          side.appendChild(confirm);
+        }
+
+        el.append(details, side);
         orderList.appendChild(el);
       });
     };
@@ -2901,6 +2943,10 @@ void start().catch((error) => {
 }
 .user-orders-head>span{color:#748ca5;font-size:8px}
 .user-orders-title{display:none}
+  .user-order-side{display:flex;flex-direction:column;align-items:flex-end;gap:7px}
+  .user-order-confirm{padding:7px 9px;border:1px solid #16a34a;border-radius:8px;background:#fff;color:#15803d;font-size:7px;font-weight:800;letter-spacing:.04em;cursor:pointer}
+  .user-order-confirm:hover{background:#f0fdf4}
+  .user-order-confirm:disabled{opacity:.55;cursor:wait}
 .user-order-list{display:grid;gap:6px;margin-top:9px}
 .user-order-item{padding:9px 10px;border:1px solid rgba(83,168,255,.08);border-radius:9px;background:rgba(255,255,255,.025)}
 .user-order-item strong,.user-order-item span,.user-order-item small{display:block}
