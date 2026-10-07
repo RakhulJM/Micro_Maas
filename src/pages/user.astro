@@ -660,6 +660,9 @@ const start = async () => {
     if (userTripDistance) userTripDistance.textContent = formatDistance(summary.distance);
   };
 
+  let gateLayer = null;
+  let gateStyle = null;
+
   const userAccessClock = document.getElementById('userAccessClock');
   const userGate09Status = document.getElementById('userGate09Status');
   const userGate09State = document.getElementById('userGate09State');
@@ -991,9 +994,7 @@ const start = async () => {
     interactive: false
   }).addTo(map);
 
-  let gateLayer = null;
-
-  const gateStyle = (feature, time = campusClock()) => {
+  gateStyle = (feature, time = campusClock()) => {
     const name = String(feature?.properties?.name || '').toLowerCase();
     const evaluation = evaluateStudentGate(feature, time);
 
@@ -1217,6 +1218,142 @@ void start().catch((error) => {
     font-weight: 650;
   }
 
+  .user-access-card {
+    position: absolute;
+    z-index: 1000;
+    top: clamp(14px, 2vw, 24px);
+    right: clamp(14px, 2vw, 24px);
+    width: min(326px, calc(100vw - 28px));
+    padding: 14px;
+    border: 1px solid rgba(83, 168, 255, .2);
+    border-radius: 16px;
+    background: rgba(7, 22, 38, .92);
+    color: #edf6ff;
+    box-shadow: 0 14px 38px rgba(0, 0, 0, .3);
+    backdrop-filter: blur(14px);
+  }
+
+  .user-access-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 11px;
+  }
+
+  .user-access-kicker {
+    display: block;
+    margin-bottom: 3px;
+    color: #27bfff;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .14em;
+  }
+
+  .user-access-header strong {
+    display: block;
+    color: #f1f7ff;
+    font: 600 13px/1.1 'Space Grotesk', sans-serif;
+  }
+
+  .user-access-clock {
+    padding: 4px 7px;
+    border: 1px solid rgba(83, 168, 255, .14);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .035);
+    color: #8da7bf;
+    font: 600 9px/1 'Space Grotesk', sans-serif;
+    white-space: nowrap;
+  }
+
+  .user-access-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid rgba(117, 162, 206, .1);
+  }
+
+  .user-access-row > div {
+    min-width: 0;
+  }
+
+  .user-access-row strong,
+  .user-access-row span {
+    display: block;
+  }
+
+  .user-access-row strong {
+    color: #eaf4ff;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .user-access-row span {
+    margin-top: 3px;
+    color: #7891aa;
+    font-size: 9px;
+    line-height: 1.35;
+  }
+
+  .user-access-row > b {
+    flex: 0 0 auto;
+    min-width: 38px;
+    padding: 5px 7px;
+    border-radius: 7px;
+    background: rgba(31, 136, 242, .12);
+    color: #7fc6ff;
+    font: 700 10px/1 'Space Grotesk', sans-serif;
+    text-align: center;
+  }
+
+  .user-access-row-preferred > b {
+    background: rgba(31, 136, 242, .16);
+    color: #59c9ff;
+  }
+
+  #userGate09State.is-open {
+    background: rgba(22, 163, 74, .14);
+    color: #61dc8a;
+  }
+
+  #userGate09State.is-closed {
+    background: rgba(220, 38, 38, .14);
+    color: #ff7b7f;
+  }
+
+  .user-access-windows {
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(117, 162, 206, .1);
+  }
+
+  .user-access-windows > span {
+    display: block;
+    margin-bottom: 4px;
+    color: #718aa3;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+  }
+
+  .user-access-windows > strong {
+    display: block;
+    color: #cfe2f7;
+    font: 600 10px/1.45 'Space Grotesk', sans-serif;
+  }
+
+  @media (max-width: 820px) {
+    .user-access-card {
+      top: auto;
+      right: 10px;
+      bottom: 10px;
+      width: min(326px, calc(100vw - 20px));
+    }
+  }
+
   @media (max-width: 560px) {
     .user-trip-card {
       top: 10px;
@@ -1232,6 +1369,14 @@ void start().catch((error) => {
 
     .user-trip-summary strong {
       font-size: 15px;
+    }
+
+    .user-access-card {
+      right: 10px;
+      bottom: 10px;
+      width: calc(100vw - 20px);
+      padding: 12px;
+      border-radius: 14px;
     }
   }
 </style>
