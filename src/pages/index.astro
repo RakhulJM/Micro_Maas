@@ -62,11 +62,24 @@ import VendorManagerCard from '../components/campusmaas/VendorManagerCard.astro'
     min-width: 0;
     width: 100%;
     max-width: none;
-    max-height: calc(100dvh - 72px);
     overflow: auto;
     box-sizing: border-box;
     pointer-events: auto;
     scrollbar-width: thin;
+  }
+
+  /* Reserve the lower-right map-control stack so the vendor panel never covers its icons. */
+  .developer-vendor-column {
+    max-height: calc(100dvh - 330px);
+    min-height: 220px;
+  }
+
+  .developer-vendor-column .vendor-manager {
+    max-height: none;
+  }
+
+  .developer-side-workspace > .access-rules-card {
+    max-height: calc(100dvh - 100px);
   }
 
   :global(.developer-side-workspace .vendor-manager) {
@@ -117,7 +130,12 @@ import VendorManagerCard from '../components/campusmaas/VendorManagerCard.astro'
       overflow: auto;
     }
 
-    .developer-vendor-column,
+    .developer-vendor-column {
+      max-height: calc(100dvh - 250px);
+      min-height: 220px;
+      overflow: auto;
+    }
+
     .developer-side-workspace > .access-rules-card {
       max-height: none;
       overflow: visible;
