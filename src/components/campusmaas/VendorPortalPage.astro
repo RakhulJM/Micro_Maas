@@ -1,0 +1,989 @@
+---
+const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
+---
+
+<main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId}>
+  <div class="vendor-portal-glow vendor-portal-glow-a" aria-hidden="true"></div>
+  <div class="vendor-portal-glow vendor-portal-glow-b" aria-hidden="true"></div>
+
+  <header class="vendor-portal-header">
+    <div class="vendor-brand">
+      <a class="vendor-back" id="vendorBack" href="/vendor" aria-label="Back to vendors">←</a>
+      <div class="vendor-brand-mark">M</div>
+      <div>
+        <span class="vendor-brand-kicker">CAMPUSMAAS</span>
+        <strong id="portalHeaderTitle">Vendors</strong>
+      </div>
+    </div>
+    <div class="vendor-header-actions">
+      <div class="vendor-header-service-control" id="vendorHeaderServiceControl" hidden>
+        <button class="vendor-header-status-toggle" id="vendorHeaderStatusToggle" type="button" aria-expanded="false" aria-haspopup="true">
+          <span class="vendor-header-status-dot" id="vendorHeaderStatusDot"></span>
+          <span class="vendor-header-status-copy">
+            <strong id="vendorHeaderStatusLabel">ONLINE</strong>
+            <small id="vendorHeaderStatusMessage">Accepting new orders</small>
+          </span>
+          <span class="vendor-header-status-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div class="vendor-header-status-menu" id="vendorHeaderStatusMenu" hidden></div>
+      </div>
+      <div class="vendor-header-status">
+        <span class="vendor-live-dot"></span>
+        <span>Live workspace</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="vendor-hero">
+    <span class="vendor-hero-kicker" id="portalKicker">CAMPUS SERVICES</span>
+    <h1 id="portalTitle">Vendors</h1>
+    <p id="portalSubtitle">Campus service dashboards</p>
+  </section>
+
+  <section class="vendor-content" aria-live="polite">
+    <div id="portalContent" class="vendor-content-grid">
+      <div class="vendor-loading-card">
+        <span class="vendor-loading-line wide"></span>
+        <span class="vendor-loading-line"></span>
+        <span class="vendor-loading-line short"></span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const initVendorPortal = () => {
+    const root = document.querySelector('.vendor-portal');
+    const content = document.getElementById('portalContent');
+    const title = document.getElementById('portalTitle');
+    const headerTitle = document.getElementById('portalHeaderTitle');
+    const subtitle = document.getElementById('portalSubtitle');
+    const kicker = document.getElementById('portalKicker');
+    const back = document.getElementById('vendorBack');
+    const headerServiceControl = document.getElementById('vendorHeaderServiceControl');
+    const headerStatusToggle = document.getElementById('vendorHeaderStatusToggle');
+    const headerStatusDot = document.getElementById('vendorHeaderStatusDot');
+    const headerStatusLabel = document.getElementById('vendorHeaderStatusLabel');
+    const headerStatusMessage = document.getElementById('vendorHeaderStatusMessage');
+    const headerStatusMenu = document.getElementById('vendorHeaderStatusMenu');
+
+    if (!root || !content) return;
+
+    const pageKind = root.dataset.pageKind || 'root';
+    const vendorId = root.dataset.vendorId || '';
+    const optionId = root.dataset.optionId || '';
+
+    const state = {
+      catalogue: { version: 1, vendors: [] },
+      orders: { version: 1, orders: [] }
+    };
+
+    const create = (tag, className, text) => {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    };
+
+    const append = (parent, ...children) => {
+      children.forEach((child) => child && parent.appendChild(child));
+      return parent;
+    };
+
+    const vendor = (id) =>
+      state.catalogue.vendors.find((item) => String(item.id) === String(id));
+
+    const option = (item, id) =>
+      item && item.options
+        ? item.options.find((child) => String(child.id) === String(id))
+        : null;
+
+    const routeParent = (parentId) =>
+      String(parentId) === 'printer' ? 'print' : String(parentId);
+
+    const route = (parentId, childId) => {
+      const parent = routeParent(parentId);
+      const child = String(parentId) === 'printer'
+        ? String(childId || '').replace(/^printer-/, '')
+        : String(childId || '');
+      return child
+        ? '/vendor/' + encodeURIComponent(parent) + '/' + encodeURIComponent(child)
+        : '/vendor/' + encodeURIComponent(parent);
+    };
+
+    const iconLetter = (id) =>
+      String(id).toLowerCase() === 'food' ? 'F' :
+      String(id).toLowerCase() === 'printer' ? 'P' : 'S';
+
+    const formatPrice = (value) => {
+      const price = Number(value) || 0;
+      return price === 0 ? 'Free' : '₹' + price.toFixed(2);
+    };
+
+    const orderStatusClass = (value) =>
+      'vendor-status-chip status-' +
+      String(value || 'placed').replace(/[^a-z]/gi, '').toLowerCase();
+
+    const orderStatusLabel = (value) =>
+      String(value || 'placed')
+        .replace(/_/g, ' ')
+        .replace(/^./, (char) => char.toUpperCase());
+
+    const makeHeader = (small, heading, parent) => {
+      const wrapper = create('div', 'vendor-section-heading');
+      const left = create('div');
+      append(left, create('span', '', small), create('strong', '', heading));
+      append(wrapper, left, create('b', '', parent));
+      return wrapper;
+    };
+
+    const loadData = async () => {
+      const responses = await Promise.all([
+        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
+        fetch('/maps/campus_orders.json', { cache: 'no-store' })
+      ]);
+
+      if (!responses[0].ok || !responses[1].ok) {
+        throw new Error('Vendor data could not be loaded.');
+      }
+
+      state.catalogue = await responses[0].json();
+      state.orders = await responses[1].json();
+    };
+
+    const renderRoot = () => {
+      const vendors = state.catalogue.vendors
+        .filter((item) => item.enabled !== false)
+        .sort((a, b) => Number(a.order) - Number(b.order));
+
+      kicker.textContent = 'VENDORS';
+      title.textContent = 'Campus vendors';
+      headerTitle.textContent = 'Vendors';
+      subtitle.textContent = 'Choose a service workspace';
+      back.href = '/';
+      back.setAttribute('aria-label', 'Back to map');
+      headerServiceControl.hidden = true;
+      headerStatusMenu.hidden = true;
+      headerStatusToggle.setAttribute('aria-expanded', 'false');
+
+      content.className = 'vendor-content-grid vendor-root-grid';
+      content.innerHTML = '';
+
+      vendors.forEach((item) => {
+        const card = create('a', 'vendor-large-card');
+        card.href = route(item.id);
+
+        const top = create('div', 'vendor-large-card-top');
+        append(
+          top,
+          create('span', 'vendor-card-number', String(item.order || 1).padStart(2, '0')),
+          create('span', 'vendor-open-icon', '↗')
+        );
+
+        const largeIcon = create('div', 'vendor-large-icon', iconLetter(item.id));
+
+        const visibleOptions = (item.options || [])
+          .filter((child) => child.enabled !== false);
+
+        const activeOrders = state.orders.orders.filter(
+          (order) =>
+            String(order.vendor_id) === String(item.id) &&
+            !['completed', 'cancelled'].includes(order.status)
+        ).length;
+
+        append(
+          card,
+          top,
+          largeIcon,
+          create('div', 'vendor-large-title', item.name),
+          create('p', '', visibleOptions.length + (visibleOptions.length === 1 ? ' service available' : ' services available'))
+        );
+
+        const footer = create('div', 'vendor-large-footer');
+        append(
+          footer,
+          create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
+          create('span', '', 'Open dashboard →')
+        );
+        append(card, footer);
+        content.appendChild(card);
+      });
+
+      if (!vendors.length) {
+        content.appendChild(create('div', 'vendor-empty-card', 'No enabled vendors are configured.'));
+      }
+    };
+
+    const renderCategory = (item) => {
+      const options = (item.options || [])
+        .filter((child) => child.enabled !== false)
+        .sort((a, b) => Number(a.order) - Number(b.order));
+
+      kicker.textContent = 'VENDOR';
+      title.textContent = item.name;
+      headerTitle.textContent = item.name;
+      subtitle.textContent = 'Service list and dedicated dashboards';
+      back.href = '/vendor';
+      headerServiceControl.hidden = true;
+      headerStatusMenu.hidden = true;
+      headerStatusToggle.setAttribute('aria-expanded', 'false');
+
+      content.className = 'vendor-content-grid vendor-category-grid';
+      content.innerHTML = '';
+
+      options.forEach((child) => {
+        const card = create('a', 'vendor-service-card');
+        card.href = route(item.id, child.id);
+
+        const top = create('div', 'vendor-service-card-head');
+        append(
+          top,
+          create('div', 'vendor-service-icon', iconLetter(item.id)),
+          create('span', 'vendor-open-icon', '↗')
+        );
+
+        const activeOrders = state.orders.orders.filter(
+          (order) =>
+            String(order.vendor_id) === String(item.id) &&
+            String(order.option_id) === String(child.id) &&
+            !['completed', 'cancelled'].includes(order.status)
+        ).length;
+
+        append(
+          card,
+          top,
+          create('div', 'vendor-service-number', String(child.order || 1).padStart(2, '0')),
+          create('h2', '', child.name),
+          create('p', '', 'Dedicated vendor dashboard')
+        );
+
+        const serviceStatus = String(child.status || 'online').toLowerCase();
+        const statusLabel = serviceStatus === 'offline' ? 'OFFLINE' : serviceStatus === 'busy' ? 'BUSY' : 'ONLINE';
+        const statusText = child.status_message || (
+          serviceStatus === 'offline' ? 'Currently unavailable' :
+          serviceStatus === 'busy' ? 'Currently serving customers' : 'Accepting new orders'
+        );
+        const statusBadge = create('div', 'vendor-service-status status-' + serviceStatus);
+        append(statusBadge, create('span', 'vendor-service-status-dot'), create('strong', statusLabel), create('small', '', statusText));
+        const info = create('div', 'vendor-service-info');
+        card.appendChild(statusBadge);
+        append(
+          info,
+          create('span', '', (Number(child.service_minutes) || 0) + ' min service'),
+          create('span', '', formatPrice(child.price))
+        );
+        append(card, info);
+
+        const statusControls = create('div', 'vendor-category-status-controls');
+        ['online', 'busy', 'offline'].forEach((value) => {
+          const button = create('button', 'vendor-status-button vendor-category-status-button', value[0].toUpperCase() + value.slice(1));
+          button.type = 'button';
+          button.classList.toggle('is-active', serviceStatus === value);
+          button.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            button.disabled = true;
+            try {
+              const nextCatalogue = structuredClone(state.catalogue);
+              const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
+              const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
+              if (!target) throw new Error('Service not found.');
+              target.status = value;
+              target.status_message = value === 'offline'
+                ? 'Currently unavailable'
+                : value === 'busy'
+                  ? 'Currently serving customers'
+                  : 'Accepting new orders';
+              const response = await fetch('/__campusmaas/save-vendors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(nextCatalogue)
+              });
+              if (!response.ok) throw new Error('Status update failed.');
+              state.catalogue = nextCatalogue;
+              render();
+            } catch {
+              button.disabled = false;
+            }
+          });
+          statusControls.appendChild(button);
+        });
+
+        const footer = create('div', 'vendor-service-footer');
+        append(
+          footer,
+          create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
+          create('span', '', 'Open →')
+        );
+        append(card, statusControls, footer);
+        content.appendChild(card);
+      });
+
+      if (!options.length) {
+        content.appendChild(create('div', 'vendor-empty-card', 'No enabled services are configured.'));
+      }
+    };
+
+    const makeOrderCard = (order) => {
+      const card = create('article', 'vendor-order-card');
+      const main = create('div', 'vendor-order-card-main');
+
+      const top = create('div', 'vendor-order-top');
+      const id = create('strong', '', '#' + order.id);
+      const chip = create('span', orderStatusClass(order.status), orderStatusLabel(order.status));
+      const dot = create('i');
+      chip.prepend(dot);
+      append(top, id, chip);
+
+      const service = create('div', 'vendor-order-service');
+      service.textContent = order.vendor_name + ' · ' + order.option_name;
+
+      const meta = create('div', 'vendor-order-meta');
+      append(
+        meta,
+        create('span', '', 'Qty ' + (Number(order.quantity) || 1)),
+        create('span', '', formatPrice(order.total_price)),
+        create('span', '', new Date(order.created_at).toLocaleString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          day: '2-digit',
+          month: 'short'
+        }))
+      );
+
+      append(main, top, service, meta);
+      append(card, main);
+
+      const actions = {
+        placed: ['Accept', 'accepted'],
+        accepted: ['Start preparing', 'preparing'],
+        preparing: ['Mark ready', 'ready'],
+        ready: ['Complete', 'completed']
+      };
+
+      const next = actions[order.status];
+      if (next && serviceStatus !== 'offline') {
+        const action = create('button', 'vendor-order-action', next[0]);
+        action.type = 'button';
+        action.dataset.orderId = order.id;
+        action.dataset.nextStatus = next[1];
+        action.addEventListener('click', async () => {
+          action.disabled = true;
+          action.textContent = 'Saving…';
+
+          try {
+            const response = await fetch('/__campusmaas/update-order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: order.id, status: next[1] })
+            });
+
+            if (!response.ok) throw new Error('Order update failed.');
+
+            order.status = next[1];
+            render();
+          } catch {
+            action.disabled = false;
+            action.textContent = next[0];
+          }
+        });
+        append(card, action);
+      }
+
+      return card;
+    };
+
+    const renderDetail = (item, child) => {
+      const allOrders = state.orders.orders.filter(
+        (order) =>
+          String(order.vendor_id) === String(item.id) &&
+          String(order.option_id) === String(child.id)
+      );
+
+      const active = allOrders.filter(
+        (order) => !['completed', 'cancelled'].includes(order.status)
+      );
+
+      const stats = {
+        active: active.length,
+        placed: active.filter((order) => order.status === 'placed').length,
+        preparing: active.filter((order) => ['accepted', 'preparing'].includes(order.status)).length,
+        ready: active.filter((order) => order.status === 'ready').length
+      };
+      const serviceStatus = String(child.status || 'online').toLowerCase();
+      const serviceStatusLabel = serviceStatus === 'offline' ? 'Offline' : serviceStatus === 'busy' ? 'Busy' : 'Online';
+      const serviceStatusMessage = child.status_message || (
+        serviceStatus === 'offline' ? 'Currently unavailable' :
+        serviceStatus === 'busy' ? 'Currently serving customers' : 'Accepting new orders'
+      );
+
+      kicker.textContent = String(item.name).toUpperCase();
+      title.textContent = child.name;
+      headerTitle.textContent = child.name;
+      subtitle.textContent = 'Vendor dashboard';
+      back.href = route(item.id);
+
+      headerServiceControl.hidden = false;
+      headerStatusMenu.hidden = true;
+      headerStatusToggle.setAttribute('aria-expanded', 'false');
+      headerStatusLabel.textContent = serviceStatusLabel.toUpperCase();
+      headerStatusMessage.textContent = serviceStatusMessage;
+      headerStatusDot.className = 'vendor-header-status-dot status-' + serviceStatus;
+      headerStatusToggle.classList.remove('status-online', 'status-busy', 'status-offline');
+      headerStatusToggle.classList.add('status-' + serviceStatus);
+      headerStatusMenu.innerHTML = '';
+
+      ['online', 'busy', 'offline'].forEach((value) => {
+        const button = create('button', 'vendor-header-status-option', value[0].toUpperCase() + value.slice(1));
+        button.type = 'button';
+        button.classList.toggle('is-active', serviceStatus === value);
+        button.addEventListener('click', async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          button.disabled = true;
+          try {
+            const nextCatalogue = structuredClone(state.catalogue);
+            const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
+            const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
+            if (!target) throw new Error('Service not found.');
+            target.status = value;
+            target.status_message = value === 'offline'
+              ? 'Currently unavailable'
+              : value === 'busy'
+                ? 'Currently serving customers'
+                : 'Accepting new orders';
+            const response = await fetch('/__campusmaas/save-vendors', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(nextCatalogue)
+            });
+            if (!response.ok) throw new Error('Status update failed.');
+            state.catalogue = nextCatalogue;
+            render();
+          } catch {
+            button.disabled = false;
+          }
+        });
+        headerStatusMenu.appendChild(button);
+      });
+
+      content.className = 'vendor-content-grid vendor-dashboard-grid';
+      content.innerHTML = '';
+
+      const overview = create('section', 'vendor-dashboard-overview');
+      const dashboardTitle = create('div', 'vendor-dashboard-title');
+      append(
+        dashboardTitle,
+        create('div', 'vendor-service-icon', iconLetter(item.id)),
+        create('div')
+      );
+      const titleBox = dashboardTitle.lastChild;
+      append(
+        titleBox,
+        create('span', '', 'VENDOR SERVICE'),
+        create('strong', item.name + ' · ' + child.name)
+      );
+
+      const statGrid = create('div', 'vendor-stat-grid');
+      [
+        ['Active', stats.active],
+        ['Placed', stats.placed],
+        ['Preparing', stats.preparing],
+        ['Ready', stats.ready]
+      ].forEach((entry) => {
+        const box = create('div');
+        append(box, create('span', '', entry[0]), create('strong', '', String(entry[1])));
+        statGrid.appendChild(box);
+      });
+
+      const statusCard = create('div', 'vendor-service-status status-' + serviceStatus);
+      append(
+        statusCard,
+        create('span', 'vendor-service-status-dot'),
+        create('strong', serviceStatusLabel.toUpperCase()),
+        create('small', '', serviceStatusMessage)
+      );
+
+      const facts = create('div', 'vendor-service-facts');
+      append(
+        facts,
+        create('span', '', 'Service time ' + (Number(child.service_minutes) || 0) + ' min'),
+        create('span', '', 'Price ' + formatPrice(child.price))
+      );
+
+      const statusControls = create('div', 'vendor-service-status-controls');
+      ['online', 'busy', 'offline'].forEach((value) => {
+        const button = create('button', 'vendor-status-button', value[0].toUpperCase() + value.slice(1));
+        button.type = 'button';
+        button.classList.toggle('is-active', serviceStatus === value);
+        button.addEventListener('click', async () => {
+          button.disabled = true;
+          try {
+            const nextCatalogue = structuredClone(state.catalogue);
+            const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
+            const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
+            if (!target) throw new Error('Service not found.');
+            target.status = value;
+            target.status_message = value === 'offline' ? 'Currently unavailable' : value === 'busy' ? 'Currently serving customers' : 'Accepting new orders';
+            const response = await fetch('/__campusmaas/save-vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(nextCatalogue) });
+            if (!response.ok) throw new Error('Status update failed.');
+            state.catalogue = nextCatalogue;
+            render();
+          } catch {
+            button.disabled = false;
+          }
+        });
+        statusControls.appendChild(button);
+      });
+
+      append(overview, dashboardTitle, statusCard, statusControls, statGrid, facts);
+      content.appendChild(overview);
+
+      const live = create('section', 'vendor-dashboard-orders');
+      append(
+        live,
+        makeHeader('LIVE QUEUE', 'Orders', active.length + ' active')
+      );
+
+      const ordersGrid = create('div', 'vendor-orders-grid');
+      active.forEach((order) => ordersGrid.appendChild(makeOrderCard(order)));
+      if (!active.length) {
+        ordersGrid.appendChild(create('div', 'vendor-empty-card', 'No active orders for this service.'));
+      }
+      live.appendChild(ordersGrid);
+      content.appendChild(live);
+
+      const history = create('section', 'vendor-history-card');
+      const completed = allOrders.filter((order) => order.status === 'completed').slice(0, 8);
+      append(
+        history,
+        makeHeader('RECENT', 'Completed orders', String(completed.length))
+      );
+
+      const historyList = create('div', 'vendor-history-list');
+      completed.forEach((order) => {
+        const row = create('div', 'vendor-history-row');
+        append(
+          row,
+          create('span', '', '#' + order.id),
+          create('span', '', 'Qty ' + (Number(order.quantity) || 1)),
+          create('span', '', new Date(order.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
+        );
+        const chip = create('span', 'vendor-status-chip status-completed', 'Completed');
+        chip.prepend(create('i'));
+        row.appendChild(chip);
+        historyList.appendChild(row);
+      });
+
+      if (!completed.length) {
+        historyList.appendChild(create('div', 'vendor-empty-card', 'No completed orders yet.'));
+      }
+
+      history.appendChild(historyList);
+      content.appendChild(history);
+    };
+
+    headerStatusToggle.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (headerServiceControl.hidden) return;
+      const open = headerStatusMenu.hidden;
+      headerStatusMenu.hidden = !open;
+      headerStatusToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!headerServiceControl.contains(event.target)) {
+        headerStatusMenu.hidden = true;
+        headerStatusToggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    const render = () => {
+      if (pageKind === 'root') {
+        renderRoot();
+        return;
+      }
+
+      const item = vendor(vendorId);
+      if (!item) {
+        title.textContent = 'Vendor not found';
+        subtitle.textContent = 'The configured vendor does not exist.';
+        content.className = 'vendor-content-grid';
+        content.innerHTML = '';
+        content.appendChild(create('div', 'vendor-empty-card', 'Vendor not found.'));
+        return;
+      }
+
+      if (pageKind === 'category') {
+        renderCategory(item);
+        return;
+      }
+
+      const child = option(item, optionId);
+      if (!child) {
+        title.textContent = 'Service not found';
+        subtitle.textContent = 'The configured vendor service does not exist.';
+        content.className = 'vendor-content-grid';
+        content.innerHTML = '';
+        content.appendChild(create('div', 'vendor-empty-card', 'Service not found.'));
+        return;
+      }
+
+      renderDetail(item, child);
+    };
+
+    const start = async () => {
+      try {
+        await loadData();
+        render();
+      } catch {
+        title.textContent = 'Vendor portal unavailable';
+        subtitle.textContent = 'Check the CampusMaaS vendor data.';
+        content.className = 'vendor-content-grid';
+        content.innerHTML = '';
+        content.appendChild(create('div', 'vendor-empty-card', 'Vendor data could not be loaded.'));
+      }
+    };
+
+    void start();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initVendorPortal, { once: true });
+  } else {
+    initVendorPortal();
+  }
+</script>
+
+<style is:global>
+  .vendor-portal {
+    position: relative;
+    min-height: 100dvh;
+    overflow: auto;
+    padding: 28px 30px 48px;
+    color: #edf6ff;
+    background:
+      radial-gradient(circle at 18% 8%, rgba(22, 135, 255, .06), transparent 30%),
+      radial-gradient(circle at 84% 22%, rgba(39, 191, 255, .045), transparent 28%),
+      linear-gradient(145deg, #ffffff 0%, #f8fbfd 55%, #edf5f9 100%);
+  }
+
+  .vendor-portal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: .24;
+    background-image:
+      linear-gradient(rgba(91, 163, 224, .055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(91, 163, 224, .055) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,.7), transparent 78%);
+  }
+
+  .vendor-portal-glow {
+    position: absolute;
+    width: 360px;
+    height: 360px;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+    opacity: .17;
+  }
+
+  .vendor-portal-glow-a { left: -120px; top: 220px; background: #1687ff; }
+  .vendor-portal-glow-b { right: -130px; bottom: -120px; background: #0e7cff; }
+
+  .vendor-portal-header,
+  .vendor-hero,
+  .vendor-content {
+    position: relative;
+    z-index: 1;
+    width: min(1120px, 100%);
+    margin-inline: auto;
+  }
+
+  .vendor-portal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+
+  .vendor-brand { display: flex; align-items: center; gap: 10px; }
+  .vendor-back {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid rgba(83, 168, 255, .16);
+    border-radius: 11px;
+    background: rgba(9, 27, 45, .72);
+    color: #9cb6ce;
+    font-size: 18px;
+  }
+  .vendor-back:hover { border-color: rgba(83,168,255,.34); color:#eaf6ff; }
+  .vendor-brand-mark {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: linear-gradient(145deg, #27bfff, #1687ff);
+    color: #fff;
+    font: 800 15px 'Space Grotesk', sans-serif;
+    box-shadow: 0 10px 24px rgba(22, 135, 255, .22);
+  }
+  .vendor-brand-kicker { display:block; color:#67c6ff; font-size:8px; font-weight:800; letter-spacing:.16em; }
+  .vendor-brand strong { display:block; margin-top:3px; color:#0b1e31; font:600 17px/1.05 'Space Grotesk',sans-serif; }
+  .vendor-header-status {
+    display:flex; align-items:center; gap:7px; padding:7px 10px;
+    border:1px solid rgba(93,125,151,.16); border-radius:999px;
+    background:rgba(255,255,255,.72); color:#5b7185; font-size:8px;
+    box-shadow:0 6px 18px rgba(35,72,101,.08);
+  }
+  .vendor-live-dot {
+    width:7px; height:7px; border-radius:50%; background:#16c784;
+    box-shadow:0 0 0 4px rgba(22,199,132,.10);
+  }
+
+  .vendor-hero { padding:54px 2px 26px; }
+  .vendor-hero-kicker { color:#1687ff; font-size:10px; font-weight:800; letter-spacing:.18em; }
+  .vendor-hero h1 { margin:7px 0 0; color:#0a1d30; font:600 clamp(38px,4.6vw,52px)/1 'Space Grotesk',sans-serif; letter-spacing:-.03em; }
+  .vendor-hero p { margin:10px 0 0; color:#60788d; font-size:13px; }
+
+  .vendor-content-grid { display:grid; gap:14px; }
+  .vendor-root-grid,.vendor-category-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+
+  .vendor-large-card,
+  .vendor-service-card,
+  .vendor-dashboard-overview,
+  .vendor-dashboard-orders,
+  .vendor-history-card {
+    position:relative;
+    overflow:hidden;
+    border:1px solid rgba(48,88,120,.42);
+    border-radius:22px;
+    background:linear-gradient(145deg,#102b43 0%,#0c2237 58%,#081a2a 100%);
+    color:#edf6ff;
+    box-shadow:0 26px 70px rgba(15,46,73,.28),0 1px 0 rgba(255,255,255,.08) inset,0 0 0 1px rgba(41,145,224,.06);
+    backdrop-filter:blur(15px);
+  }
+
+  .vendor-large-card {
+    min-height:290px;
+    padding:25px;
+    transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;
+  }
+  .vendor-large-card:hover,.vendor-service-card:hover {
+    transform:translateY(-3px);
+    border-color:rgba(61,163,239,.68);
+    box-shadow:0 30px 84px rgba(6,26,45,.42),0 1px 0 rgba(255,255,255,.10) inset,0 10px 34px rgba(22,135,255,.13);
+  }
+  .vendor-large-card::after,.vendor-service-card::after {
+    content:'';
+    position:absolute;
+    width:220px;
+    height:220px;
+    right:-90px;
+    top:-90px;
+    border-radius:50%;
+    background:radial-gradient(circle,rgba(31,136,242,.16),transparent 68%);
+    pointer-events:none;
+  }
+
+  .vendor-large-card-top,.vendor-service-card-head {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .vendor-card-number,.vendor-service-number {
+    display:grid;
+    place-items:center;
+    width:32px;
+    height:32px;
+    border:1px solid rgba(83,168,255,.18);
+    border-radius:9px;
+    background:#0d2742;
+    color:#67c6ff;
+    font:800 9px 'Space Grotesk',sans-serif;
+  }
+  .vendor-open-icon {
+    display:grid;
+    place-items:center;
+    width:32px;
+    height:32px;
+    border:1px solid rgba(83,168,255,.13);
+    border-radius:9px;
+    background:rgba(255,255,255,.035);
+    color:#72bfff;
+    font-size:15px;
+  }
+  .vendor-large-icon,.vendor-service-icon {
+    display:grid;
+    place-items:center;
+    width:58px;
+    height:58px;
+    margin-top:42px;
+    border:1px solid rgba(39,191,255,.18);
+    border-radius:16px;
+    background:linear-gradient(145deg,#123854,#0d2942);
+    color:#52c8ff;
+    font:700 21px 'Space Grotesk',sans-serif;
+    box-shadow:inset 0 0 30px rgba(31,136,242,.05);
+  }
+  .vendor-large-title { margin-top:20px; color:#f4f9ff; font:600 32px/1.02 'Space Grotesk',sans-serif; letter-spacing:-.02em; }
+  .vendor-large-card p { margin:9px 0 0; color:#8ea5b9; font-size:13px; }
+  .vendor-large-footer,.vendor-service-footer {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-top:27px; padding-top:12px;
+    border-top:1px solid rgba(126,163,193,.14);
+    color:#8299ad; font-size:10px;
+  }
+  .vendor-large-footer span:last-child,.vendor-service-footer span:last-child { color:#67c6ff; font-weight:700; }
+
+  .vendor-service-card { min-height:250px; padding:20px; text-decoration:none; }
+  .vendor-service-card:hover,
+  .vendor-service-card:focus,
+  .vendor-service-card:visited { text-decoration:none; }
+  .vendor-service-card-head .vendor-service-icon { margin-top:0; width:48px; height:48px; border-radius:13px; }
+  .vendor-service-number { margin-top:30px; width:29px; height:29px; font-size:8px; }
+  .vendor-service-card h2 { margin:10px 0 0; color:#f2f7fb; font:600 27px/1.05 'Space Grotesk',sans-serif; }
+  .vendor-service-card p { margin:7px 0 0; color:#8ba1b4; font-size:12px; }
+  .vendor-service-info { display:flex; gap:9px; margin-top:18px; }
+  .vendor-service-info span { padding:6px 8px; border:1px solid rgba(83,145,190,.16); border-radius:7px; background:rgba(255,255,255,.045); color:#91a8ba; font-size:8px; }
+  .vendor-service-info b { color:#d7ecfb; }
+
+  .vendor-dashboard-grid { grid-template-columns:1.08fr .92fr; }
+  .vendor-dashboard-overview,.vendor-dashboard-orders,.vendor-history-card { padding:20px; }
+  .vendor-dashboard-overview { grid-column:1/-1; }
+  .vendor-dashboard-title { display:flex; align-items:center; gap:12px; }
+  .vendor-dashboard-title .vendor-service-icon { margin:0; width:54px; height:54px; }
+  .vendor-dashboard-title>div:last-child>span,.vendor-section-heading>div>span {
+    display:block; color:#61bffc; font-size:8px; font-weight:800; letter-spacing:.14em;
+  }
+  .vendor-dashboard-title strong { display:block; margin-top:4px; color:#f0f7ff; font:600 17px/1.05 'Space Grotesk',sans-serif; }
+  .vendor-stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin-top:16px; }
+  .vendor-stat-grid>div { padding:12px; border:1px solid rgba(83,168,255,.09); border-radius:10px; background:rgba(255,255,255,.025); }
+  .vendor-stat-grid span { display:block; color:#6e879f; font-size:8px; text-transform:uppercase; letter-spacing:.07em; }
+  .vendor-stat-grid strong { display:block; margin-top:5px; color:#f0f7ff; font:600 24px/1 'Space Grotesk',sans-serif; }
+  .vendor-service-facts { display:flex; gap:8px; flex-wrap:wrap; margin-top:11px; }
+  .vendor-service-facts span { padding:7px 9px; border-radius:8px; background:#0d2742; color:#7f97ad; font-size:8px; }
+  .vendor-service-facts b { color:#d9efff; }
+
+  .vendor-section-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:11px; }
+  .vendor-section-heading strong { display:block; margin-top:4px; color:#f0f7ff; font:600 15px/1.05 'Space Grotesk',sans-serif; }
+  .vendor-section-heading>b { padding:5px 7px; border:1px solid rgba(83,168,255,.10); border-radius:999px; background:rgba(255,255,255,.025); color:#79a4c5; font-size:7px; }
+
+  .vendor-orders-grid { display:grid; gap:7px; }
+  .vendor-order-card { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 11px; border:1px solid rgba(83,168,255,.08); border-radius:11px; background:rgba(255,255,255,.025); }
+  .vendor-order-card-main { min-width:0; }
+  .vendor-order-top { display:flex; align-items:center; gap:7px; }
+  .vendor-order-top strong { color:#dff2ff; font-size:11px; }
+  .vendor-order-service { margin-top:3px; color:#c4d7e8; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .vendor-order-meta { display:flex; gap:9px; margin-top:4px; color:#617d95; font-size:8px; }
+  .vendor-status-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 6px; border:1px solid rgba(83,168,255,.10); border-radius:999px; background:rgba(255,255,255,.02); color:#79a2bf; font-size:7px; }
+  .vendor-status-chip i { width:5px; height:5px; border-radius:50%; background:#6e8295; }
+  .status-placed { color:#72bbff; background:rgba(31,136,242,.08); border-color:rgba(31,136,242,.17); }
+  .status-placed i { background:#2ca6ff; }
+  .status-accepted { color:#89d4ff; background:rgba(39,191,255,.08); }
+  .status-accepted i { background:#39c0ff; }
+  .status-preparing { color:#f0cc71; background:rgba(227,168,52,.08); border-color:rgba(227,168,52,.15); }
+  .status-preparing i { background:#e6b34d; }
+  .status-ready { color:#6ee8a1; background:rgba(22,199,132,.08); border-color:rgba(22,199,132,.15); }
+  .status-ready i { background:#16c784; }
+  .status-completed { color:#74e7a2; background:rgba(22,199,132,.07); }
+  .status-completed i { background:#16c784; }
+  .status-cancelled { color:#ff8d94; background:rgba(255,91,99,.07); }
+  .status-cancelled i { background:#ff5b63; }
+  .vendor-order-action { flex:0 0 auto; padding:6px 8px; border:1px solid rgba(83,168,255,.18); border-radius:7px; background:#0d2742; color:#80c9fb; font-size:7px; font-weight:800; cursor:pointer; }
+  .vendor-order-action:hover { background:#123757; color:#bfe6ff; }
+  .vendor-order-action:disabled { opacity:.5; cursor:wait; }
+
+  .vendor-history-list { display:grid; gap:5px; }
+  .vendor-history-row { display:grid; grid-template-columns:1.2fr .7fr .8fr auto; gap:8px; align-items:center; padding:8px 9px; border:1px solid rgba(83,168,255,.06); border-radius:8px; background:rgba(255,255,255,.02); color:#728ba2; font-size:7px; }
+
+  .vendor-empty-card { padding:28px 18px; border:1px dashed rgba(83,168,255,.13); border-radius:13px; color:#6d859d; font-size:9px; text-align:center; background:rgba(255,255,255,.015); }
+  .vendor-loading-card { min-height:250px; padding:22px; border:1px solid rgba(83,168,255,.13); border-radius:18px; background:rgba(10,28,46,.74); }
+  .vendor-loading-line { display:block; height:12px; margin-top:12px; border-radius:5px; background:linear-gradient(90deg,rgba(83,168,255,.05),rgba(83,168,255,.13),rgba(83,168,255,.05)); animation:vendorShimmer 1.3s infinite; }
+  .vendor-loading-line.wide { width:55%; height:20px; margin-top:26px; }
+  .vendor-loading-line.short { width:34%; }
+  @keyframes vendorShimmer { 50% { opacity:.45; } }
+
+  .vendor-service-status {
+    display:flex; align-items:center; gap:7px; margin:10px 0;
+    padding:9px 11px; border:1px solid rgba(83,168,255,.12);
+    border-radius:10px; background:rgba(255,255,255,.025);
+  }
+  .vendor-service-status-dot { width:8px; height:8px; border-radius:50%; flex:0 0 auto; background:#22c55e; box-shadow:0 0 10px rgba(34,197,94,.45); }
+  .vendor-service-status strong { font-size:8px; letter-spacing:.1em; color:#b8d7ed; }
+  .vendor-service-status small { margin-left:auto; color:#728ba2; font-size:8px; }
+  .vendor-service-status.status-busy { border-color:rgba(245,158,11,.18); }
+  .vendor-service-status.status-busy .vendor-service-status-dot { background:#f59e0b; box-shadow:0 0 10px rgba(245,158,11,.4); }
+  .vendor-service-status.status-offline { border-color:rgba(239,68,68,.18); }
+  .vendor-service-status.status-offline .vendor-service-status-dot { background:#ef4444; box-shadow:0 0 10px rgba(239,68,68,.4); }
+  .vendor-service-status.status-offline strong { color:#ff9a9a; }
+
+  .vendor-service-status{display:flex;align-items:center;gap:7px;margin:10px 0;padding:9px 11px;border:1px solid rgba(83,168,255,.12);border-radius:10px;background:rgba(255,255,255,.025)}
+  .vendor-service-status-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:#22c55e;box-shadow:0 0 10px rgba(34,197,94,.45)}
+  .vendor-service-status strong{font-size:8px;letter-spacing:.1em;color:#b8d7ed}.vendor-service-status small{margin-left:auto;color:#728ba2;font-size:8px}
+  .vendor-service-status.status-busy{border-color:rgba(245,158,11,.18)}.vendor-service-status.status-busy .vendor-service-status-dot{background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,.4)}
+  .vendor-service-status.status-offline{border-color:rgba(239,68,68,.18)}.vendor-service-status.status-offline .vendor-service-status-dot{background:#ef4444;box-shadow:0 0 10px rgba(239,68,68,.4)}
+  .vendor-service-status.status-offline strong{color:#ff9a9a}
+  .vendor-service-status-controls{display:flex;gap:6px;margin:8px 0 10px}.vendor-status-button{border:1px solid rgba(83,168,255,.12);border-radius:7px;background:#0d2035;color:#91aac1;padding:6px 9px;font-size:8px;cursor:pointer}.vendor-status-button.is-active{background:#1687ff;border-color:#1687ff;color:#fff}
+  .vendor-header-actions{display:flex;align-items:center;gap:9px}
+  .vendor-header-service-control{position:relative;z-index:20}
+  .vendor-header-status-toggle{
+    display:flex;align-items:center;gap:9px;min-width:188px;min-height:54px;padding:8px 11px;
+    border:1px solid rgba(83,168,255,.22);border-radius:14px;background:rgba(8,27,45,.96);
+    color:#eaf6ff;cursor:pointer;box-shadow:0 12px 30px rgba(7,28,48,.20),0 1px 0 rgba(255,255,255,.07) inset;
+  }
+  .vendor-header-status-toggle:hover{border-color:rgba(83,168,255,.48);transform:translateY(-1px)}
+  .vendor-header-status-dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto;background:#22c55e;box-shadow:0 0 14px rgba(34,197,94,.55)}
+  .vendor-header-status-dot.status-busy{background:#f59e0b;box-shadow:0 0 14px rgba(245,158,11,.55)}
+  .vendor-header-status-dot.status-offline{background:#ef4444;box-shadow:0 0 14px rgba(239,68,68,.55)}
+  .vendor-header-status-copy{display:flex;flex-direction:column;align-items:flex-start;min-width:0;text-align:left}
+  .vendor-header-status-copy strong{font:800 10px/1 'Space Grotesk',sans-serif;letter-spacing:.12em;color:#eff8ff}
+  .vendor-header-status-copy small{margin-top:4px;color:#7791a8;font-size:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:118px}
+  .vendor-header-status-toggle.status-busy{border-color:rgba(245,158,11,.28)}
+  .vendor-header-status-toggle.status-offline{border-color:rgba(239,68,68,.28)}
+  .vendor-header-status-chevron{margin-left:auto;color:#74bdf1;font-size:16px;line-height:1;transform:translateY(-1px)}
+  .vendor-header-status-menu{
+    position:absolute;right:0;top:calc(100% + 7px);width:188px;padding:6px;
+    border:1px solid rgba(83,168,255,.22);border-radius:13px;background:#0a2035;
+    box-shadow:0 20px 45px rgba(3,16,28,.38);backdrop-filter:blur(16px)
+  }
+  .vendor-header-status-option{
+    display:flex;width:100%;align-items:center;justify-content:space-between;padding:10px 11px;
+    border:0;border-radius:8px;background:transparent;color:#9db4c7;font-size:9px;font-weight:700;cursor:pointer;text-align:left
+  }
+  .vendor-header-status-option:hover{background:rgba(83,168,255,.09);color:#e7f5ff}
+  .vendor-header-status-option.is-active{background:rgba(22,135,255,.14);color:#6fc5ff}
+  @media(max-width:850px){
+    .vendor-portal{padding:22px 16px 34px}
+    .vendor-hero{padding-top:38px}
+    .vendor-root-grid,.vendor-category-grid,.vendor-dashboard-grid{grid-template-columns:1fr}
+    .vendor-dashboard-overview{grid-column:auto}
+    .vendor-stat-grid{grid-template-columns:repeat(2,1fr)}
+  }
+
+  @media(max-width:560px){
+    .vendor-portal-header{align-items:flex-start}
+    .vendor-header-actions{align-items:flex-start}
+    .vendor-header-service-control{max-width:54px}
+    .vendor-header-status-toggle{min-width:54px;width:54px;height:54px;padding:0;justify-content:center}
+    .vendor-header-status-copy,.vendor-header-status-chevron{display:none}
+    .vendor-header-status{display:none}
+    .vendor-header-status-menu{right:0;width:170px}
+    .vendor-header-status{padding:6px 8px}
+    .vendor-hero{padding:32px 0 21px}
+    .vendor-large-card{min-height:245px;padding:20px}
+    .vendor-large-icon{margin-top:30px}
+    .vendor-large-title{font-size:24px}
+    .vendor-service-card{min-height:220px}
+    .vendor-order-card{align-items:flex-start}
+    .vendor-order-action{margin-top:23px}
+    .vendor-history-row{grid-template-columns:1fr 1fr}
+  }
+</style>
