@@ -1,0 +1,9 @@
+---
+import MainLayout from '../../../layouts/MainLayout.astro';
+import VendorPortalPage from '../../../components/campusmaas/VendorPortalPage.astro';
+
+const { optionId } = Astro.params;
+---
+<MainLayout title="CampusMaaS · Food Service">
+  <VendorPortalPage pageKind="detail" vendorId="food" optionId={optionId} />
+</MainLayout>
