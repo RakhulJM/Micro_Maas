@@ -79,10 +79,15 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         ? item.options.find((child) => String(child.id) === String(id))
         : null;
 
-    const route = (parentId, childId) =>
-      childId
-        ? '/vendor/' + encodeURIComponent(parentId) + '/' + encodeURIComponent(childId)
-        : '/vendor/' + encodeURIComponent(parentId);
+    const routeParent = (parentId) =>
+      String(parentId) === 'printer' ? 'print' : String(parentId);
+
+    const route = (parentId, childId) => {
+      const parent = routeParent(parentId);
+      return childId
+        ? '/vendor/' + encodeURIComponent(parent) + '/' + encodeURIComponent(childId)
+        : '/vendor/' + encodeURIComponent(parent);
+    };
 
     const iconLetter = (id) =>
       String(id).toLowerCase() === 'food' ? 'F' :
@@ -338,7 +343,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       title.textContent = child.name;
       headerTitle.textContent = child.name;
       subtitle.textContent = 'Vendor dashboard';
-      back.href = '/vendor/' + encodeURIComponent(item.id);
+      back.href = route(item.id);
 
       content.className = 'vendor-content-grid vendor-dashboard-grid';
       content.innerHTML = '';
