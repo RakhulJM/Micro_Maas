@@ -935,11 +935,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       const rightColumn = create('div', 'vendor-dashboard-side-column');
 
       const waiting = create('section', 'vendor-history-card vendor-waiting-card');
-      const readyOrders = allOrders.filter(
-        (order) => String(order.status || '').toLowerCase() === 'ready'
-      );
-
-      append(
+            append(
         waiting,
         makeHeader('WAITING', 'Waiting for confirmation', String(readyOrders.length))
       );
@@ -1164,7 +1160,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
   };
 
   window.addEventListener('pagehide', () => {
-    if (liveSyncTimer) window.clearInterval(liveSyncTimer);
+    // Portal polling is tied to the current page instance.
   }, { once: true });
 
   if (document.readyState === 'loading') {
