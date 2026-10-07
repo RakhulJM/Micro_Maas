@@ -2018,6 +2018,7 @@
       const editCard = document.getElementById('editCard');
       const editStatus = document.getElementById('editStatus');
       const pathTypePalette = document.getElementById('pathTypePalette');
+      const groundShapePalette = document.getElementById('groundShapePalette');
       const editNewPath = document.getElementById('editNewPath');
       const editUndo = document.getElementById('editUndo');
       const editFinish = document.getElementById('editFinish');
@@ -2058,6 +2059,9 @@
       let drawingMarkers = [];
       let drawingLine = null;
       let drawingLineCasing = null;
+      let drawingArea = null;
+      let drawingShapeType = 'freehand';
+      let drawingClosed = false;
       let drawingSnapMarker = null;
 
       let gateEditDirty = false;
@@ -2113,6 +2117,7 @@
         const enabled = Boolean(editModeToggle?.checked);
         editModeEnabled = enabled;
         showEditIcon(enabled);
+        syncGroundShapePalette();
         showGateIcon(enabled);
 
         /*
@@ -2153,11 +2158,14 @@
         drawingMarkers.forEach((marker) => map.removeLayer(marker));
         if (drawingLine) map.removeLayer(drawingLine);
         if (drawingLineCasing) map.removeLayer(drawingLineCasing);
+        if (drawingArea) map.removeLayer(drawingArea);
         clearDrawingSnap();
         drawingMarkers = [];
         drawingPoints = [];
         drawingLine = null;
         drawingLineCasing = null;
+        drawingArea = null;
+        drawingClosed = false;
       };
 
       const clearDefaultVertices = () => {
@@ -2233,10 +2241,53 @@
           });
       };
 
+      const syncGroundShapePalette = () => {
+        const visible = editModeEnabled && drawingModeActive && activePathType === 'Ground';
+
+        groundShapePalette?.classList.toggle('is-open', visible);
+        groundShapePalette?.setAttribute('aria-hidden', String(!visible));
+
+        groundShapePalette
+          ?.querySelectorAll('[data-ground-shape]')
+          .forEach((option) => {
+            const selected =
+              option.getAttribute('data-ground-shape') === drawingShapeType;
+
+            option.classList.toggle('is-selected', selected);
+            option.setAttribute('aria-pressed', String(selected));
+          });
+      };
+
+      const setGroundShape = (shape) => {
+        if (!['square', 'circle', 'freehand', 'polygon'].includes(shape)) return;
+
+        drawingShapeType = shape;
+        drawingClosed = false;
+        syncGroundShapePalette();
+
+        if (drawingModeActive) {
+          clearDrawing();
+          editStatus.textContent =
+            shape === 'square'
+              ? 'Ground · Square · click a corner then the opposite corner'
+              : shape === 'circle'
+                ? 'Ground · Circle · click center then edge'
+                : shape === 'polygon'
+                  ? 'Ground · Polygon · click points · click the first point to close'
+                  : 'Ground · Free line · click points then Finish';
+        }
+      };
+
       const setActivePathType = (category) => {
         if (!pathTypeValues.includes(category)) return;
+
         activePathType = category;
+        if (category === 'Ground' && !['square', 'circle', 'freehand', 'polygon'].includes(drawingShapeType)) {
+          drawingShapeType = 'freehand';
+        }
+
         syncPathTypePalette();
+        syncGroundShapePalette();
       };
 
       const applyPathType = (category) => {
@@ -2247,7 +2298,13 @@
         if (!selectedPath || drawingModeActive) {
           if (drawingModeActive) {
             editStatus.textContent =
-              'New path type: ' + category;
+              category === 'Ground'
+                ? 'Ground · ' + (
+                    drawingShapeType === 'square' ? 'Square' :
+                    drawingShapeType === 'circle' ? 'Circle' :
+                    drawingShapeType === 'polygon' ? 'Polygon' : 'Free line'
+                  )
+                : 'New path type: ' + category;
           }
           return;
         }
@@ -2277,6 +2334,8 @@
         closeDeletePathModal();
         pathTypePalette?.classList.remove('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'true');
+        groundShapePalette?.classList.remove('is-open');
+        groundShapePalette?.setAttribute('aria-hidden', 'true');
         clearDrawing();
         clearEditableVertices();
         clearSelectedPath();
@@ -2314,10 +2373,32 @@
       const renderDrawingLine = () => {
         if (drawingLine) map.removeLayer(drawingLine);
         if (drawingLineCasing) map.removeLayer(drawingLineCasing);
+        if (drawingArea) map.removeLayer(drawingArea);
 
-        if (drawingPoints.length < 2) {
-          drawingLine = null;
-          drawingLineCasing = null;
+        drawingLine = null;
+        drawingLineCasing = null;
+        drawingArea = null;
+
+        if (drawingPoints.length < 2) return;
+
+        const previewPoints = drawingClosed
+          ? [...drawingPoints, drawingPoints[0]]
+          : drawingPoints;
+
+        if (activePathType === 'Ground' && drawingShapeType !== 'freehand' && previewPoints.length >= 3) {
+          drawingArea = L.polygon(previewPoints, {
+            pane: 'drawingPreviewPane',
+            color: '#4f9d69',
+            weight: 3,
+            opacity: 0.95,
+            fillColor: '#4f9d69',
+            fillOpacity: 0.20,
+            lineCap: 'round',
+            lineJoin: 'round',
+            interactive: false
+          }).addTo(map);
+
+          drawingArea.bringToFront();
           return;
         }
 
@@ -2327,7 +2408,7 @@
          * blue center makes it obvious that this is the path currently being
          * created.
          */
-        drawingLineCasing = L.polyline(drawingPoints, {
+        drawingLineCasing = L.polyline(previewPoints, {
           pane: 'drawingPreviewPane',
           color: '#ffffff',
           weight: Math.max(editorPreviewWeight + 4, 8),
@@ -2337,7 +2418,7 @@
           interactive: false
         }).addTo(map);
 
-        drawingLine = L.polyline(drawingPoints, {
+        drawingLine = L.polyline(previewPoints, {
           pane: 'drawingPreviewPane',
           color: '#0f4fd8',
           weight: Math.max(editorPreviewWeight + 1, 5),
@@ -2360,13 +2441,17 @@
         type: 'FeatureCollection',
         features: (pedestrianPathData.features || []).map((feature) => ({
           type: 'Feature',
+          id: feature.id,
           properties: {
             category: pathTypeValues.includes(feature?.properties?.category)
               ? feature.properties.category
-              : 'Pedestrian Path'
+              : 'Pedestrian Path',
+            ...(feature?.properties?.ground_shape
+              ? { ground_shape: feature.properties.ground_shape }
+              : {})
           },
           geometry: {
-            type: 'LineString',
+            type: feature?.geometry?.type || 'LineString',
             coordinates: cloneJson(feature?.geometry?.coordinates || [])
           }
         }))
@@ -2599,7 +2684,20 @@
           });
         });
 
+      groundShapePalette
+        ?.querySelectorAll('[data-ground-shape]')
+        .forEach((option) => {
+          option.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const shape = option.getAttribute('data-ground-shape');
+            setGroundShape(shape);
+          });
+        });
+
       syncPathTypePalette();
+      syncGroundShapePalette();
 
       const selectEditablePoint = (featureId, vertexIndex) => {
         // Existing points are only targets while drawing; they must never
@@ -2777,6 +2875,7 @@
 
         pathTypePalette?.classList.add('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'false');
+        syncGroundShapePalette();
 
         pedestrianPathsActive = true;
         pedestrianPathCasing?.addTo(map);
@@ -2799,6 +2898,10 @@
         if (!editModeEnabled) return;
 
         clearEditableVertices();
+        if (activePathType !== 'Ground') {
+          drawingShapeType = 'freehand';
+        }
+        syncGroundShapePalette();
         clearSelectedPath();
         clearDrawing();
 
@@ -2809,6 +2912,7 @@
 
         pointEditorActive = false;
         drawingModeActive = true;
+        drawingClosed = false;
 
         pathTypePalette?.classList.add('is-open');
         pathTypePalette?.setAttribute('aria-hidden', 'false');
@@ -2980,6 +3084,91 @@
         return findDrawingSnap(point).latlng;
       };
 
+      const commitDrawingFeature = (geometry, properties = {}) => {
+        const customId = 'custom-' + Date.now();
+
+        pedestrianPathData.features.push({
+          type: 'Feature',
+          id: customId,
+          properties: {
+            category: activePathType,
+            ...properties
+          },
+          geometry
+        });
+
+        markPathEditsDirty();
+        rebuildPedestrianRouting();
+        refreshPedestrianLayers();
+
+        clearDrawing();
+        drawingModeActive = false;
+        syncGroundShapePalette();
+        startPointEditorMode();
+      };
+
+      const localMetersFromLatLng = (origin, point) => {
+        const cosLat = Math.cos(origin.lat * Math.PI / 180);
+        return {
+          x: (point.lng - origin.lng) * 111320 * cosLat,
+          y: (point.lat - origin.lat) * 111320
+        };
+      };
+
+      const latLngFromLocalMeters = (origin, local) => {
+        const cosLat = Math.max(0.1, Math.cos(origin.lat * Math.PI / 180));
+        return L.latLng(
+          origin.lat + local.y / 111320,
+          origin.lng + local.x / (111320 * cosLat)
+        );
+      };
+
+      const squareFromTwoPoints = (first, second) => {
+        const vector = localMetersFromLatLng(first, second);
+        const side = Math.hypot(vector.x, vector.y);
+        if (side < 0.5) return null;
+
+        const perpendicular = {
+          x: -vector.y,
+          y: vector.x
+        };
+
+        const third = {
+          x: vector.x + perpendicular.x,
+          y: vector.y + perpendicular.y
+        };
+        const fourth = {
+          x: perpendicular.x,
+          y: perpendicular.y
+        };
+
+        return [
+          first,
+          second,
+          latLngFromLocalMeters(first, third),
+          latLngFromLocalMeters(first, fourth)
+        ];
+      };
+
+      const circleFromTwoPoints = (center, edge) => {
+        const radius = center.distanceTo(edge);
+        if (radius < 0.5) return null;
+
+        const points = [];
+        const segments = 48;
+
+        for (let index = 0; index < segments; index += 1) {
+          const angle = (Math.PI * 2 * index) / segments;
+          const local = {
+            x: Math.cos(angle) * radius,
+            y: Math.sin(angle) * radius
+          };
+          points.push(latLngFromLocalMeters(center, local));
+        }
+
+        return points;
+      };
+
       const finishCustomPath = () => {
         if (drawingPoints.length < 2) {
           editStatus.textContent = 'Add at least 2 points';
@@ -2987,7 +3176,100 @@
         }
 
         const effectiveDrawingPoints = drawingPoints.map((point) => snapDrawingPoint(point));
-        const customId = 'custom-' + Date.now();
+
+        if (activePathType === 'Ground') {
+          if (drawingShapeType === 'square') {
+            const square = squareFromTwoPoints(effectiveDrawingPoints[0], effectiveDrawingPoints[1]);
+            if (!square) {
+              editStatus.textContent = 'Choose two points farther apart';
+              return;
+            }
+
+            drawingPoints = square;
+            drawingClosed = true;
+            renderDrawingLine();
+
+            const geometry = {
+              type: 'Polygon',
+              coordinates: [[
+                ...square.map((point) => [
+                  Number(point.lng.toFixed(7)),
+                  Number(point.lat.toFixed(7))
+                ]),
+                [
+                  Number(square[0].lng.toFixed(7)),
+                  Number(square[0].lat.toFixed(7))
+                ]
+              ]]
+            };
+
+            commitDrawingFeature(geometry, { ground_shape: 'square' });
+            editStatus.textContent = 'Ground square saved · walkable area';
+            return;
+          }
+
+          if (drawingShapeType === 'circle') {
+            const circle = circleFromTwoPoints(effectiveDrawingPoints[0], effectiveDrawingPoints[1]);
+            if (!circle) {
+              editStatus.textContent = 'Choose two points farther apart';
+              return;
+            }
+
+            drawingPoints = circle;
+            drawingClosed = true;
+            renderDrawingLine();
+
+            const geometry = {
+              type: 'Polygon',
+              coordinates: [[
+                ...circle.map((point) => [
+                  Number(point.lng.toFixed(7)),
+                  Number(point.lat.toFixed(7))
+                ]),
+                [
+                  Number(circle[0].lng.toFixed(7)),
+                  Number(circle[0].lat.toFixed(7))
+                ]
+              ]]
+            };
+
+            commitDrawingFeature(geometry, { ground_shape: 'circle' });
+            editStatus.textContent = 'Ground circle saved · walkable area';
+            return;
+          }
+
+          if (drawingShapeType === 'polygon') {
+            if (drawingPoints.length < 3) {
+              editStatus.textContent = 'Polygon needs at least 3 points';
+              return;
+            }
+
+            const ring = effectiveDrawingPoints.map((point) => [
+              Number(point.lng.toFixed(7)),
+              Number(point.lat.toFixed(7))
+            ]);
+
+            const first = ring[0];
+            if (
+              ring.length < 4 ||
+              ring[ring.length - 1][0] !== first[0] ||
+              ring[ring.length - 1][1] !== first[1]
+            ) {
+              ring.push(first);
+            }
+
+            const geometry = {
+              type: 'Polygon',
+              coordinates: [ring]
+            };
+
+            drawingClosed = true;
+            renderDrawingLine();
+            commitDrawingFeature(geometry, { ground_shape: 'polygon' });
+            editStatus.textContent = 'Ground polygon saved · walkable area';
+            return;
+          }
+        }
 
         const geometry = {
           type: 'LineString',
@@ -2997,21 +3279,9 @@
           ])
         };
 
-        pedestrianPathData.features.push({
-          type: 'Feature',
-          id: customId,
-          properties: {
-            category: activePathType
-          },
-          geometry
-        });
-        markPathEditsDirty();
-
-        rebuildPedestrianRouting();
-        refreshPedestrianLayers();
-
-        drawingModeActive = false;
-        startPointEditorMode();
+        commitDrawingFeature(geometry, activePathType === 'Ground'
+          ? { ground_shape: 'freehand' }
+          : {});
         editStatus.textContent = 'Custom path saved · all points active';
       };
 
@@ -4438,12 +4708,51 @@
          * then original vertices, then the nearest path segment.
          */
         const clicked = L.latLng(event.latlng.lat, event.latlng.lng);
+
+        if (
+          activePathType === 'Ground' &&
+          drawingShapeType === 'polygon' &&
+          drawingPoints.length >= 3
+        ) {
+          const firstPoint = drawingPoints[0];
+
+          if (clicked.distanceTo(firstPoint) <= snapToleranceMeters) {
+            const first = snapDrawingPoint(firstPoint);
+            drawingPoints = drawingPoints.slice(0, -0);
+            drawingClosed = true;
+            renderDrawingLine();
+            finishCustomPath();
+            return;
+          }
+        }
+
         const snap = findDrawingSnap(clicked);
         const connected = snap.type !== 'free';
         const point = snap.latlng;
 
         drawingPoints.push(point);
         drawingMarkers.push(createEditPointMarker(point, drawingPoints.length));
+
+        if (
+          activePathType === 'Ground' &&
+          drawingShapeType === 'square' &&
+          drawingPoints.length === 2
+        ) {
+          finishCustomPath();
+          clearDrawingSnap();
+          return;
+        }
+
+        if (
+          activePathType === 'Ground' &&
+          drawingShapeType === 'circle' &&
+          drawingPoints.length === 2
+        ) {
+          finishCustomPath();
+          clearDrawingSnap();
+          return;
+        }
+
         renderDrawingLine();
         clearDrawingSnap();
 
@@ -4457,11 +4766,14 @@
           segment: 'connected to existing path'
         }[snap.type];
 
-        editStatus.textContent = drawingPoints.length +
-          ' point' + (drawingPoints.length === 1 ? '' : 's') +
-          (connected
-            ? ' · ' + (connectionText || 'connected to routing network')
-            : ' · Finish when ready');
+        editStatus.textContent =
+          activePathType === 'Ground' && drawingShapeType === 'polygon'
+            ? drawingPoints.length + ' point' + (drawingPoints.length === 1 ? '' : 's') + ' · click first point to close'
+            : drawingPoints.length +
+              ' point' + (drawingPoints.length === 1 ? '' : 's') +
+              (connected
+                ? ' · ' + (connectionText || 'connected to routing network')
+                : ' · Finish when ready');
       });
 
       map.on('mousemove', (event) => {
