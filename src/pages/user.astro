@@ -1522,7 +1522,7 @@ const start = async () => {
               confirm.textContent = 'CONFIRM COLLECTED';
             }
           });
-          side.appendChild(confirm);
+          el.appendChild(confirm);
         }
 
         el.append(details, side);
@@ -2901,7 +2901,7 @@ void start().catch((error) => {
 .user-orders-head>span{color:#748ca5;font-size:8px}
 .user-orders-title{display:none}
   .user-order-side{display:flex;flex-direction:column;align-items:flex-end;gap:7px}
-  .user-order-confirm{padding:7px 9px;border:1px solid #16a34a;border-radius:8px;background:#fff;color:#15803d;font-size:7px;font-weight:800;letter-spacing:.04em;cursor:pointer}
+  .user-order-confirm{display:block;width:fit-content;min-width:150px;margin:10px auto 0;padding:8px 12px;border:1px solid #16a34a;border-radius:8px;background:#fff;color:#15803d;font-size:7px;font-weight:800;letter-spacing:.04em;cursor:pointer;text-align:center}
   .user-order-confirm:hover{background:#f0fdf4}
   .user-order-confirm:disabled{opacity:.55;cursor:wait}
 .user-order-list{display:grid;gap:6px;margin-top:9px}
