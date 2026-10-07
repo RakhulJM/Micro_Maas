@@ -55,9 +55,13 @@ const pedestrianNetworkSavePlugin = () => ({
             p.files.forEach((file,index)=>{
               const name=String(file?.name||'file-'+(index+1)).trim();
               const copies=Math.max(1,Math.min(99,Math.floor(Number(file?.copies)||0)));
+              const sides=String(file?.sides||'single').toLowerCase();
+              const color=String(file?.color||'bw').toLowerCase();
               const size=Math.max(0,Number(file?.size)||0);
               const data=String(file?.data_base64||'');
               if(!name)throw Error('Invalid print file name.');
+              if(!['single','double'].includes(sides))throw Error('Invalid print sides.');
+              if(!['bw','color'].includes(color))throw Error('Invalid print colour.');
               if(!data)throw Error('Print file data is missing.');
               if(size!==0&&size>50*1024*1024)throw Error('Print files must be 50 MB or smaller each.');
               if(!/^[A-Za-z0-9+/]*={0,2}$/.test(data))throw Error('Invalid print file data.');
@@ -69,7 +73,7 @@ const pedestrianNetworkSavePlugin = () => ({
               const safeName=name.replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim().slice(0,180)||('file-'+(index+1));
               const storedName=String(index+1).padStart(3,'0')+'-'+safeName;
               fs.writeFileSync(path.join(orderDir,storedName),buffer);
-              storedFiles.push({name,type:String(file?.type||'application/octet-stream').slice(0,200),size:buffer.length,copies,stored_path:path.posix.join('maps','print_orders',orderId,storedName)});
+              storedFiles.push({name,type:String(file?.type||'application/octet-stream').slice(0,200),size:buffer.length,copies,sides,color,stored_path:path.posix.join('maps','print_orders',orderId,storedName)});
             });
             const total=(Number(o.price)||0)*totalCopies;
             order={id:orderId,user_id:String(p.user_id||'anonymous').slice(0,80),vendor_id:v.id,vendor_name:v.name,option_id:o.id,option_name:o.name,files:storedFiles,quantity:totalCopies,total_price:total,service_minutes:Number(o.service_minutes)||0,status:'placed',created_at:new Date().toISOString()};
