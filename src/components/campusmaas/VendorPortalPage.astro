@@ -186,7 +186,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       state.orders.orders.filter((order) => {
         if (String(order.vendor_id) !== String(id)) return false;
         if (optionId && String(order.option_id) !== String(optionId)) return false;
-        if (['completed', 'cancelled'].includes(String(order.status || '').toLowerCase())) return false;
+        const status = String(order.status || '').toLowerCase();
+        if (!['placed', 'accepted', 'preparing'].includes(status)) return false;
         return !requireFiles || (Array.isArray(order.files) && order.files.length);
       });
 
@@ -632,10 +633,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       append(card, main);
 
       const actions = {
-        placed: ['Accept', 'accepted'],
-        accepted: ['Start preparing', 'preparing'],
-        preparing: ['Mark ready', 'ready'],
-        ready: ['Complete', 'completed']
+        placed: ['Accept', 'preparing'],
+        accepted: ['Mark ready', 'ready'],
+        preparing: ['Mark ready', 'ready']
       };
 
       const next = actions[order.status];
@@ -693,8 +693,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
           String(order.option_id) === String(child.id)
       );
 
-      const active = allOrders.filter(
-        (order) => !['completed', 'cancelled'].includes(order.status)
+      const active = allOrders.filter((order) =>
+        ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
       );
 
       const stats = {
@@ -704,7 +704,6 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         ready: active.filter((order) => order.status === 'ready').length
       };
       const serviceStatus = String(child.status || 'online').toLowerCase();
-      const serviceStatusLabel = serviceStatus === 'offline' ? 'Offline' : serviceStatus === 'busy' ? 'Busy' : 'Online';
       const serviceStatusMessage = child.status_message || (
         serviceStatus === 'offline' ? 'Currently unavailable' :
         serviceStatus === 'busy' ? 'Currently serving customers' : 'Accepting new orders'
@@ -758,14 +757,6 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         statGrid.appendChild(box);
       });
 
-      const statusCard = create('div', 'vendor-service-status status-' + serviceStatus);
-      append(
-        statusCard,
-        create('span', 'vendor-service-status-dot'),
-        create('strong', serviceStatusLabel.toUpperCase()),
-        create('small', '', serviceStatusMessage)
-      );
-
       const facts = create('div', 'vendor-service-facts');
       append(
         facts,
@@ -773,7 +764,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         create('span', '', 'Price ' + formatPrice(child.price))
       );
 
-      append(overview, dashboardTitle, statusCard, statGrid, facts);
+      append(overview, dashboardTitle, statGrid, facts);
       content.appendChild(overview);
 
       const live = create('section', 'vendor-dashboard-orders');
