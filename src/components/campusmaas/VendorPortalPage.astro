@@ -249,13 +249,48 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         );
         append(card, info);
 
+        const statusControls = create('div', 'vendor-category-status-controls');
+        ['online', 'busy', 'offline'].forEach((value) => {
+          const button = create('button', 'vendor-status-button vendor-category-status-button', value[0].toUpperCase() + value.slice(1));
+          button.type = 'button';
+          button.classList.toggle('is-active', serviceStatus === value);
+          button.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            button.disabled = true;
+            try {
+              const nextCatalogue = structuredClone(state.catalogue);
+              const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
+              const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
+              if (!target) throw new Error('Service not found.');
+              target.status = value;
+              target.status_message = value === 'offline'
+                ? 'Currently unavailable'
+                : value === 'busy'
+                  ? 'Currently serving customers'
+                  : 'Accepting new orders';
+              const response = await fetch('/__campusmaas/save-vendors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(nextCatalogue)
+              });
+              if (!response.ok) throw new Error('Status update failed.');
+              state.catalogue = nextCatalogue;
+              render();
+            } catch {
+              button.disabled = false;
+            }
+          });
+          statusControls.appendChild(button);
+        });
+
         const footer = create('div', 'vendor-service-footer');
         append(
           footer,
           create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
           create('span', '', 'Open →')
         );
-        append(card, footer);
+        append(card, statusControls, footer);
         content.appendChild(card);
       });
 
