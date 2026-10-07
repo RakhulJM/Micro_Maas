@@ -347,8 +347,11 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         serviceOrders.forEach((order) => {
           totalQuantity += Number(order.quantity) || 1;
           const service = option(vendor(ordersVendorId), order.option_id);
+          const status = String(service?.status || 'online').toLowerCase();
           list.appendChild(
-            makeOrderCard(order, String(service?.status || 'online').toLowerCase())
+            String(ordersVendorId) === 'food'
+              ? makeFoodOrderCard(order, status)
+              : makeOrderCard(order, status)
           );
         });
 
@@ -680,6 +683,75 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 
       append(main, top, service, meta);
       append(card, main);
+
+      const actions = {
+        placed: ['Accept', 'preparing'],
+        accepted: ['Mark ready', 'ready'],
+        preparing: ['Mark ready', 'ready']
+      };
+
+      const next = actions[order.status];
+      if (next && currentServiceStatus !== 'offline') {
+        const action = create('button', 'vendor-order-action', next[0]);
+        action.type = 'button';
+        action.dataset.orderId = order.id;
+        action.dataset.nextStatus = next[1];
+        action.addEventListener('click', async () => {
+          action.disabled = true;
+          action.textContent = 'Saving…';
+
+          try {
+            const response = await fetch('/__campusmaas/update-order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: order.id, status: next[1] })
+            });
+
+            if (!response.ok) throw new Error('Order update failed.');
+
+            order.status = next[1];
+            render();
+          } catch {
+            action.disabled = false;
+            action.textContent = next[0];
+          }
+        });
+        append(card, action);
+      }
+
+      return card;
+    };
+
+    const makeFoodOrderCard = (order, currentServiceStatus = 'online') => {
+      const card = create('article', 'vendor-order-card vendor-food-order-card');
+
+      const top = create('div', 'vendor-order-top');
+      const id = create('strong', '', '#' + order.id);
+      const chip = create('span', orderStatusClass(order.status), orderStatusLabel(order.status));
+      const dot = create('i');
+      chip.prepend(dot);
+      append(top, id, chip);
+
+      const items = create('div', 'vendor-food-order-items');
+      const foodItems = Array.isArray(order.items) ? order.items : [];
+
+      foodItems.forEach((item) => {
+        const row = create('div', 'vendor-food-order-item');
+        append(
+          row,
+          create('span', 'vendor-food-order-item-name', item.menu_item_name || item.name || 'Food item'),
+          create('span', 'vendor-food-order-item-count', '× ' + (Number(item.quantity) || 1))
+        );
+        items.appendChild(row);
+      });
+
+      if (!foodItems.length) {
+        items.appendChild(
+          create('div', 'vendor-food-order-empty', 'No food items listed.')
+        );
+      }
+
+      append(card, top, items);
 
       const actions = {
         placed: ['Accept', 'preparing'],
@@ -1218,6 +1290,12 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
   .vendor-section-heading>b { padding:5px 7px; border:1px solid rgba(83,168,255,.10); border-radius:999px; background:rgba(255,255,255,.025); color:#79a4c5; font-size:7px; }
 
   .vendor-orders-grid { display:grid; gap:7px; }
+  .vendor-food-order-items{display:grid;gap:4px;margin:12px 0 2px}
+  .vendor-food-order-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 9px;border:1px solid rgba(83,145,190,.12);border-radius:8px;background:rgba(255,255,255,.035)}
+  .vendor-food-order-item-name{min-width:0;color:#dcecf8;font-size:9px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vendor-food-order-item-count{flex:0 0 auto;color:#67c6ff;font-size:9px;font-weight:800}
+  .vendor-food-order-empty{padding:8px 0;color:#8398aa;font-size:8px}
+  .vendor-food-order-card .vendor-order-action{margin-top:8px}
   .vendor-order-card { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 11px; border:1px solid rgba(83,168,255,.08); border-radius:11px; background:rgba(255,255,255,.025); }
   .vendor-order-card-main { min-width:0; }
   .vendor-order-top { display:flex; align-items:center; gap:7px; }
