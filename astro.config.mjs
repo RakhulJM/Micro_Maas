@@ -90,6 +90,159 @@ const pedestrianNetworkSavePlugin = () => ({
         }
       });
     });
+    server.middlewares.use('/__campusmaas/print-file', (req, res, next) => {
+      if (req.method !== 'GET') {
+        next();
+        return;
+      }
+
+      try {
+        const parsed = new URL(req.url || '', 'http://localhost');
+        const orderId = parsed.searchParams.get('order_id');
+        const fileIndex = Number(parsed.searchParams.get('file_index'));
+        if (!orderId || !Number.isInteger(fileIndex) || fileIndex < 0) {
+          throw new Error('Invalid print file request.');
+        }
+
+        const orders = readJsonFile('maps/campus_orders.json');
+        const order = orders.orders.find(
+          (item) =>
+            item.id === orderId &&
+            item.vendor_id === 'printer' &&
+            Array.isArray(item.files)
+        );
+        const file = order?.files?.[fileIndex];
+        if (!order || !file?.stored_path) {
+          res.statusCode = 404;
+          res.end('Print file not found.');
+          return;
+        }
+
+        const absolutePath = path.resolve(process.cwd(), file.stored_path);
+        const printRoot = path.resolve(process.cwd(), 'maps', 'print_orders');
+        if (!(absolutePath === printRoot || absolutePath.startsWith(printRoot + path.sep)) ||
+            !fs.existsSync(absolutePath)) {
+          res.statusCode = 404;
+          res.end('Print file not found.');
+          return;
+        }
+
+        const mimeByExtension = {
+          '.pdf': 'application/pdf',
+          '.png': 'image/png',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.gif': 'image/gif',
+          '.webp': 'image/webp',
+          '.svg': 'image/svg+xml',
+          '.txt': 'text/plain; charset=utf-8',
+          '.csv': 'text/csv; charset=utf-8',
+          '.html': 'text/html; charset=utf-8'
+        };
+        const ext = path.extname(absolutePath).toLowerCase();
+        const mime = mimeByExtension[ext] || file.type || 'application/octet-stream';
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Content-Disposition', 'inline; filename="' + String(file.name || path.basename(absolutePath)).replace(/["\\]/g, '_') + '"');
+        res.end(fs.readFileSync(absolutePath));
+      } catch (error) {
+        res.statusCode = 400;
+        res.end(error instanceof Error ? error.message : 'Print file request failed.');
+      }
+    });
+
+    server.middlewares.use('/__campusmaas/print-batch', (req, res, next) => {
+      if (req.method !== 'GET') {
+        next();
+        return;
+      }
+
+      try {
+        const parsed = new URL(req.url || '', 'http://localhost');
+        const orderId = parsed.searchParams.get('order_id');
+        const indexes = String(parsed.searchParams.get('indexes') || '')
+          .split(',')
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value) && value >= 0);
+
+        if (!orderId || !indexes.length) {
+          throw new Error('Invalid print batch request.');
+        }
+
+        const orders = readJsonFile('maps/campus_orders.json');
+        const order = orders.orders.find(
+          (item) =>
+            item.id === orderId &&
+            item.vendor_id === 'printer' &&
+            Array.isArray(item.files)
+        );
+
+        if (!order) {
+          res.statusCode = 404;
+          res.end('Print order not found.');
+          return;
+        }
+
+        const uniqueIndexes = [...new Set(indexes)].filter((index) => order.files[index]);
+        const escapeHtml = (value) =>
+          String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+        const items = uniqueIndexes.map((index) => {
+          const file = order.files[index];
+          const url =
+            '/__campusmaas/print-file?order_id=' +
+            encodeURIComponent(order.id) +
+            '&file_index=' +
+            encodeURIComponent(String(index));
+          const name = escapeHtml(file.name || ('File ' + (index + 1)));
+          const copies = Number(file.copies) || 1;
+          const settings =
+            (file.color === 'color' ? 'Colour' : 'Black & White') +
+            ' · ' +
+            (file.sides === 'double' ? 'Both sides' : 'One side') +
+            ' · ' +
+            copies +
+            (copies === 1 ? ' copy' : ' copies');
+
+          const ext = path.extname(String(file.name || '')).toLowerCase();
+          const supportedImage = ['.png','.jpg','.jpeg','.gif','.webp','.svg'].includes(ext);
+          const supportedText = ['.txt','.csv'].includes(ext);
+          const body = supportedImage
+            ? '<img src="' + url + '" alt="' + name + '">'
+            : supportedText
+              ? '<iframe src="' + url + '" title="' + name + '"></iframe>'
+              : '<div class="unsupported"><strong>' + name + '</strong><span>This file type must be opened in its own application.</span><a href="' + url + '" target="_blank" rel="noreferrer">OPEN FILE</a></div>';
+
+          return '<section class="sheet"><header><strong>' + name + '</strong><small>' + escapeHtml(settings) + '</small></header>' + body + '</section>';
+        }).join('');
+
+        const label = escapeHtml(parsed.searchParams.get('label') || ('Order #' + order.id));
+
+        const html='<!doctype html><html><head><meta charset="utf-8"><title>' + label + '</title><style>' +
+          'body{margin:0;background:#e9eef3;color:#102132;font-family:Arial,sans-serif;padding:24px}' +
+          '.toolbar{position:sticky;top:0;display:flex;justify-content:space-between;gap:12px;padding:10px 0 16px;background:#e9eef3;z-index:2}' +
+          '.toolbar strong{font-size:14px}.toolbar button{border:0;border-radius:8px;background:#1687ff;color:#fff;padding:9px 14px;font-weight:700;cursor:pointer}' +
+          '.sheet{background:#fff;margin:0 auto 18px;max-width:760px;min-height:420px;padding:18px;box-sizing:border-box;box-shadow:0 10px 30px rgba(15,35,53,.12);break-after:page}' +
+          '.sheet header{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px}.sheet header strong{font-size:12px}.sheet header small{font-size:9px;color:#6f8395}' +
+          '.sheet img{display:block;max-width:100%;max-height:650px;margin:0 auto}.sheet iframe{width:100%;height:680px;border:0}.unsupported{display:grid;place-items:center;min-height:360px;text-align:center;gap:8px;color:#60778b}.unsupported strong{color:#18344d}.unsupported a{color:#1687ff}' +
+          '@media print{body{padding:0;background:#fff}.toolbar{display:none}.sheet{max-width:none;margin:0;box-shadow:none;min-height:100vh;padding:12mm}.sheet:last-child{break-after:auto}}' +
+          '</style></head><body><div class="toolbar"><strong>' + label + '</strong><button onclick="window.print()">PRINT</button></div>' +
+          items + '<script>setTimeout(function(){try{window.print()}catch(e){}},700)<\/script></body></html>';
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(html);
+      } catch (error) {
+        res.statusCode = 400;
+        res.end(error instanceof Error ? error.message : 'Print batch request failed.');
+      }
+    });
+
     server.middlewares.use('/__campusmaas/update-order',(req,res,next)=>{if(req.method!=='POST')return next();const chunks=[];req.on('data',c=>chunks.push(c));req.on('end',()=>{try{const p=jsonBody(chunks),allowed=new Set(['placed','accepted','preparing','ready','completed','cancelled']);if(!p?.id||!allowed.has(p.status))throw Error('Invalid order update.');const orders=readJsonFile('maps/campus_orders.json'),o=orders.orders.find(x=>x.id===p.id);if(!o)throw Error('Order not found.');o.status=p.status;o.updated_at=new Date().toISOString();writeJsonCopies('maps/campus_orders.json',orders);res.statusCode=200;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true}))}catch(e){res.statusCode=400;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:false,error:e.message||'Order update failed'}))}})});
     server.middlewares.use('/__campusmaas/save-gates', (req, res, next) => {
       if (req.method !== 'POST') {
