@@ -635,10 +635,7 @@ const start = async () => {
     if (userTripDistance) userTripDistance.textContent = formatDistance(summary.distance);
   };
 
-  let gateLayer = null;
-  let gateStyle = null;
-
-  const minutesFromClock = (value) => {
+    const minutesFromClock = (value) => {
     const [hours, minutes] = String(value || '00:00').split(':').map(Number);
     return hours * 60 + minutes;
   };
@@ -740,19 +737,6 @@ const start = async () => {
     return best;
   };
 
-  const updateUserGateVisuals = () => {
-    const time = campusClock();
-
-    if (gateLayer && typeof gateLayer.eachLayer === 'function') {
-      gateLayer.eachLayer((layer) => {
-        const feature = layer?.feature;
-        if (!feature) return;
-
-        layer.setStyle?.(gateStyle(feature, time));
-      });
-    }
-  };
-
   const handleUserMapClick = (event) => {
     const clicked = event.latlng;
     const gateCheck = validateUserGateClick(clicked);
@@ -791,9 +775,7 @@ const start = async () => {
     renderUserRoute();
   };
 
-  updateUserGateVisuals();
-
-  resetTripSummary();
+    resetTripSummary();
   map.on('click', handleUserMapClick);
 
   const colors = {
@@ -894,61 +876,15 @@ const start = async () => {
     interactive: false
   }).addTo(map);
 
-  gateStyle = (feature, time = campusClock()) => {
-    const name = String(feature?.properties?.name || '').toLowerCase();
-    const evaluation = evaluateStudentGate(feature, time);
-
-    if (name.replace(/\s/g, '') === 'gate-06') {
-      return {
-        color: '#1687ff',
-        weight: 2.4,
-        opacity: 1,
-        fillColor: '#1687ff',
-        fillOpacity: 0.34
-      };
-    }
-
-    if (name.replace(/\s/g, '') === 'gate-09') {
-      return {
-        color: evaluation.allowed ? '#16a34a' : '#dc2626',
-        weight: 2.4,
-        opacity: 1,
-        fillColor: evaluation.allowed ? '#16a34a' : '#dc2626',
-        fillOpacity: 0.28
-      };
-    }
-
-    return {
+  const gateLayer = L.geoJSON(gates, {
+    style: {
       color: '#475569',
       weight: 2,
       opacity: 0.95,
       fillColor: '#ffffff',
       fillOpacity: 0.18
-    };
-  };
-
-  gateLayer = L.geoJSON(gates, {
-    style: (feature) => gateStyle(feature),
-    interactive: true,
-    onEachFeature: (feature, layer) => {
-      const evaluation = evaluateStudentGate(feature);
-      const name = escapeHtml(feature?.properties?.name || 'Gate');
-      const description = evaluation.preferred
-        ? 'Preferred for students · priority ' + String(evaluation.priority)
-        : evaluation.allowed
-          ? 'Open for students now · entry + exit'
-          : 'Closed for students now · time restricted';
-
-      layer.bindPopup(
-        '<strong>' + name + '</strong><br>' +
-        '<span>' + escapeHtml(description) + '</span>'
-      );
-
-      layer.on('click', (event) => {
-        L.DomEvent.stopPropagation(event);
-        layer.openPopup();
-      });
-    }
+    },
+    interactive: false
   }).addTo(map);
 
   const buildingLabels = [];
@@ -1116,15 +1052,6 @@ void start().catch((error) => {
     font-family: 'Space Grotesk', sans-serif;
     font-size: 16px;
     font-weight: 650;
-  }
-
-  @media (max-width: 820px) {
-    .user-access-card {
-      top: auto;
-      right: 10px;
-      bottom: 10px;
-      width: min(326px, calc(100vw - 20px));
-    }
   }
 
   @media (max-width: 560px) {
