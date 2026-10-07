@@ -66,7 +66,7 @@ const pedestrianNetworkSavePlugin = () => ({
           const raw = Buffer.concat(chunks).toString('utf8');
           const payload = JSON.parse(raw);
 
-          const timePattern = /^([01]\\d|2[0-3]):[0-5]\\d$/;
+          const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
           const validModes = new Set(['preferred', 'allow_only_during']);
           const validDirections = new Set(['in_out', 'in', 'out']);
 
@@ -128,7 +128,7 @@ const pedestrianNetworkSavePlugin = () => ({
           const root = process.cwd();
           const sourcePath = path.join(root, 'maps', 'campus_access_rules.json');
           const publicPath = path.join(root, 'public', 'maps', 'campus_access_rules.json');
-          const output = JSON.stringify(payload, null, 2) + '\\n';
+          const output = JSON.stringify(payload, null, 2) + '\n';
 
           fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
           fs.mkdirSync(path.dirname(publicPath), { recursive: true });
