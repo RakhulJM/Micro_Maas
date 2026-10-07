@@ -463,24 +463,40 @@
 
       const createPedestrianLayers = () => {
         pedestrianPathCasing = L.geoJSON(pedestrianPathData, {
-          style: {
-            color: '#ffffff',
-            weight: basePedestrianCasingWeight,
-            opacity: 0.9,
-            lineCap: 'round',
-            lineJoin: 'round'
+          style: (feature) => {
+            const isGround =
+              normalizePathCategory(feature) === 'Ground' &&
+              feature?.geometry?.type === 'Polygon';
+
+            return {
+              color: '#ffffff',
+              weight: isGround ? 2 : basePedestrianCasingWeight,
+              opacity: 0.9,
+              fillColor: '#ffffff',
+              fillOpacity: isGround ? 0.08 : 0,
+              lineCap: 'round',
+              lineJoin: 'round'
+            };
           },
           interactive: false
         });
 
         pedestrianPaths = L.geoJSON(pedestrianPathData, {
-          style: (feature) => ({
-            color: pathTypeColor(feature),
-            weight: highlightPathWeight,
-            opacity: 1,
-            lineCap: 'round',
-            lineJoin: 'round'
-          }),
+          style: (feature) => {
+            const isGround =
+              normalizePathCategory(feature) === 'Ground' &&
+              feature?.geometry?.type === 'Polygon';
+
+            return {
+              color: pathTypeColor(feature),
+              weight: isGround ? 2.5 : highlightPathWeight,
+              opacity: 1,
+              fillColor: pathTypeColor(feature),
+              fillOpacity: isGround ? 0.22 : 0,
+              lineCap: 'round',
+              lineJoin: 'round'
+            };
+          },
           interactive: false
         });
 
@@ -940,7 +956,10 @@
               ? geometry.coordinates[0]
               : [];
 
-            if (ring.length >= 4 && pointInPolygon(ring[0], ring)) {
+            if (
+              ring.length >= 4 &&
+              graphKey(ring[0]) === graphKey(ring[ring.length - 1])
+            ) {
               const featureId = String(feature.id ?? ('feature-' + featureIndex));
               for (let index = 0; index < ring.length - 1; index += 1) {
                 const a = ring[index];
