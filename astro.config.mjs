@@ -10,6 +10,22 @@ const writeJsonCopies=(relativePath,payload)=>{const sourcePath=path.join(proces
 const pedestrianNetworkSavePlugin = () => ({
   name: 'campusmaas-pedestrian-network-save',
   configureServer(server) {
+    server.middlewares.use('/__campusmaas/vendor-data',(req,res,next)=>{
+      if(req.method!=='GET'){next();return;}
+      try{
+        const catalogue=readJsonFile('maps/campus_vendors.json');
+        const orders=readJsonFile('maps/campus_orders.json');
+        res.statusCode=200;
+        res.setHeader('Content-Type','application/json');
+        res.setHeader('Cache-Control','no-store');
+        res.end(JSON.stringify({catalogue,orders}));
+      }catch(error){
+        res.statusCode=500;
+        res.setHeader('Content-Type','application/json');
+        res.end(JSON.stringify({ok:false,error:error instanceof Error?error.message:'Vendor data unavailable'}));
+      }
+    });
+
     server.middlewares.use('/__campusmaas/save-vendors',(req,res,next)=>{if(req.method!=='POST')return next();const chunks=[];req.on('data',c=>chunks.push(c));req.on('end',()=>{try{const p=jsonBody(chunks);if(p?.version!==1||!Array.isArray(p.vendors))throw Error('Invalid vendor catalogue.');const vids=new Set(),oids=new Set();for(const v of p.vendors){if(!v?.id||vids.has(String(v.id))||!String(v.name||'').trim())throw Error('Invalid vendor.');vids.add(String(v.id));if(!Array.isArray(v.options))throw Error('Invalid vendor options.');for(const o of v.options){if(!o?.id||oids.has(String(o.id))||!String(o.name||'').trim())throw Error('Invalid vendor option.');oids.add(String(o.id));if(Number(o.order)<1||Number(o.service_minutes)<0||Number(o.price)<0)throw Error('Invalid option values.')}}writeJsonCopies('maps/campus_vendors.json',p);res.statusCode=200;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true}))}catch(e){res.statusCode=400;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:false,error:e.message||'Vendor save failed'}))}})});
     server.middlewares.use('/__campusmaas/create-order',(req,res,next)=>{
       if(req.method!=='POST')return next();

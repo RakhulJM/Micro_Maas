@@ -1,7 +1,23 @@
 ---
+import fs from 'node:fs';
+import path from 'node:path';
 import MainLayout from '../../../layouts/MainLayout.astro';
 import VendorPortalPage from '../../../components/campusmaas/VendorPortalPage.astro';
+
+const readCampusJson = (name, fallback) => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(process.cwd(), 'maps', name), 'utf8'));
+  } catch {
+    return fallback;
+  }
+};
+
+const initialData = {
+  catalogue: readCampusJson('campus_vendors.json', { version: 1, vendors: [] }),
+  orders: readCampusJson('campus_orders.json', { version: 1, orders: [] }),
+  pageCards: readCampusJson('vendor_page_cards.json', { version: 1, root: {}, categories: {} })
+};
 ---
 <MainLayout title="CampusMaaS · Single's">
-  <VendorPortalPage pageKind="detail" vendorId="food" optionId="singles" />
+  <VendorPortalPage pageKind="detail" vendorId="food" optionId="singles" initialData={initialData} />
 </MainLayout>

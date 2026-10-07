@@ -1,8 +1,9 @@
 ---
-const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
+const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = Astro.props;
 ---
 
 <main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId}>
+  <script type="application/json" id="vendorPortalInitialData" set:html={JSON.stringify(initialData || { catalogue: { version: 1, vendors: [] }, orders: { version: 1, orders: [] }, pageCards: { version: 1, root: {}, categories: {} } })}></script>
   <div class="vendor-portal-glow vendor-portal-glow-a" aria-hidden="true"></div>
   <div class="vendor-portal-glow vendor-portal-glow-b" aria-hidden="true"></div>
 
@@ -103,7 +104,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
     const state = {
       catalogue: { version: 1, vendors: [] },
-      orders: { version: 1, orders: [] }
+      orders: { version: 1, orders: [] },
+      pageCards: { version: 1, root: {}, categories: {} }
     };
     let ordersVendorId = '';
     let ordersVendorName = '';
@@ -169,17 +171,57 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const loadData = async () => {
-      const responses = await Promise.all([
-        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-        fetch('/maps/campus_orders.json', { cache: 'no-store' })
-      ]);
+      let catalogue = null;
+      let orders = null;
+      let pageCards = null;
 
-      if (!responses[0].ok || !responses[1].ok) {
+      try {
+        const embedded = JSON.parse(
+          document.getElementById('vendorPortalInitialData')?.textContent || '{}'
+        );
+        catalogue = embedded?.catalogue;
+        orders = embedded?.orders;
+        pageCards = embedded?.pageCards;
+      } catch {
+        // Embedded route data will be validated below.
+      }
+
+      const valid = (nextCatalogue, nextOrders) =>
+        nextCatalogue?.version === 1 &&
+        Array.isArray(nextCatalogue?.vendors) &&
+        nextOrders?.version === 1 &&
+        Array.isArray(nextOrders?.orders);
+
+      if (!valid(catalogue, orders)) {
         throw new Error('Vendor data could not be loaded.');
       }
 
-      state.catalogue = await responses[0].json();
-      state.orders = await responses[1].json();
+      state.catalogue = catalogue;
+      state.orders = orders;
+      state.pageCards = pageCards?.version === 1 ? pageCards : { version: 1, root: {}, categories: {} };
+
+      // Refresh when the public JSON files are available, but never blank the page
+      // when a dev-server/static-file refresh is unavailable.
+      try {
+        const responses = await Promise.all([
+          fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
+          fetch('/maps/campus_orders.json', { cache: 'no-store' })
+        ]);
+
+        if (responses[0].ok && responses[1].ok) {
+          const refreshed = await Promise.all([
+            responses[0].json(),
+            responses[1].json()
+          ]);
+
+          if (valid(refreshed[0], refreshed[1])) {
+            state.catalogue = refreshed[0];
+            state.orders = refreshed[1];
+          }
+        }
+      } catch {
+        // Keep the working route snapshot.
+      }
     };
 
     const vendorOrders = (id, optionId = '', requireFiles = false) =>
@@ -488,14 +530,15 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         const card = create('a', 'vendor-large-card');
         card.href = route(item.id);
 
+        const cardData = state.pageCards.root[String(item.id)] || {};
         const top = create('div', 'vendor-large-card-top');
         append(
           top,
-          create('span', 'vendor-card-number', String(item.order || 1).padStart(2, '0')),
+          create('span', 'vendor-card-number', String(cardData.number || item.order || 1).padStart(2, '0')),
           create('span', 'vendor-open-icon', '↗')
         );
 
-        const largeIcon = create('div', 'vendor-large-icon', iconLetter(item.id));
+        const largeIcon = create('div', 'vendor-large-icon', cardData.icon || iconLetter(item.id));
 
         const visibleOptions = (item.options || [])
           .filter((child) => child.enabled !== false);
@@ -510,7 +553,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
           card,
           top,
           largeIcon,
-          create('div', 'vendor-large-title', item.name),
+          create('div', 'vendor-large-title', cardData.title || item.name),
           create('p', '', visibleOptions.length + (visibleOptions.length === 1 ? ' service available' : ' services available'))
         );
 
@@ -518,7 +561,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         append(
           footer,
           create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
-          create('span', '', 'Open dashboard →')
+          create('span', '', cardData.action || 'Open dashboard →')
         );
         append(card, footer);
         content.appendChild(card);
@@ -530,27 +573,27 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const renderCategory = (item) => {
+      const pageData = state.pageCards.categories[String(item.id)] || {};
       const options = (item.options || [])
         .filter((child) => child.enabled !== false)
         .sort((a, b) => Number(a.order) - Number(b.order));
 
       kicker.textContent = 'VENDOR';
-      title.textContent = item.name;
-      headerTitle.textContent = item.name;
-      subtitle.textContent = 'Service list and dedicated dashboards';
+      title.textContent = pageData.title || item.name;
+      headerTitle.textContent = pageData.title || item.name;
+      subtitle.textContent = pageData.subtitle || 'Service list and dedicated dashboards';
       back.href = '/vendor';
       headerServiceControl.hidden = true;
-      ordersVendorId = String(item.id);
-      ordersVendorName = String(item.name || 'Vendor');
+      ordersVendorId = '';
+      ordersVendorName = '';
       ordersOptionId = '';
-      printQueueButton.hidden = false;
-      updateOrdersButton();
-      closePrintQueue();
+      printQueueButton.hidden = true;
 
       content.className = 'vendor-content-grid vendor-category-grid';
       content.innerHTML = '';
 
       options.forEach((child) => {
+        const serviceData = pageData.services?.[String(child.id)] || {};
         const card = create('a', 'vendor-service-card');
         card.href = route(item.id, child.id);
 
@@ -571,9 +614,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         append(
           card,
           top,
-          create('div', 'vendor-service-number', String(child.order || 1).padStart(2, '0')),
-          create('h2', '', child.name),
-          create('p', '', 'Dedicated vendor dashboard')
+          create('div', 'vendor-service-number', String(serviceData.number || child.order || 1).padStart(2, '0')),
+          create('h2', '', serviceData.title || child.name),
+          create('p', '', serviceData.description || 'Dedicated vendor dashboard')
         );
 
         const serviceStatus = String(child.status || 'online').toLowerCase();
@@ -593,6 +636,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         );
         append(card, info);
 
+        const footer = create('div', 'vendor-large-footer');
+        append(
+          footer,
+          create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
+          create('span', '', 'Open dashboard →')
+        );
         append(card, footer);
         content.appendChild(card);
       });
@@ -1288,6 +1337,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     50%,100%{opacity:.34;filter:brightness(.92)}
   }
 
+  .vendor-print-queue-button[hidden],
+  .vendor-header-service-control[hidden]{display:none !important}
   .vendor-header-actions{display:flex;align-items:center;gap:9px}
   .vendor-header-service-control{display:flex;align-items:center;gap:8px;position:relative;z-index:20}
   .vendor-header-status-toggle{display:flex;align-items:center;padding:3px;border:1px solid #d7dee7;border-radius:14px;background:#fff;box-shadow:0 8px 22px rgba(15,23,42,.08)}
