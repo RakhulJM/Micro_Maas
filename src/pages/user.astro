@@ -11,14 +11,14 @@ import 'leaflet/dist/leaflet.css';
     <section class="user-trip-card" aria-label="Campus trip">
       <div class="user-trip-field">
         <span>From</span>
-        <strong id="userTripFrom">KEC Main Gate</strong>
+        <strong id="userTripFrom">Point A</strong>
       </div>
 
       <div class="user-trip-divider" aria-hidden="true"></div>
 
       <div class="user-trip-field">
         <span>To</span>
-        <strong id="userTripTo">Mechanical Block</strong>
+        <strong id="userTripTo">Point B</strong>
       </div>
 
       <div class="user-trip-summary">
@@ -138,6 +138,137 @@ const findBuildingCenter = (places, nameFragment) => {
 };
 
 const USER_ROUTE_CONNECT_RADIUS_M = 40;
+const USER_GATE_MATCH_RADIUS_M = 25;
+const ALL_POLICY_DAYS = Object.freeze([
+  'mon',
+  'tue',
+  'wed',
+  'thu',
+  'fri',
+  'sat',
+  'sun'
+]);
+
+const policyTemporalState = (timezone = 'Asia/Kolkata', date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: timezone,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(date);
+
+  const read = (type) =>
+    parts.find((part) => part.type === type)?.value || '';
+
+  return {
+    day: read('weekday').slice(0, 3).toLowerCase(),
+    time: read('hour') + ':' + read('minute')
+  };
+};
+
+const policyMatchesNow = (policy, temporal) => {
+  if (policy?.enabled === false) return false;
+
+  const days = Array.isArray(policy?.days) && policy.days.length
+    ? policy.days
+    : ALL_POLICY_DAYS;
+
+  if (!days.includes(temporal.day)) return false;
+
+  const windows =
+    Array.isArray(policy?.windows)
+      ? policy.windows
+      : Array.isArray(policy?.condition?.time_windows)
+        ? policy.condition.time_windows
+        : [];
+
+  if (!windows.length) return true;
+
+  const current = minutesFromClockValue(temporal.time);
+
+  return windows.some((window) => {
+    const start = minutesFromClockValue(window?.start);
+    const end = minutesFromClockValue(window?.end);
+    return current >= start && current <= end;
+  });
+};
+
+const minutesFromClockValue = (value) => {
+  const [hours, minutes] = String(value || '00:00').split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+const policyAppliesToGroup = (policy, group) => {
+  const policyGroup = String(policy?.group || 'all');
+  return policyGroup === 'all' || policyGroup === group;
+};
+
+const policyHasCondition = (policy) => {
+  const windows =
+    Array.isArray(policy?.windows)
+      ? policy.windows
+      : Array.isArray(policy?.condition?.time_windows)
+        ? policy.condition.time_windows
+        : [];
+
+  const days = Array.isArray(policy?.days) ? policy.days : ALL_POLICY_DAYS;
+
+  return windows.length > 0 ||
+    days.length !== ALL_POLICY_DAYS.length ||
+    days.some((day, index) => day !== ALL_POLICY_DAYS[index]);
+};
+
+const pathFeatureAllowed = (feature, accessPolicy, group = 'students') => {
+  const temporal = policyTemporalState(accessPolicy?.timezone || 'Asia/Kolkata');
+  const policies = (accessPolicy?.policies || []).filter(
+    (policy) =>
+      policy?.target?.type === 'path' &&
+      String(policy?.target?.id) === String(feature?.id) &&
+      policyAppliesToGroup(policy, group) &&
+      policy?.enabled !== false
+  );
+
+  if (!policies.length) return true;
+
+  const activePolicies = policies.filter((policy) =>
+    policyMatchesNow(policy, temporal)
+  );
+
+  if (
+    activePolicies.some(
+      (policy) =>
+        policy.mode === 'deny' ||
+        policy.mode === 'deny_during'
+    )
+  ) {
+    return false;
+  }
+
+  const allowOnlyPolicies = policies.filter(
+    (policy) => policy.mode === 'allow_only_during'
+  );
+
+  if (allowOnlyPolicies.length) {
+    return allowOnlyPolicies.some((policy) =>
+      activePolicies.includes(policy)
+    );
+  }
+
+  const conditionalAllowPolicies = policies.filter(
+    (policy) =>
+      policy.mode === 'allow' &&
+      policyHasCondition(policy)
+  );
+
+  if (conditionalAllowPolicies.length) {
+    return conditionalAllowPolicies.some((policy) =>
+      activePolicies.includes(policy)
+    );
+  }
+
+  return true;
+};
 
 const projectPointToPath = (pathData, latlng) => {
   let best = null;
@@ -218,21 +349,291 @@ const projectPointToPath = (pathData, latlng) => {
  * Exact user clicks are preserved as route endpoints.
  * The nearest path location is only a temporary internal routing anchor.
  */
-const routeSummary = (pathData, startPoint, endPoint) => {
-  const startAnchor = projectPointToPath(pathData, startPoint);
-  const endAnchor = projectPointToPath(pathData, endPoint);
+/*
+ * Build an intersection-aware user routing graph.
+ *
+ * The stored GeoJSON often contains lines that cross without sharing an
+ * explicit coordinate. Those crossings must become graph nodes, otherwise
+ * the router can miss the physically short route and take a large detour.
+ *
+ * User clicks remain exact endpoints. Multiple nearby path candidates are
+ * connected to each endpoint; Dijkstra then chooses the best complete route.
+ */
+const routeSummary = (pathData, startPoint, endPoint, accessPolicy) => {
+  const routablePathData = {
+    ...pathData,
+    features: (pathData?.features || [])
+      .map((feature, index) => ({
+        ...feature,
+        id: String(
+          feature?.id ||
+          feature?.properties?.['@id'] ||
+          feature?.properties?.id ||
+          'path-' + (index + 1)
+        )
+      }))
+      .filter((feature) =>
+        pathFeatureAllowed(feature, accessPolicy, 'students')
+      )
+  };
 
-  if (!startAnchor || !endAnchor) return null;
+  const toRoutingXY = (coordinate) => {
+    const scaleX =
+      111320 *
+      Math.cos(Number(centerForRoutingLat) * Math.PI / 180);
+    const scaleY = 111320;
 
-  if (
-    startAnchor.distance > USER_ROUTE_CONNECT_RADIUS_M ||
-    endAnchor.distance > USER_ROUTE_CONNECT_RADIUS_M
+    return {
+      x: Number(coordinate[0]) * scaleX,
+      y: Number(coordinate[1]) * scaleY
+    };
+  };
+
+  const centerForRoutingLat = Number(
+    (
+      (Number(startPoint.lat) + Number(endPoint.lat)) / 2
+    )
+  );
+
+  const interpolateCoordinate = (a, b, fraction) => [
+    Number(a[0]) + (Number(b[0]) - Number(a[0])) * fraction,
+    Number(a[1]) + (Number(b[1]) - Number(a[1])) * fraction
+  ];
+
+  const distanceBetweenCoordinates = (a, b) =>
+    L.latLng(Number(a[1]), Number(a[0]))
+      .distanceTo(L.latLng(Number(b[1]), Number(b[0])));
+
+  const cross2D = (a, b) =>
+    a.x * b.y - a.y * b.x;
+
+  const pointOnSegmentFraction = (point, a, b, toleranceMeters = 0.05) => {
+    const p = toRoutingXY(point);
+    const ax = toRoutingXY(a);
+    const bx = toRoutingXY(b);
+
+    const dx = bx.x - ax.x;
+    const dy = bx.y - ax.y;
+    const lengthSquared = dx * dx + dy * dy;
+
+    if (lengthSquared === 0) return null;
+
+    const fraction = Math.max(
+      0,
+      Math.min(
+        1,
+        ((p.x - ax.x) * dx + (p.y - ax.y) * dy) / lengthSquared
+      )
+    );
+
+    const nearest = {
+      x: ax.x + dx * fraction,
+      y: ax.y + dy * fraction
+    };
+
+    if (
+      Math.hypot(p.x - nearest.x, p.y - nearest.y) >
+      toleranceMeters
+    ) {
+      return null;
+    }
+
+    return fraction;
+  };
+
+  const segmentIntersectionFractions = (first, second) => {
+    const p = toRoutingXY(first.a);
+    const p2 = toRoutingXY(first.b);
+    const q = toRoutingXY(second.a);
+    const q2 = toRoutingXY(second.b);
+
+    const r = {
+      x: p2.x - p.x,
+      y: p2.y - p.y
+    };
+
+    const qMinusP = {
+      x: q.x - p.x,
+      y: q.y - p.y
+    };
+
+    const s = {
+      x: q2.x - q.x,
+      y: q2.y - q.y
+    };
+
+    const denominator = cross2D(r, s);
+    const fractions = [];
+
+    if (Math.abs(denominator) > 1e-9) {
+      const t = cross2D(qMinusP, s) / denominator;
+      const u = cross2D(qMinusP, r) / denominator;
+
+      if (
+        t >= -1e-9 &&
+        t <= 1 + 1e-9 &&
+        u >= -1e-9 &&
+        u <= 1 + 1e-9
+      ) {
+        fractions.push({
+          first: Math.max(0, Math.min(1, t)),
+          second: Math.max(0, Math.min(1, u))
+        });
+      }
+
+      return fractions;
+    }
+
+    /*
+     * Parallel/collinear segments only connect when one segment endpoint
+     * actually lies on the other segment. Merely nearby parallel paths
+     * remain separate.
+     */
+    const firstStartOnSecond = pointOnSegmentFraction(
+      first.a,
+      second.a,
+      second.b
+    );
+
+    if (firstStartOnSecond !== null) {
+      fractions.push({
+        first: 0,
+        second: firstStartOnSecond
+      });
+    }
+
+    const firstEndOnSecond = pointOnSegmentFraction(
+      first.b,
+      second.a,
+      second.b
+    );
+
+    if (firstEndOnSecond !== null) {
+      fractions.push({
+        first: 1,
+        second: firstEndOnSecond
+      });
+    }
+
+    const secondStartOnFirst = pointOnSegmentFraction(
+      second.a,
+      first.a,
+      first.b
+    );
+
+    if (secondStartOnFirst !== null) {
+      fractions.push({
+        first: secondStartOnFirst,
+        second: 0
+      });
+    }
+
+    const secondEndOnFirst = pointOnSegmentFraction(
+      second.b,
+      first.a,
+      first.b
+    );
+
+    if (secondEndOnFirst !== null) {
+      fractions.push({
+        first: secondEndOnFirst,
+        second: 1
+      });
+    }
+
+    return fractions;
+  };
+
+  const rawSegments = [];
+
+  for (
+    let featureIndex = 0;
+    featureIndex < (routablePathData.features || []).length;
+    featureIndex += 1
   ) {
-    return null;
+    const feature = routablePathData.features[featureIndex];
+    const geometry = feature?.geometry;
+
+    if (!geometry) continue;
+
+    const lines =
+      geometry.type === 'LineString'
+        ? [geometry.coordinates]
+        : geometry.type === 'MultiLineString'
+          ? geometry.coordinates
+          : [];
+
+    for (
+      let lineIndex = 0;
+      lineIndex < lines.length;
+      lineIndex += 1
+    ) {
+      const line = lines[lineIndex];
+
+      if (!Array.isArray(line) || line.length < 2) continue;
+
+      for (
+        let segmentIndex = 0;
+        segmentIndex < line.length - 1;
+        segmentIndex += 1
+      ) {
+        const a = line[segmentIndex];
+        const b = line[segmentIndex + 1];
+        const distance = distanceBetweenCoordinates(a, b);
+
+        if (distance <= 0) continue;
+
+        rawSegments.push({
+          featureId: String(feature.id),
+          featureIndex,
+          lineIndex,
+          segmentIndex,
+          a,
+          b,
+          distance
+        });
+      }
+    }
+  }
+
+  if (!rawSegments.length) return null;
+
+  const splitFractions = rawSegments.map(() => [0, 1]);
+
+  for (
+    let firstIndex = 0;
+    firstIndex < rawSegments.length;
+    firstIndex += 1
+  ) {
+    for (
+      let secondIndex = firstIndex + 1;
+      secondIndex < rawSegments.length;
+      secondIndex += 1
+    ) {
+      const first = rawSegments[firstIndex];
+      const second = rawSegments[secondIndex];
+
+      if (
+        first.featureId === second.featureId &&
+        first.lineIndex === second.lineIndex &&
+        Math.abs(first.segmentIndex - second.segmentIndex) <= 1
+      ) {
+        continue;
+      }
+
+      const intersections =
+        segmentIntersectionFractions(first, second);
+
+      for (const intersection of intersections) {
+        splitFractions[firstIndex].push(intersection.first);
+        splitFractions[secondIndex].push(intersection.second);
+      }
+    }
   }
 
   const graph = new Map();
   const coordinates = new Map();
+  const graphSegments = [];
 
   const graphKey = (coordinate) =>
     Number(coordinate[0]).toFixed(7) + ',' +
@@ -244,32 +645,52 @@ const routeSummary = (pathData, startPoint, endPoint) => {
   };
 
   const addEdge = (fromKey, toKey, distance) => {
+    if (fromKey === toKey || distance <= 0) return;
+
     if (!graph.has(fromKey)) graph.set(fromKey, []);
     if (!graph.has(toKey)) graph.set(toKey, []);
 
-    graph.get(fromKey).push({ node: toKey, distance });
-    graph.get(toKey).push({ node: fromKey, distance });
+    graph.get(fromKey).push({
+      node: toKey,
+      distance
+    });
+
+    graph.get(toKey).push({
+      node: fromKey,
+      distance
+    });
   };
 
   for (
-    let featureIndex = 0;
-    featureIndex < (pathData?.features || []).length;
-    featureIndex += 1
+    let segmentIndex = 0;
+    segmentIndex < rawSegments.length;
+    segmentIndex += 1
   ) {
-    const feature = pathData.features[featureIndex];
+    const segment = rawSegments[segmentIndex];
 
-    if (feature?.geometry?.type !== 'LineString') continue;
+    const fractions = Array.from(
+      new Set(
+        splitFractions[segmentIndex]
+          .map((value) =>
+            Number(
+              Math.max(0, Math.min(1, value)).toFixed(10)
+            )
+          )
+      )
+    ).sort((a, b) => a - b);
 
-    const points = feature.geometry.coordinates;
+    const splitCoordinates = fractions.map((fraction) =>
+      interpolateCoordinate(segment.a, segment.b, fraction)
+    );
 
     for (
-      let segmentIndex = 0;
-      segmentIndex < points.length - 1;
-      segmentIndex += 1
+      let partIndex = 0;
+      partIndex < splitCoordinates.length - 1;
+      partIndex += 1
     ) {
-      const a = points[segmentIndex];
-      const b = points[segmentIndex + 1];
-      const distance = distanceMeters(a, b);
+      const a = splitCoordinates[partIndex];
+      const b = splitCoordinates[partIndex + 1];
+      const distance = distanceBetweenCoordinates(a, b);
 
       if (distance <= 0) continue;
 
@@ -279,116 +700,380 @@ const routeSummary = (pathData, startPoint, endPoint) => {
       addNode(aKey, a);
       addNode(bKey, b);
       addEdge(aKey, bKey, distance);
+
+      graphSegments.push({
+        a,
+        b,
+        aKey,
+        bKey,
+        distance,
+        sourceFeatureId: segment.featureId,
+        sourceFeatureIndex: segment.featureIndex,
+        sourceSegmentIndex: segment.segmentIndex,
+        fractionStart: fractions[partIndex],
+        fractionEnd: fractions[partIndex + 1]
+      });
+    }
+  }
+
+  const projectToSegment = (point, a, b) => {
+    const refLat =
+      Number(point.lat) * Math.PI / 180;
+    const scaleX = 111320 * Math.cos(refLat);
+    const scaleY = 111320;
+
+    const px = Number(point.lng) * scaleX;
+    const py = Number(point.lat) * scaleY;
+    const ax = Number(a[0]) * scaleX;
+    const ay = Number(a[1]) * scaleY;
+    const bx = Number(b[0]) * scaleX;
+    const by = Number(b[1]) * scaleY;
+
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lengthSquared = dx * dx + dy * dy;
+
+    if (lengthSquared === 0) {
+      return {
+        coordinate: [Number(a[0]), Number(a[1])],
+        fraction: 0,
+        distance: Math.hypot(px - ax, py - ay)
+      };
+    }
+
+    const fraction = Math.max(
+      0,
+      Math.min(
+        1,
+        ((px - ax) * dx + (py - ay) * dy) /
+          lengthSquared
+      )
+    );
+
+    const x = ax + fraction * dx;
+    const y = ay + fraction * dy;
+
+    return {
+      coordinate: [
+        x / scaleX,
+        y / scaleY
+      ],
+      fraction,
+      distance: Math.hypot(px - x, py - y)
+    };
+  };
+
+  const candidateAnchors = (point) => {
+    const candidates = [];
+
+    for (
+      let index = 0;
+      index < graphSegments.length;
+      index += 1
+    ) {
+      const segment = graphSegments[index];
+      const projection = projectToSegment(
+        point,
+        segment.a,
+        segment.b
+      );
+
+      if (
+        projection.distance <=
+        USER_ROUTE_CONNECT_RADIUS_M
+      ) {
+        candidates.push({
+          segment,
+          coordinate: projection.coordinate,
+          distance: projection.distance,
+          fraction: projection.fraction
+        });
+      }
+    }
+
+    candidates.sort((a, b) => a.distance - b.distance);
+
+    /*
+     * Keeping a handful of nearby candidates allows the router to choose
+     * a slightly farther connection when it produces a much shorter total
+     * journey.
+     */
+    return candidates.slice(0, 8);
+  };
+
+  const startCandidates = candidateAnchors(startPoint);
+  const endCandidates = candidateAnchors(endPoint);
+
+  if (!startCandidates.length || !endCandidates.length) {
+    return null;
+  }
+
+  const addAnchor = (prefix, anchor, index) => {
+    const anchorKey =
+      '__user_anchor_' +
+      prefix +
+      '_' +
+      String(index);
+
+    addNode(anchorKey, anchor.coordinate);
+
+    const fromA =
+      anchor.segment.distance * anchor.fraction;
+    const fromB =
+      anchor.segment.distance *
+      (1 - anchor.fraction);
+
+    addEdge(
+      anchorKey,
+      anchor.segment.aKey,
+      fromA
+    );
+
+    addEdge(
+      anchorKey,
+      anchor.segment.bKey,
+      fromB
+    );
+
+    return anchorKey;
+  };
+
+  const startNodeKey = '__user_start';
+  const endNodeKey = '__user_end';
+
+  addNode(startNodeKey, [
+    Number(startPoint.lng),
+    Number(startPoint.lat)
+  ]);
+
+  addNode(endNodeKey, [
+    Number(endPoint.lng),
+    Number(endPoint.lat)
+  ]);
+
+  const startAnchorKeys = startCandidates.map(
+    (candidate, index) => {
+      const anchorKey = addAnchor(
+        'start',
+        candidate,
+        index
+      );
+
+      addEdge(
+        startNodeKey,
+        anchorKey,
+        candidate.distance
+      );
+
+      return {
+        key: anchorKey,
+        candidate
+      };
+    }
+  );
+
+  const endAnchorKeys = endCandidates.map(
+    (candidate, index) => {
+      const anchorKey = addAnchor(
+        'end',
+        candidate,
+        index
+      );
+
+      addEdge(
+        anchorKey,
+        endNodeKey,
+        candidate.distance
+      );
+
+      return {
+        key: anchorKey,
+        candidate
+      };
+    }
+  );
+
+  /*
+   * If A and B connect to the same physical split segment, permit the
+   * direct along-segment connection as well.
+   */
+  for (const startAnchor of startAnchorKeys) {
+    for (const endAnchor of endAnchorKeys) {
+      const first = startAnchor.candidate.segment;
+      const second = endAnchor.candidate.segment;
+
+      if (
+        first.aKey === second.aKey &&
+        first.bKey === second.bKey ||
+        first.aKey === second.bKey &&
+        first.bKey === second.aKey
+      ) {
+        const fractionDifference =
+          Math.abs(
+            startAnchor.candidate.fraction -
+            endAnchor.candidate.fraction
+          );
+
+        const directDistance =
+          fractionDifference * first.distance;
+
+        addEdge(
+          startAnchor.key,
+          endAnchor.key,
+          directDistance
+        );
+      }
     }
   }
 
   /*
-   * Connect the exact user point directly to the nearest point on the
-   * nearest walkable segment. This supports diagonal, perpendicular, or
-   * any other reasonable straight connection dictated by the geometry.
+   * Min-heap Dijkstra. The graph is now fully intersection-aware and
+   * contains all reasonable nearby endpoint connections.
    */
-  const attachExactPoint = (label, point, anchor) => {
-    const pointKey =
-      '__user_point_' +
-      label +
-      '_' +
-      anchor.featureIndex +
-      '_' +
-      anchor.segmentIndex;
+  class MinHeap {
+    constructor() {
+      this.items = [];
+    }
 
-    const anchorKey =
-      '__user_anchor_' +
-      label +
-      '_' +
-      anchor.featureIndex +
-      '_' +
-      anchor.segmentIndex;
+    get size() {
+      return this.items.length;
+    }
 
-    const pointCoordinate = [point.lng, point.lat];
-    const anchorCoordinate = [anchor.point.lng, anchor.point.lat];
+    push(item) {
+      this.items.push(item);
 
-    addNode(pointKey, pointCoordinate);
-    addNode(anchorKey, anchorCoordinate);
+      let index = this.items.length - 1;
 
-    addEdge(pointKey, anchorKey, point.distanceTo(anchor.point));
+      while (index > 0) {
+        const parent = Math.floor((index - 1) / 2);
 
-    const aKey = graphKey(anchor.a);
-    const bKey = graphKey(anchor.b);
+        if (
+          this.items[parent].distance <=
+          this.items[index].distance
+        ) {
+          break;
+        }
 
-    addEdge(
-      anchorKey,
-      aKey,
-      distanceMeters(anchorCoordinate, anchor.a)
-    );
+        [
+          this.items[parent],
+          this.items[index]
+        ] = [
+          this.items[index],
+          this.items[parent]
+        ];
 
-    addEdge(
-      anchorKey,
-      bKey,
-      distanceMeters(anchorCoordinate, anchor.b)
-    );
+        index = parent;
+      }
+    }
 
-    return { pointKey, anchorKey, anchor };
-  };
+    pop() {
+      if (!this.items.length) return null;
 
-  const start = attachExactPoint('start', startPoint, startAnchor);
-  const end = attachExactPoint('end', endPoint, endAnchor);
+      const first = this.items[0];
+      const last = this.items.pop();
 
-  if (
-    start.anchor.featureIndex === end.anchor.featureIndex &&
-    start.anchor.segmentIndex === end.anchor.segmentIndex
-  ) {
-    addEdge(
-      start.anchorKey,
-      end.anchorKey,
-      startAnchor.point.distanceTo(endAnchor.point)
-    );
+      if (this.items.length && last) {
+        this.items[0] = last;
+
+        let index = 0;
+
+        while (true) {
+          const left = index * 2 + 1;
+          const right = left + 1;
+          let smallest = index;
+
+          if (
+            left < this.items.length &&
+            this.items[left].distance <
+              this.items[smallest].distance
+          ) {
+            smallest = left;
+          }
+
+          if (
+            right < this.items.length &&
+            this.items[right].distance <
+              this.items[smallest].distance
+          ) {
+            smallest = right;
+          }
+
+          if (smallest === index) break;
+
+          [
+            this.items[index],
+            this.items[smallest]
+          ] = [
+            this.items[smallest],
+            this.items[index]
+          ];
+
+          index = smallest;
+        }
+      }
+
+      return first;
+    }
   }
 
-  const distances = new Map([[start.pointKey, 0]]);
+  const distances = new Map([
+    [startNodeKey, 0]
+  ]);
   const previous = new Map();
   const visited = new Set();
+  const queue = new MinHeap();
 
-  while (true) {
-    let current = null;
-    let currentDistance = Infinity;
+  queue.push({
+    node: startNodeKey,
+    distance: 0
+  });
 
-    for (const [key, distance] of distances.entries()) {
-      if (!visited.has(key) && distance < currentDistance) {
-        current = key;
-        currentDistance = distance;
-      }
-    }
+  while (queue.size) {
+    const current = queue.pop();
 
-    if (!current) break;
-    if (current === end.pointKey) break;
+    if (!current || visited.has(current.node)) continue;
 
-    visited.add(current);
+    visited.add(current.node);
 
-    for (const edge of graph.get(current) || []) {
-      const nextDistance = currentDistance + edge.distance;
+    if (current.node === endNodeKey) break;
 
-      if (nextDistance < (distances.get(edge.node) ?? Infinity)) {
+    for (const edge of graph.get(current.node) || []) {
+      if (visited.has(edge.node)) continue;
+
+      const nextDistance =
+        current.distance + edge.distance;
+
+      if (
+        nextDistance <
+        (distances.get(edge.node) ?? Infinity)
+      ) {
         distances.set(edge.node, nextDistance);
-        previous.set(edge.node, current);
+        previous.set(edge.node, current.node);
+
+        queue.push({
+          node: edge.node,
+          distance: nextDistance
+        });
       }
     }
   }
 
-  const totalDistance = distances.get(end.pointKey);
+  const totalDistance = distances.get(endNodeKey);
 
   if (!Number.isFinite(totalDistance)) return null;
 
   const nodeKeys = [];
-  let current = end.pointKey;
+  let current = endNodeKey;
 
   while (current) {
     nodeKeys.unshift(current);
 
-    if (current === start.pointKey) break;
+    if (current === startNodeKey) break;
+
     current = previous.get(current);
   }
 
-  if (nodeKeys[0] !== start.pointKey) return null;
+  if (nodeKeys[0] !== startNodeKey) return null;
 
   return {
     coordinates: nodeKeys.map((key) => coordinates.get(key)),
@@ -446,13 +1131,19 @@ const start = async () => {
   const mapElement = document.getElementById('map');
   if (!mapElement) return;
 
-  const [placesResponse, pathResponse, gatesResponse, perimeterResponse] =
-    await Promise.all([
-      fetch('/maps/export_places.geojson', { cache: 'no-store' }),
-      fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
-      fetch('/maps/gates.geojson', { cache: 'no-store' }),
-      fetch('/maps/perimeter.geojson', { cache: 'no-store' })
-    ]);
+  const [
+    placesResponse,
+    pathResponse,
+    gatesResponse,
+    perimeterResponse,
+    accessRulesResponse
+  ] = await Promise.all([
+    fetch('/maps/export_places.geojson', { cache: 'no-store' }),
+    fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
+    fetch('/maps/gates.geojson', { cache: 'no-store' }),
+    fetch('/maps/perimeter.geojson', { cache: 'no-store' }),
+    fetch('/maps/campus_access_rules.json', { cache: 'no-store' }).catch(() => null)
+  ]);
 
   if (
     !placesResponse.ok ||
@@ -463,12 +1154,57 @@ const start = async () => {
     throw new Error('CampusMaaS user map data could not be loaded.');
   }
 
-  const [places, pathData, gates, perimeter] = await Promise.all([
+  const [places, pathData, gates, perimeter, loadedAccessPolicy] = await Promise.all([
     placesResponse.json(),
     pathResponse.json(),
     gatesResponse.json(),
-    perimeterResponse.json()
+    perimeterResponse.json(),
+    accessRulesResponse
+      ? (accessRulesResponse.ok
+        ? accessRulesResponse.json()
+        : Promise.resolve(null))
+      : Promise.resolve(null)
   ]);
+
+  /*
+   * The walking map must remain usable even if the editable access-policy
+   * file is temporarily unavailable. The fallback mirrors the currently
+   * configured student policy and is only used when the JSON cannot load.
+   */
+  const accessPolicy = loadedAccessPolicy || {
+    version: 1,
+    timezone: 'Asia/Kolkata',
+    policies: [
+      {
+        id: 'students-gate-06-preferred',
+        target: {
+          type: 'gate',
+          id: 'gate-1791182325069',
+          name: 'Gate - 06'
+        },
+        group: 'students',
+        direction: 'in_out',
+        mode: 'preferred',
+        priority: 85
+      },
+      {
+        id: 'students-gate-09-time',
+        target: {
+          type: 'gate',
+          id: 'gate-1791182233958',
+          name: 'Gate - 09'
+        },
+        group: 'students',
+        direction: 'in_out',
+        mode: 'allow_only_during',
+        windows: [
+          { start: '07:00', end: '08:45' },
+          { start: '12:25', end: '13:25' },
+          { start: '16:15', end: '18:00' }
+        ]
+      }
+    ]
+  };
 
   const perimeterFeature = perimeter?.features?.[0];
   const perimeterCoordinates = perimeterFeature?.geometry?.coordinates?.[0];
@@ -585,7 +1321,7 @@ const start = async () => {
   const renderUserRoute = () => {
     if (!pointA || !pointB) return;
 
-    const summary = routeSummary(pathData, pointA, pointB);
+    const summary = routeSummary(pathData, pointA, pointB, accessPolicy);
 
     if (!summary) {
       if (userTripFrom) userTripFrom.textContent = 'Point A selected';
@@ -626,8 +1362,194 @@ const start = async () => {
     if (userTripDistance) userTripDistance.textContent = formatDistance(summary.distance);
   };
 
+    const minutesFromClock = (value) => {
+    const [hours, minutes] = String(value || '00:00').split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
+  const campusClock = () => {
+    const parts = new Intl.DateTimeFormat('en-IN', {
+      timeZone: accessPolicy?.timezone || 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(new Date());
+
+    const read = (type) => parts.find((part) => part.type === type)?.value || '00';
+    return read('hour') + ':' + read('minute');
+  };
+
+  const gatePoliciesFor = (gateId) =>
+    (accessPolicy?.policies || []).filter(
+      (policy) =>
+        policy?.target?.type === 'gate' &&
+        String(policy?.target?.id) === String(gateId) &&
+        policyAppliesToGroup(policy, 'students') &&
+        policy?.enabled !== false
+    );
+
+  const evaluateStudentGate = (gate, time = campusClock()) => {
+    const policies = gatePoliciesFor(gate?.id);
+
+    if (!policies.length) {
+      return {
+        allowed: true,
+        preferred: false,
+        priority: null,
+        policy: null
+      };
+    }
+
+    const currentTemporal = policyTemporalState(
+      accessPolicy?.timezone || 'Asia/Kolkata'
+    );
+
+    const temporal = {
+      day: currentTemporal.day,
+      time
+    };
+
+    const activePolicies = policies.filter((policy) =>
+      policyMatchesNow(policy, temporal)
+    );
+
+    const denyActive = activePolicies.some(
+      (policy) => policy.mode === 'deny' || policy.mode === 'deny_during'
+    );
+
+    if (denyActive) {
+      return {
+        allowed: false,
+        preferred: false,
+        priority: null,
+        policy: activePolicies.find(
+          (policy) =>
+            policy.mode === 'deny' ||
+            policy.mode === 'deny_during'
+        ) || null
+      };
+    }
+
+    const allowOnlyPolicies = policies.filter(
+      (policy) => policy.mode === 'allow_only_during'
+    );
+
+    if (allowOnlyPolicies.length) {
+      return {
+        allowed: allowOnlyPolicies.some((policy) =>
+          activePolicies.includes(policy)
+        ),
+        preferred: false,
+        priority: null,
+        policy: allowOnlyPolicies[0] || null
+      };
+    }
+
+    const conditionalAllowPolicies = policies.filter(
+      (policy) =>
+        policy.mode === 'allow' &&
+        policyHasCondition(policy)
+    );
+
+    if (conditionalAllowPolicies.length) {
+      return {
+        allowed: conditionalAllowPolicies.some((policy) =>
+          activePolicies.includes(policy)
+        ),
+        preferred: false,
+        priority: null,
+        policy: conditionalAllowPolicies[0] || null
+      };
+    }
+
+    const preferredPolicies = activePolicies.filter(
+      (policy) => policy.mode === 'preferred'
+    );
+
+    const preferred = preferredPolicies.length > 0;
+    const priority = preferred
+      ? Math.max(
+          ...preferredPolicies.map((policy) =>
+            Number.isFinite(Number(policy?.priority))
+              ? Number(policy.priority)
+              : 0
+          )
+        )
+      : null;
+
+    return {
+      allowed: true,
+      preferred,
+      priority,
+      policy: preferredPolicies[0] || activePolicies[0] || policies[0]
+    };
+  };
+
+  const nearestGateForPoint = (point) => {
+    let best = null;
+
+    for (const gate of gates?.features || []) {
+      const coordinate =
+        gate?.properties?.access_point ||
+        gate?.properties?.center;
+
+      if (!Array.isArray(coordinate) || coordinate.length < 2) continue;
+
+      const gatePoint = L.latLng(
+        Number(coordinate[1]),
+        Number(coordinate[0])
+      );
+      const distance = point.distanceTo(gatePoint);
+
+      if (!best || distance < best.distance) {
+        best = {
+          gate,
+          point: gatePoint,
+          distance
+        };
+      }
+    }
+
+    return best;
+  };
+
+  const validateUserGateClick = (point) => {
+    const nearest = nearestGateForPoint(point);
+
+    if (!nearest || nearest.distance > USER_GATE_MATCH_RADIUS_M) {
+      return {
+        allowed: true,
+        nearest: null
+      };
+    }
+
+    const evaluation = evaluateStudentGate(nearest.gate);
+
+    if (!evaluation.allowed) {
+      if (userTripFrom) userTripFrom.textContent = 'Gate 09 is closed';
+      if (userTripTo) userTripTo.textContent = 'Students cannot use it now';
+      if (userTripTime) userTripTime.textContent = 'Unavailable';
+      if (userTripDistance) userTripDistance.textContent = 'Try Gate 06';
+
+      return {
+        allowed: false,
+        nearest,
+        evaluation
+      };
+    }
+
+    return {
+      allowed: true,
+      nearest,
+      evaluation
+    };
+  };
+
   const handleUserMapClick = (event) => {
     const clicked = event.latlng;
+    const gateCheck = validateUserGateClick(clicked);
+
+    if (!gateCheck.allowed) return;
 
     /*
      * User endpoints are the exact coordinates of the click.
@@ -638,18 +1560,30 @@ const start = async () => {
       pointA = clicked;
       pointB = null;
       resetTripSummary();
-      if (userTripFrom) userTripFrom.textContent = 'Point A selected';
+
+      const gateName = gateCheck.nearest?.gate?.properties?.name;
+      if (userTripFrom) {
+        userTripFrom.textContent = gateName
+          ? gateName + ' selected'
+          : 'Point A selected';
+      }
       if (userTripTo) userTripTo.textContent = 'Select Point B';
       renderEndpointMarkers();
       return;
     }
 
     pointB = clicked;
+    if (userTripTo) {
+      const gateName = gateCheck.nearest?.gate?.properties?.name;
+      userTripTo.textContent = gateName
+        ? gateName + ' selected'
+        : 'Point B selected';
+    }
     renderEndpointMarkers();
     renderUserRoute();
   };
 
-  resetTripSummary();
+    resetTripSummary();
   map.on('click', handleUserMapClick);
 
   const colors = {
@@ -828,8 +1762,6 @@ const start = async () => {
   void roads;
   void pedestrianCasing;
   void pedestrianPaths;
-  void gateLayer;
-
   const updateLabels = buildingLabelSizing(map, buildingLabels);
 
   map.on('zoomend', updateLabels);
@@ -946,5 +1878,6 @@ void start().catch((error) => {
     .user-trip-summary strong {
       font-size: 15px;
     }
+
   }
 </style>
