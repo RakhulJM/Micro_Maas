@@ -105,6 +105,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
     const state = {
       catalogue: { version: 1, vendors: [] },
       orders: { version: 1, orders: [] },
+      orderSummary: [],
       pageCards: { version: 1, root: {}, categories: {} }
     };
     let ordersVendorId = '';
@@ -172,7 +173,8 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 
     const loadData = async () => {
       let catalogue = null;
-      let orders = null;
+      let orders = { version: 1, orders: [] };
+      let orderSummary = [];
       let pageCards = null;
 
       try {
@@ -180,48 +182,60 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
           document.getElementById('vendorPortalInitialData')?.textContent || '{}'
         );
         catalogue = embedded?.catalogue;
-        orders = embedded?.orders;
+        orders = embedded?.orders || orders;
         pageCards = embedded?.pageCards;
       } catch {
-        // Embedded route data will be validated below.
+        // Embedded catalogue/card data will be validated below.
       }
 
-      const valid = (nextCatalogue, nextOrders) =>
-        nextCatalogue?.version === 1 &&
-        Array.isArray(nextCatalogue?.vendors) &&
-        nextOrders?.version === 1 &&
-        Array.isArray(nextOrders?.orders);
+      const validCatalogue = (value) =>
+        value?.version === 1 && Array.isArray(value?.vendors);
 
-      if (!valid(catalogue, orders)) {
+      if (!validCatalogue(catalogue)) {
         throw new Error('Vendor data could not be loaded.');
       }
 
+      const query = new URLSearchParams();
+
+      if (pageKind !== 'root' && vendorId) {
+        query.set('vendor_id', String(vendorId));
+      }
+
+      if (pageKind === 'detail' && optionId) {
+        query.set('option_id', String(optionId));
+      }
+
+      const endpoint = '/__campusmaas/vendor-data' +
+        (query.toString() ? '?' + query.toString() : '');
+
+      const response = await fetch(endpoint, { cache: 'no-store' });
+
+      if (!response.ok) {
+        throw new Error('Vendor data could not be loaded.');
+      }
+
+      const payload = await response.json();
+
+      if (!validCatalogue(payload?.catalogue)) {
+        throw new Error('Invalid CampusMaaS vendor data.');
+      }
+
+      catalogue = payload.catalogue;
+      orders = payload?.orders?.version === 1 &&
+        Array.isArray(payload?.orders?.orders)
+        ? payload.orders
+        : { version: 1, orders: [] };
+
+      orderSummary = Array.isArray(payload?.order_summary)
+        ? payload.order_summary
+        : [];
+
       state.catalogue = catalogue;
       state.orders = orders;
-      state.pageCards = pageCards?.version === 1 ? pageCards : { version: 1, root: {}, categories: {} };
-
-      // Refresh when the public JSON files are available, but never blank the page
-      // when a dev-server/static-file refresh is unavailable.
-      try {
-        const responses = await Promise.all([
-          fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-          fetch('/maps/campus_orders.json', { cache: 'no-store' })
-        ]);
-
-        if (responses[0].ok && responses[1].ok) {
-          const refreshed = await Promise.all([
-            responses[0].json(),
-            responses[1].json()
-          ]);
-
-          if (valid(refreshed[0], refreshed[1])) {
-            state.catalogue = refreshed[0];
-            state.orders = refreshed[1];
-          }
-        }
-      } catch {
-        // Keep the working route snapshot.
-      }
+      state.orderSummary = orderSummary;
+      state.pageCards = pageCards?.version === 1
+        ? pageCards
+        : { version: 1, root: {}, categories: {} };
     };
 
     const vendorOrders = (id, optionId = '', requireFiles = false) =>
@@ -1063,40 +1077,55 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       liveSyncBusy = true;
 
       try {
-        const [catalogueResponse, ordersResponse] = await Promise.all([
-          fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-          fetch('/maps/campus_orders.json', { cache: 'no-store' })
-        ]);
+        const query = new URLSearchParams();
 
-        if (!catalogueResponse.ok || !ordersResponse.ok) return;
+        if (pageKind !== 'root' && vendorId) {
+          query.set('vendor_id', String(vendorId));
+        }
 
-        const nextCatalogue = await catalogueResponse.json();
-        const nextOrders = await ordersResponse.json();
+        if (pageKind === 'detail' && optionId) {
+          query.set('option_id', String(optionId));
+        }
+
+        const response = await fetch(
+          '/__campusmaas/vendor-data' +
+            (query.toString() ? '?' + query.toString() : ''),
+          { cache: 'no-store' }
+        );
+
+        if (!response.ok) return;
+
+        const payload = await response.json();
         if (
-          nextCatalogue?.version !== 1 ||
-          !Array.isArray(nextCatalogue?.vendors) ||
-          nextOrders?.version !== 1 ||
-          !Array.isArray(nextOrders?.orders)
+          payload?.catalogue?.version !== 1 ||
+          !Array.isArray(payload?.catalogue?.vendors)
         ) return;
 
-        const catalogueChanged =
-          JSON.stringify(nextCatalogue) !== JSON.stringify(state.catalogue);
-        const ordersChanged =
-          JSON.stringify(nextOrders) !== JSON.stringify(state.orders);
+        const nextOrders =
+          payload?.orders?.version === 1 &&
+          Array.isArray(payload?.orders?.orders)
+            ? payload.orders
+            : { version: 1, orders: [] };
 
-        if (!catalogueChanged && !ordersChanged) return;
+        const nextSummary = Array.isArray(payload?.order_summary)
+          ? payload.order_summary
+          : [];
 
-        state.catalogue = nextCatalogue;
+        const changed =
+          JSON.stringify(payload.catalogue) !== JSON.stringify(state.catalogue) ||
+          JSON.stringify(nextOrders) !== JSON.stringify(state.orders) ||
+          JSON.stringify(nextSummary) !== JSON.stringify(state.orderSummary);
+
+        if (!changed) return;
+
+        state.catalogue = payload.catalogue;
         state.orders = nextOrders;
+        state.orderSummary = nextSummary;
 
         const queueWasOpen = printQueue && !printQueue.hidden;
         render();
 
-        if (
-          queueWasOpen &&
-          pageKind === 'detail' &&
-          ordersVendorId
-        ) {
+        if (queueWasOpen && pageKind === 'detail' && ordersVendorId) {
           openPrintQueue();
         }
       } finally {
