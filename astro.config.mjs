@@ -387,6 +387,72 @@ const pedestrianNetworkSavePlugin = () => ({
       });
     });
 
+    server.middlewares.use('/__campusmaas/cancel-order-item', (req, res, next) => {
+      if (req.method !== 'POST') return next();
+      const chunks = [];
+      req.on('data', (chunk) => chunks.push(chunk));
+      req.on('end', () => {
+        try {
+          const p = jsonBody(chunks);
+          if (!p?.id || !Number.isInteger(Number(p.item_index)) || Number(p.item_index) < 0) {
+            throw Error('Invalid item cancellation.');
+          }
+          const orders = readJsonFile('maps/campus_orders.json');
+          if (orders?.version !== 1 || !Array.isArray(orders?.orders)) throw Error('Invalid order database.');
+          const o = orders.orders.find((x) => x.id === p.id);
+          if (!o) throw Error('Order not found.');
+          const current = String(o.status || '').toLowerCase();
+          if (!['placed', 'accepted', 'preparing'].includes(current)) {
+            throw Error('This order cannot be changed now.');
+          }
+
+          const itemIndex = Number(p.item_index);
+
+          if (String(o.vendor_id) === 'printer') {
+            if (!Array.isArray(o.files) || !o.files[itemIndex]) throw Error('Print item not found.');
+            const file = o.files[itemIndex];
+            if (file.cancelled) throw Error('Item is already cancelled.');
+            file.cancelled = true;
+            file.cancelled_at = new Date().toISOString();
+
+            const remaining = o.files.filter((entry) => !entry.cancelled);
+            o.quantity = remaining.reduce((sum, entry) => sum + (Number(entry.copies) || 1), 0);
+            o.total_price = remaining.reduce(
+              (sum, entry) => sum + (Number(entry.copies) || 1) * Number(o.unit_price || 0),
+              0
+            );
+            if (!remaining.length) o.status = 'cancelled';
+          } else {
+            if (!Array.isArray(o.items) || !o.items[itemIndex]) throw Error('Order item not found.');
+            const item = o.items[itemIndex];
+            if (item.cancelled) throw Error('Item is already cancelled.');
+            item.cancelled = true;
+            item.cancelled_at = new Date().toISOString();
+
+            const remaining = o.items.filter((entry) => !entry.cancelled);
+            o.quantity = remaining.reduce((sum, entry) => sum + (Number(entry.quantity) || 1), 0);
+            o.total_price = remaining.reduce(
+              (sum, entry) => sum + (Number(entry.quantity) || 1) * Number(entry.unit_price || entry.price || 0),
+              0
+            );
+            if (!remaining.length) o.status = 'cancelled';
+          }
+
+          o.updated_at = new Date().toISOString();
+          writePrivateJson('maps/campus_orders.json', orders);
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ ok: true, order: o }));
+        } catch (e) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ ok: false, error: e.message || 'Item cancellation failed' }));
+        }
+      });
+    });
+
     server.middlewares.use('/__campusmaas/save-gates', (req, res, next) => {
       if (req.method !== 'POST') {
         next();
