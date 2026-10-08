@@ -2061,8 +2061,12 @@ const start = async () => {
       }
 
       const offline = normalizeVendorStatus(printService) === 'offline';
+      const allSelectedReady =
+        selectedFiles.length > 0 &&
+        selectedFiles.every((entry) => entry.conversionStatus === 'ready');
+
       printPopupPlaceOrder.disabled =
-        offline || selectedFiles.length === 0 || printPopupBusy;
+        offline || !allSelectedReady || printPopupBusy;
     };
 
     const renderPrintFiles = () => {
@@ -2114,7 +2118,19 @@ const start = async () => {
           (entry.file.type || 'Unknown file type') + ' · ' +
           formatFileSize(entry.file.size);
 
-        main.append(nameLine, meta);
+        const conversion = document.createElement('div');
+        conversion.className = 'print-file-conversion print-file-conversion-' + (entry.conversionStatus || 'converting');
+
+        if (entry.conversionStatus === 'ready') {
+          conversion.innerHTML = '<span class="print-conversion-dot"></span><span>PDF READY</span>';
+        } else if (entry.conversionStatus === 'error') {
+          conversion.innerHTML = '<span class="print-conversion-dot"></span><span>CONVERSION FAILED</span>';
+          conversion.title = entry.conversionError || 'PDF conversion failed.';
+        } else {
+          conversion.innerHTML = '<span class="print-conversion-spinner"></span><span>CONVERTING TO PDF…</span>';
+        }
+
+        main.append(nameLine, meta, conversion);
 
         const settings = document.createElement('div');
         settings.className = 'print-file-settings';
@@ -2227,7 +2243,7 @@ const start = async () => {
         preview.textContent = 'Preview';
         preview.setAttribute('aria-label', 'Preview ' + entry.file.name);
         preview.title = 'Preview';
-        preview.disabled = !entry.selected;
+        preview.disabled = !entry.selected || entry.conversionStatus !== 'ready';
         preview.addEventListener('click', () => {
           void openPrintPreview(entry);
         });
@@ -2258,13 +2274,27 @@ const start = async () => {
       if (!selected.length) return;
 
       selected.forEach((file) => {
-        printFiles.push({
+        const entry = {
           file,
           copies: 1,
           selected: true,
           sides: 'single',
-          color: 'bw'
-        });
+          color: 'bw',
+          conversionStatus: 'converting',
+          conversionError: ''
+        };
+        printFiles.push(entry);
+        void convertPrintFile(entry)
+          .then(() => {
+            entry.conversionStatus = 'ready';
+            entry.conversionError = '';
+            renderPrintFiles();
+          })
+          .catch((error) => {
+            entry.conversionStatus = 'error';
+            entry.conversionError = error?.message || 'PDF conversion failed.';
+            renderPrintFiles();
+          });
       });
 
       printPopupError.hidden = true;
@@ -2283,9 +2313,17 @@ const start = async () => {
       });
 
     const convertPrintFile = async (entry) => {
-      if (entry.printPdfBase64) return entry.printPdfBase64;
+      if (entry.printPdfBase64) {
+        entry.conversionStatus = 'ready';
+        return entry.printPdfBase64;
+      }
+      if (entry.conversionPromise) return entry.conversionPromise;
 
-      const dataBase64 = await readFileAsBase64(entry.file);
+      entry.conversionStatus = 'converting';
+      entry.conversionError = '';
+
+      entry.conversionPromise = (async () => {
+        const dataBase64 = await readFileAsBase64(entry.file);
       const response = await fetch('/__campusmaas/convert-print-file', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2305,9 +2343,21 @@ const start = async () => {
       const payload = await response.json();
       if (!payload?.pdf_base64) throw new Error('PDF conversion returned no file.');
 
-      entry.printPdfBase64 = String(payload.pdf_base64);
-      entry.printPdfSize = Number(payload.size) || 0;
-      return entry.printPdfBase64;
+        entry.printPdfBase64 = String(payload.pdf_base64);
+        entry.printPdfSize = Number(payload.size) || 0;
+        entry.conversionStatus = 'ready';
+        return entry.printPdfBase64;
+      })();
+
+      try {
+        return await entry.conversionPromise;
+      } catch (error) {
+        entry.conversionStatus = 'error';
+        entry.conversionError = error?.message || 'PDF conversion failed.';
+        throw error;
+      } finally {
+        entry.conversionPromise = null;
+      }
     };
 
     const closePrintPreview = () => {
@@ -2383,6 +2433,7 @@ const start = async () => {
         !printVendor ||
         !printService ||
         !printFiles.some((entry) => entry.selected) ||
+        printFiles.some((entry) => entry.selected && entry.conversionStatus !== 'ready') ||
         normalizeVendorStatus(printService) === 'offline'
       ) {
         return;
@@ -2396,7 +2447,10 @@ const start = async () => {
       try {
         const files = [];
         for (const entry of printFiles.filter((item) => item.selected)) {
-          const pdfBase64 = await convertPrintFile(entry);
+          if (entry.conversionStatus !== 'ready' || !entry.printPdfBase64) {
+            throw new Error('Please wait for all files to finish PDF conversion.');
+          }
+          const pdfBase64 = entry.printPdfBase64;
           files.push({
             name: entry.file.name,
             type: 'application/pdf',
