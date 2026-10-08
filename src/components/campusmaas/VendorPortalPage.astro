@@ -463,7 +463,10 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
           openPrintBatch(order, orderEntries, 'Order #' + order.id);
         });
 
-        append(orderHeader, orderHeading, orderPrint);
+        const orderCancel = create('button', 'vendor-print-order-cancel', 'CANCEL ORDER');
+        orderCancel.type = 'button';
+        orderCancel.addEventListener('click', () => cancelWholeOrder(order, orderCancel));
+        append(orderHeader, orderHeading, orderPrint, orderCancel);
         orderCard.appendChild(orderHeader);
 
         const groups = new Map();
@@ -703,6 +706,32 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       }
     };
 
+    const cancelWholeOrder = async (order, button) => {
+      button.disabled = true;
+      button.textContent = 'Cancelling…';
+      try {
+        const response = await fetch('/__campusmaas/update-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: order.id,
+            status: 'cancelled',
+            actor: 'vendor',
+            vendor_id: ordersVendorId,
+            option_id: ordersOptionId
+          })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Order cancellation failed.');
+        order.status = 'cancelled';
+        renderVendorOrderList();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Cancel Order';
+        button.title = error?.message || 'Order cancellation failed.';
+      }
+    };
+
     const cancelOrderItem = async (order, itemIndex, button) => {
       button.disabled = true;
       button.textContent = 'Cancelling…';
@@ -761,7 +790,10 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       );
 
       append(main, top, service, meta);
-      append(card, main);
+      const cancelOrder = create('button', 'vendor-order-cancel', 'Cancel Order');
+      cancelOrder.type = 'button';
+      cancelOrder.addEventListener('click', () => cancelWholeOrder(order, cancelOrder));
+      append(card, main, cancelOrder);
 
       const actions = {
         placed: ['Accept', 'preparing'],
@@ -842,7 +874,10 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         );
       }
 
-      append(card, top, items);
+      const cancelOrder = create('button', 'vendor-order-cancel', 'Cancel Order');
+      cancelOrder.type = 'button';
+      cancelOrder.addEventListener('click', () => cancelWholeOrder(order, cancelOrder));
+      append(card, top, items, cancelOrder);
 
       const actions = {
         placed: ['Accept', 'preparing'],
@@ -1652,6 +1687,8 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
     .vendor-order-action{margin-top:23px}
     .vendor-history-row{grid-template-columns:1fr 1fr}
   }
+      .vendor-order-cancel,.vendor-print-order-cancel{border:1px solid rgba(195,62,73,.18);background:#fff7f7;color:#c33e49;border-radius:6px;padding:6px 10px;font-size:9px;font-weight:800;cursor:pointer}
+      .vendor-order-cancel:disabled,.vendor-print-order-cancel:disabled{opacity:.55;cursor:default}
       .vendor-order-item-info{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
       .vendor-order-item-cancel,.vendor-print-file-cancel{border:1px solid rgba(195,62,73,.18);background:#fff7f7;color:#c33e49;border-radius:6px;padding:5px 8px;font-size:9px;font-weight:800;cursor:pointer}
       .vendor-order-item-cancel:disabled,.vendor-print-file-cancel:disabled{opacity:.55;cursor:default}
