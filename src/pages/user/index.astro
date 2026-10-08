@@ -1700,6 +1700,12 @@ const start = async () => {
     const printSelectAll = document.getElementById('printSelectAll');
     const printPopupPlaceOrder = document.getElementById('printPopupPlaceOrder');
     const printPopupError = document.getElementById('printPopupError');
+    const printPreviewModal = document.getElementById('printPreviewModal');
+    const printPreviewBackdrop = document.getElementById('printPreviewBackdrop');
+    const printPreviewClose = document.getElementById('printPreviewClose');
+    const printPreviewFrame = document.getElementById('printPreviewFrame');
+    const printPreviewTitle = document.getElementById('printPreviewTitle');
+    let printPreviewUrl = '';
 
     let catalogue = { vendors: [] };
     let orders = { orders: [] };
@@ -2019,6 +2025,7 @@ const start = async () => {
 
     const closePrintPopup = () => {
       if (!printPopup) return;
+      closePrintPreview();
       printPopup.hidden = true;
       printPopup.setAttribute('aria-hidden', 'true');
       printPopupBusy = false;
@@ -2220,6 +2227,10 @@ const start = async () => {
         preview.textContent = 'Preview';
         preview.setAttribute('aria-label', 'Preview ' + entry.file.name);
         preview.title = 'Preview';
+        preview.disabled = !entry.selected;
+        preview.addEventListener('click', () => {
+          void openPrintPreview(entry);
+        });
 
         controls.append(minus, count, plus, preview);
 
@@ -2271,6 +2282,74 @@ const start = async () => {
         reader.readAsDataURL(file);
       });
 
+    const convertPrintFile = async (entry) => {
+      if (entry.printPdfBase64) return entry.printPdfBase64;
+
+      const dataBase64 = await readFileAsBase64(entry.file);
+      const response = await fetch('/__campusmaas/convert-print-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: entry.file.name,
+          type: entry.file.type || 'application/octet-stream',
+          size: Number(entry.file.size) || 0,
+          data_base64: dataBase64
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || 'File could not be converted to PDF.');
+      }
+
+      const payload = await response.json();
+      if (!payload?.pdf_base64) throw new Error('PDF conversion returned no file.');
+
+      entry.printPdfBase64 = String(payload.pdf_base64);
+      entry.printPdfSize = Number(payload.size) || 0;
+      return entry.printPdfBase64;
+    };
+
+    const closePrintPreview = () => {
+      if (!printPreviewModal) return;
+      printPreviewModal.hidden = true;
+      printPreviewModal.setAttribute('aria-hidden', 'true');
+      if (printPreviewFrame) printPreviewFrame.removeAttribute('src');
+      if (printPreviewUrl) {
+        URL.revokeObjectURL(printPreviewUrl);
+        printPreviewUrl = '';
+      }
+    };
+
+    const openPrintPreview = async (entry) => {
+      if (!printPreviewModal || !printPreviewFrame || !entry?.selected) return;
+
+      printPopupError.hidden = true;
+      printPreviewTitle.textContent = entry.file.name;
+      printPreviewModal.hidden = false;
+      printPreviewModal.setAttribute('aria-hidden', 'false');
+      printPreviewFrame.removeAttribute('src');
+
+      try {
+        const pdfBase64 = await convertPrintFile(entry);
+        const binary = atob(pdfBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+
+        if (printPreviewUrl) URL.revokeObjectURL(printPreviewUrl);
+        printPreviewUrl = URL.createObjectURL(blob);
+        printPreviewFrame.src = printPreviewUrl;
+      } catch (error) {
+        closePrintPreview();
+        printPopupError.textContent = error.message || 'Preview could not be generated.';
+        printPopupError.hidden = false;
+      }
+    };
+
+    printPreviewClose?.addEventListener('click', closePrintPreview);
+    printPreviewBackdrop?.addEventListener('click', closePrintPreview);
+
     const openPrintPopup = (vendor, option) => {
       printVendor = vendor;
       printService = option;
@@ -2317,14 +2396,17 @@ const start = async () => {
       try {
         const files = [];
         for (const entry of printFiles.filter((item) => item.selected)) {
+          const pdfBase64 = await convertPrintFile(entry);
           files.push({
             name: entry.file.name,
-            type: entry.file.type || 'application/octet-stream',
-            size: Number(entry.file.size) || 0,
+            type: 'application/pdf',
+            original_type: entry.file.type || 'application/octet-stream',
+            original_size: Number(entry.file.size) || 0,
+            size: Number(entry.printPdfSize) || 0,
             copies: entry.copies,
             sides: entry.sides,
             color: entry.color,
-            data_base64: await readFileAsBase64(entry.file)
+            data_base64: pdfBase64
           });
         }
 
