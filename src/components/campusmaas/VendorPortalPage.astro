@@ -522,7 +522,12 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
             filePrint.type = 'button';
             filePrint.addEventListener('click', () => openPrintFile(order, file, index));
 
-            append(fileCard, fileMain, fileSettings, filePrint);
+            const fileCancel = create('button', 'vendor-print-file-cancel', file.cancelled ? 'CANCELLED' : 'CANCEL');
+            fileCancel.type = 'button';
+            fileCancel.disabled = Boolean(file.cancelled) || !['placed','accepted','preparing'].includes(String(order.status || '').toLowerCase());
+            if (!fileCancel.disabled) fileCancel.addEventListener('click', () => cancelOrderItem(order, index, fileCancel));
+
+            append(fileCard, fileMain, fileSettings, filePrint, fileCancel);
             orderCard.appendChild(fileCard);
           });
         });
@@ -698,6 +703,36 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       }
     };
 
+    const cancelOrderItem = async (order, itemIndex, button) => {
+      button.disabled = true;
+      button.textContent = 'Cancelling…';
+      try {
+        const response = await fetch('/__campusmaas/cancel-order-item', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: order.id,
+            item_index: itemIndex,
+            actor: 'vendor',
+            vendor_id: ordersVendorId,
+            option_id: ordersOptionId
+          })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Item cancellation failed.');
+        order.status = payload.order?.status || order.status;
+        if (payload.order?.items) order.items = payload.order.items;
+        if (payload.order?.files) order.files = payload.order.files;
+        order.quantity = payload.order?.quantity ?? order.quantity;
+        order.total_price = payload.order?.total_price ?? order.total_price;
+        renderVendorOrderList();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Cancel';
+        button.title = error?.message || 'Item cancellation failed.';
+      }
+    };
+
     const makeOrderCard = (order, currentServiceStatus = 'online') => {
       const card = create('article', 'vendor-order-card');
       const main = create('div', 'vendor-order-card-main');
@@ -785,13 +820,19 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       const items = create('div', 'vendor-food-order-items');
       const foodItems = Array.isArray(order.items) ? order.items : [];
 
-      foodItems.forEach((item) => {
+      foodItems.forEach((item, itemIndex) => {
         const row = create('div', 'vendor-food-order-item');
+        const itemInfo = create('div', 'vendor-food-order-item-info');
         append(
-          row,
+          itemInfo,
           create('span', 'vendor-food-order-item-name', item.menu_item_name || item.name || 'Food item'),
           create('span', 'vendor-food-order-item-count', '× ' + (Number(item.quantity) || 1))
         );
+        const itemCancel = create('button', 'vendor-order-item-cancel', item.cancelled ? 'Cancelled' : 'Cancel');
+        itemCancel.type = 'button';
+        itemCancel.disabled = Boolean(item.cancelled) || !['placed','accepted','preparing'].includes(String(order.status || '').toLowerCase());
+        if (!itemCancel.disabled) itemCancel.addEventListener('click', () => cancelOrderItem(order, itemIndex, itemCancel));
+        append(row, itemInfo, itemCancel);
         items.appendChild(row);
       });
 
@@ -1611,4 +1652,8 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
     .vendor-order-action{margin-top:23px}
     .vendor-history-row{grid-template-columns:1fr 1fr}
   }
+      .vendor-order-item-info{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+      .vendor-order-item-cancel,.vendor-print-file-cancel{border:1px solid rgba(195,62,73,.18);background:#fff7f7;color:#c33e49;border-radius:6px;padding:5px 8px;font-size:9px;font-weight:800;cursor:pointer}
+      .vendor-order-item-cancel:disabled,.vendor-print-file-cancel:disabled{opacity:.55;cursor:default}
+      .vendor-print-file-card{position:relative}
 </style>
