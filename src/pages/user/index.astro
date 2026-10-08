@@ -2217,11 +2217,11 @@ const start = async () => {
         const preview = document.createElement('button');
         preview.type = 'button';
         preview.className = 'print-preview-button';
-        preview.textContent = '◉';
+        preview.textContent = 'Preview';
         preview.setAttribute('aria-label', 'Preview ' + entry.file.name);
         preview.title = 'Preview';
 
-        controls.append(minus, count, preview, plus);
+        controls.append(minus, count, plus, preview);
 
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -3132,7 +3132,7 @@ void start().catch((error) => {
 </MainLayout>
 
 <style is:global>
- .print-preview-button{display:grid;place-items:center;width:25px;height:25px;border:1px solid rgba(22,135,255,.12);border-radius:6px;background:#fff;color:#1687ff;cursor:pointer;font-size:11px;line-height:1}
+ .print-preview-button{display:grid;place-items:center;min-width:58px;height:25px;padding:0 8px;border:1px solid rgba(22,135,255,.12);border-radius:6px;background:#fff;color:#1687ff;cursor:pointer;font-size:9px;font-weight:700;line-height:1;white-space:nowrap}
 .print-preview-button:hover{background:#edf6fd}
 .user-services-stack{
   position:absolute;
