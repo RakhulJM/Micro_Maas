@@ -26,38 +26,166 @@ const safeFileStem=(value,fallback='file')=>String(value||fallback)
   .trim()
   .slice(0,180)||fallback;
 
-const convertUploadedFileToPdf=(name,data)=>{
+const OFFICE_PDF_EXTENSIONS=new Set([
+  'doc','docx','dot','dotm','dotx',
+  'ppt','pptm','pptx','pps','ppsm','ppsx',
+  'xls','xlsm','xlsx',
+  'odp','ods','odt','rtf'
+]);
+
+let microsoftGraphTokenCache={token:'',expiresAt:0};
+
+const extensionOf=(name)=>{
+  const value=String(name||'').trim().toLowerCase();
+  const dot=value.lastIndexOf('.');
+  return dot>=0?value.slice(dot+1):'';
+};
+
+const graphErrorMessage=async(response,fallback)=>{
+  let detail='';
+  try{
+    const text=await response.text();
+    if(text){
+      try{
+        const payload=JSON.parse(text);
+        detail=payload?.error?.message||payload?.error_description||'';
+      }catch{
+        detail=text.slice(0,500);
+      }
+    }
+  }catch{
+    // Keep the fallback error when the response body cannot be read.
+  }
+  return detail||fallback;
+};
+
+const getMicrosoftGraphAccessToken=async()=>{
+  const now=Date.now();
+  if(microsoftGraphTokenCache.token && microsoftGraphTokenCache.expiresAt>now+60000){
+    return microsoftGraphTokenCache.token;
+  }
+
+  const tenantId=String(process.env.CAMPUSMAAS_GRAPH_TENANT_ID||'').trim();
+  const clientId=String(process.env.CAMPUSMAAS_GRAPH_CLIENT_ID||'').trim();
+  const clientSecret=String(process.env.CAMPUSMAAS_GRAPH_CLIENT_SECRET||'').trim();
+
+  if(!tenantId||!clientId||!clientSecret){
+    throw Error('Microsoft document conversion is not configured. Set CAMPUSMAAS_GRAPH_TENANT_ID, CAMPUSMAAS_GRAPH_CLIENT_ID, and CAMPUSMAAS_GRAPH_CLIENT_SECRET.');
+  }
+
+  const body=new URLSearchParams({
+    client_id:clientId,
+    client_secret:clientSecret,
+    scope:'https://graph.microsoft.com/.default',
+    grant_type:'client_credentials'
+  });
+
+  const response=await fetch(
+    'https://login.microsoftonline.com/'+encodeURIComponent(tenantId)+'/oauth2/v2.0/token',
+    {
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body
+    }
+  );
+
+  if(!response.ok){
+    throw Error(await graphErrorMessage(response,'Microsoft authentication failed.'));
+  }
+
+  const payload=await response.json();
+  if(!payload?.access_token) throw Error('Microsoft authentication returned no access token.');
+
+  microsoftGraphTokenCache={
+    token:String(payload.access_token),
+    expiresAt:now+(Math.max(60,Number(payload.expires_in)||3600)*1000)
+  };
+
+  return microsoftGraphTokenCache.token;
+};
+
+const convertOfficeDocumentToPdf=async(name,inputBuffer)=>{
+  const driveId=String(process.env.CAMPUSMAAS_GRAPH_DRIVE_ID||'').trim();
+  const parentId=String(process.env.CAMPUSMAAS_GRAPH_PARENT_ID||'').trim();
+  if(!driveId||!parentId){
+    throw Error('Microsoft document conversion is not configured. Set CAMPUSMAAS_GRAPH_DRIVE_ID and CAMPUSMAAS_GRAPH_PARENT_ID.');
+  }
+
+  const token=await getMicrosoftGraphAccessToken();
+  const remoteName='campusmaas-print-'+Date.now()+'-'+Math.random().toString(36).slice(2,9)+'-'+safeFileStem(name,'file');
+  const uploadUrl='https://graph.microsoft.com/v1.0/drives/'+
+    encodeURIComponent(driveId)+'/items/'+encodeURIComponent(parentId)+':/'+
+    encodeURIComponent(remoteName)+':/content';
+
+  let itemId='';
+  try{
+    const uploadResponse=await fetch(uploadUrl,{
+      method:'PUT',
+      headers:{
+        Authorization:'Bearer '+token,
+        'Content-Type':'application/octet-stream'
+      },
+      body:inputBuffer
+    });
+
+    if(!uploadResponse.ok){
+      throw Error(await graphErrorMessage(uploadResponse,'Microsoft file upload failed.'));
+    }
+
+    const item=await uploadResponse.json();
+    itemId=String(item?.id||'');
+    if(!itemId) throw Error('Microsoft file upload returned no drive item id.');
+
+    const pdfResponse=await fetch(
+      'https://graph.microsoft.com/v1.0/drives/'+encodeURIComponent(driveId)+
+      '/items/'+encodeURIComponent(itemId)+'/content?format=pdf',
+      {
+        method:'GET',
+        headers:{Authorization:'Bearer '+token}
+      }
+    );
+
+    if(!pdfResponse.ok){
+      throw Error(await graphErrorMessage(pdfResponse,'Microsoft could not convert this document to PDF.'));
+    }
+
+    const pdf=Buffer.from(await pdfResponse.arrayBuffer());
+    if(pdf.subarray(0,5).toString('ascii')!=='%PDF-'){
+      throw Error('Microsoft returned an invalid PDF document.');
+    }
+
+    return pdf;
+  }finally{
+    if(itemId){
+      try{
+        await fetch(
+          'https://graph.microsoft.com/v1.0/drives/'+encodeURIComponent(driveId)+
+          '/items/'+encodeURIComponent(itemId),
+          {
+            method:'DELETE',
+            headers:{Authorization:'Bearer '+token}
+          }
+        );
+      }catch{
+        // Conversion already succeeded; cleanup failure must not replace the PDF.
+      }
+    }
+  }
+};
+
+const convertUploadedFileToPdf=async(name,data)=>{
   const inputBuffer=Buffer.isBuffer(data)?data:decodeBase64(data);
   if(inputBuffer.length>50*1024*1024) throw Error('Print files must be 50 MB or smaller each.');
+
+  // Existing PDFs are never re-rendered. Their original bytes are preserved.
   if(inputBuffer.subarray(0,5).toString('ascii')==='%PDF-') return inputBuffer;
 
-  const workDir=fs.mkdtempSync(path.join(os.tmpdir(),'campusmaas-print-'));
-  const inputName=safeFileStem(name,'file') || 'file';
-  const inputPath=path.join(workDir,inputName);
-  const outputDir=path.join(workDir,'out');
-  const profileDir=path.join(workDir,'profile');
-  fs.mkdirSync(outputDir,{recursive:true});
-  fs.mkdirSync(profileDir,{recursive:true});
-  fs.writeFileSync(inputPath,inputBuffer);
-
-  try{
-    execFileSync('soffice',[
-      '--headless',
-      '--convert-to','pdf',
-      '--outdir',outputDir,
-      '-env:UserInstallation=file://'+profileDir,
-      inputPath
-    ],{stdio:'pipe',timeout:120000});
-
-    const outputPath=path.join(outputDir,path.basename(inputName,path.extname(inputName))+'.pdf');
-    if(!fs.existsSync(outputPath)) throw Error('LibreOffice did not produce a PDF.');
-    return fs.readFileSync(outputPath);
-  }catch(error){
-    const detail=Buffer.isBuffer(error?.stderr)?error.stderr.toString('utf8').trim():'';
-    throw Error(detail||('Unsupported file type or PDF conversion failed for '+name+'.'));
-  }finally{
-    fs.rmSync(workDir,{recursive:true,force:true});
+  const extension=extensionOf(name);
+  if(!OFFICE_PDF_EXTENSIONS.has(extension)){
+    throw Error('This file format is not accepted because its layout cannot be safely preserved. Upload a PDF or a supported Office document.');
   }
+
+  return convertOfficeDocumentToPdf(name,inputBuffer);
 };
 
 const mergePdfFiles=(files)=>{
