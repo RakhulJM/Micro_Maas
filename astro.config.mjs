@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { defineConfig } from 'astro/config';
 
 const jsonBody=(chunks)=>JSON.parse(Buffer.concat(chunks).toString('utf8'));
@@ -10,6 +12,69 @@ const writePrivateJson=(relativePath,payload)=>{
   const output=JSON.stringify(payload,null,2)+'\n';
   fs.mkdirSync(path.dirname(sourcePath),{recursive:true});
   fs.writeFileSync(sourcePath,output,'utf8');
+};
+
+const decodeBase64=(value)=>{
+  const data=String(value||'');
+  if(!data||!/^[A-Za-z0-9+/]*={0,2}$/.test(data)) throw Error('Invalid file data.');
+  return Buffer.from(data,'base64');
+};
+
+const safeFileStem=(value,fallback='file')=>String(value||fallback)
+  .replace(/[\\/:*?"<>|]+/g,'_')
+  .replace(/\\s+/g,' ')
+  .trim()
+  .slice(0,180)||fallback;
+
+const convertUploadedFileToPdf=(name,data)=>{
+  const inputBuffer=Buffer.isBuffer(data)?data:decodeBase64(data);
+  if(inputBuffer.length>50*1024*1024) throw Error('Print files must be 50 MB or smaller each.');
+  if(inputBuffer.subarray(0,5).toString('ascii')==='%%PDF') return inputBuffer;
+
+  const workDir=fs.mkdtempSync(path.join(os.tmpdir(),'campusmaas-print-'));
+  const inputName=safeFileStem(name,'file') || 'file';
+  const inputPath=path.join(workDir,inputName);
+  const outputDir=path.join(workDir,'out');
+  const profileDir=path.join(workDir,'profile');
+  fs.mkdirSync(outputDir,{recursive:true});
+  fs.mkdirSync(profileDir,{recursive:true});
+  fs.writeFileSync(inputPath,inputBuffer);
+
+  try{
+    execFileSync('soffice',[
+      '--headless',
+      '--convert-to','pdf',
+      '--outdir',outputDir,
+      '-env:UserInstallation=file://'+profileDir,
+      inputPath
+    ],{stdio:'pipe',timeout:120000});
+
+    const outputPath=path.join(outputDir,path.basename(inputName,path.extname(inputName))+'.pdf');
+    if(!fs.existsSync(outputPath)) throw Error('LibreOffice did not produce a PDF.');
+    return fs.readFileSync(outputPath);
+  }catch(error){
+    const detail=Buffer.isBuffer(error?.stderr)?error.stderr.toString('utf8').trim():'';
+    throw Error(detail||('Unsupported file type or PDF conversion failed for '+name+'.'));
+  }finally{
+    fs.rmSync(workDir,{recursive:true,force:true});
+  }
+};
+
+const mergePdfFiles=(files)=>{
+  if(!files.length) throw Error('No PDF files selected.');
+  if(files.length===1) return fs.readFileSync(files[0]);
+  const workDir=fs.mkdtempSync(path.join(os.tmpdir(),'campusmaas-print-merge-'));
+  const outputPath=path.join(workDir,'print-job.pdf');
+  try{
+    execFileSync('pdfunite',[...files,outputPath],{stdio:'pipe',timeout:120000});
+    if(!fs.existsSync(outputPath)) throw Error('PDF merge did not produce an output file.');
+    return fs.readFileSync(outputPath);
+  }catch(error){
+    const detail=Buffer.isBuffer(error?.stderr)?error.stderr.toString('utf8').trim():'';
+    throw Error(detail||'PDF print job could not be prepared.');
+  }finally{
+    fs.rmSync(workDir,{recursive:true,force:true});
+  }
 };
 
 const writeJsonCopies=(relativePath,payload)=>{const sourcePath=path.join(process.cwd(),relativePath);const publicPath=path.join(process.cwd(),'public',relativePath);const output=JSON.stringify(payload,null,2)+'\n';fs.mkdirSync(path.dirname(sourcePath),{recursive:true});fs.mkdirSync(path.dirname(publicPath),{recursive:true});fs.writeFileSync(sourcePath,output,'utf8');fs.writeFileSync(publicPath,output,'utf8')};
@@ -147,23 +212,32 @@ const pedestrianNetworkSavePlugin = () => ({
               const copies=Math.max(1,Math.min(99,Math.floor(Number(file?.copies)||0)));
               const sides=String(file?.sides||'single').toLowerCase();
               const color=String(file?.color||'bw').toLowerCase();
-              const size=Math.max(0,Number(file?.size)||0);
+              const originalSize=Math.max(0,Number(file?.original_size||file?.size)||0);
               const data=String(file?.data_base64||'');
               if(!name)throw Error('Invalid print file name.');
               if(!['single','double'].includes(sides))throw Error('Invalid print sides.');
               if(!['bw','color'].includes(color))throw Error('Invalid print colour.');
               if(!data)throw Error('Print file data is missing.');
-              if(size!==0&&size>50*1024*1024)throw Error('Print files must be 50 MB or smaller each.');
-              if(!/^[A-Za-z0-9+/]*={0,2}$/.test(data))throw Error('Invalid print file data.');
-              const buffer=Buffer.from(data,'base64');
-              if(size>0&&buffer.length!==size)throw Error('Print file size validation failed.');
-              totalBytes+=buffer.length;
+              const pdfBuffer=decodeBase64(data);
+              if(pdfBuffer.subarray(0,5).toString('ascii')!=='%PDF-')throw Error('Print order files must be generated PDF documents.');
+              if(pdfBuffer.length>50*1024*1024)throw Error('Generated PDF files must be 50 MB or smaller each.');
+              totalBytes+=pdfBuffer.length;
               if(totalBytes>250*1024*1024)throw Error('Total print upload is too large.');
               totalCopies+=copies;
-              const safeName=name.replace(/[\\/:*?"<>|]+/g,'_').replace(/\s+/g,' ').trim().slice(0,180)||('file-'+(index+1));
-              const storedName=String(index+1).padStart(3,'0')+'-'+safeName;
-              fs.writeFileSync(path.join(orderDir,storedName),buffer);
-              storedFiles.push({name,type:String(file?.type||'application/octet-stream').slice(0,200),size:buffer.length,copies,sides,color,stored_path:path.posix.join('maps','print_orders',orderId,storedName)});
+              const safeName=safeFileStem(name,'file-'+(index+1));
+              const storedName=String(index+1).padStart(3,'0')+'-'+safeName+'.pdf';
+              fs.writeFileSync(path.join(orderDir,storedName),pdfBuffer);
+              storedFiles.push({
+                name,
+                type:'application/pdf',
+                original_type:String(file?.original_type||'application/octet-stream').slice(0,200),
+                original_size:originalSize,
+                size:pdfBuffer.length,
+                copies,
+                sides,
+                color,
+                stored_path:path.posix.join('maps','print_orders',orderId,storedName)
+              });
             });
             const total=(Number(o.price)||0)*totalCopies;
             order={id:orderId,user_id:String(p.user_id||'anonymous').slice(0,80),vendor_id:v.id,vendor_name:v.name,option_id:o.id,option_name:o.name,files:storedFiles,quantity:totalCopies,total_price:total,service_minutes:Number(o.service_minutes)||0,status:'placed',created_at:new Date().toISOString()};
@@ -180,157 +254,84 @@ const pedestrianNetworkSavePlugin = () => ({
         }
       });
     });
-    server.middlewares.use('/__campusmaas/print-file', (req, res, next) => {
-      if (req.method !== 'GET') {
-        next();
-        return;
-      }
-
-      try {
-        const parsed = new URL(req.url || '', 'http://localhost');
-        const orderId = parsed.searchParams.get('order_id');
-        const fileIndex = Number(parsed.searchParams.get('file_index'));
-        if (!orderId || !Number.isInteger(fileIndex) || fileIndex < 0) {
-          throw new Error('Invalid print file request.');
+    server.middlewares.use('/__campusmaas/convert-print-file',(req,res,next)=>{
+      if(req.method!=='POST')return next();
+      const chunks=[];
+      req.on('data',c=>chunks.push(c));
+      req.on('end',()=>{
+        try{
+          const p=jsonBody(chunks);
+          const name=String(p?.name||'file').trim();
+          const data=decodeBase64(p?.data_base64);
+          if(!name)throw Error('Invalid file name.');
+          if(data.length>50*1024*1024)throw Error('Print files must be 50 MB or smaller each.');
+          const pdf=convertUploadedFileToPdf(name,data);
+          res.statusCode=200;
+          res.setHeader('Content-Type','application/json');
+          res.setHeader('Cache-Control','no-store');
+          res.end(JSON.stringify({ok:true,name,type:'application/pdf',size:pdf.length,pdf_base64:pdf.toString('base64')}));
+        }catch(error){
+          res.statusCode=400;
+          res.setHeader('Content-Type','application/json');
+          res.end(JSON.stringify({ok:false,error:error.message||'PDF conversion failed.'}));
         }
-
-        const orders = readJsonFile('maps/campus_orders.json');
-        const order = orders.orders.find(
-          (item) =>
-            item.id === orderId &&
-            item.vendor_id === 'printer' &&
-            Array.isArray(item.files)
-        );
-        const file = order?.files?.[fileIndex];
-        if (!order || !file?.stored_path) {
-          res.statusCode = 404;
-          res.end('Print file not found.');
-          return;
-        }
-
-        const absolutePath = path.resolve(process.cwd(), file.stored_path);
-        const printRoot = path.resolve(process.cwd(), 'maps', 'print_orders');
-        if (!(absolutePath === printRoot || absolutePath.startsWith(printRoot + path.sep)) ||
-            !fs.existsSync(absolutePath)) {
-          res.statusCode = 404;
-          res.end('Print file not found.');
-          return;
-        }
-
-        const mimeByExtension = {
-          '.pdf': 'application/pdf',
-          '.png': 'image/png',
-          '.jpg': 'image/jpeg',
-          '.jpeg': 'image/jpeg',
-          '.gif': 'image/gif',
-          '.webp': 'image/webp',
-          '.svg': 'image/svg+xml',
-          '.txt': 'text/plain; charset=utf-8',
-          '.csv': 'text/csv; charset=utf-8',
-          '.html': 'text/html; charset=utf-8'
-        };
-        const ext = path.extname(absolutePath).toLowerCase();
-        const mime = mimeByExtension[ext] || file.type || 'application/octet-stream';
-
-        res.statusCode = 200;
-        res.setHeader('Content-Type', mime);
-        res.setHeader('Content-Disposition', 'inline; filename="' + String(file.name || path.basename(absolutePath)).replace(/["\\]/g, '_') + '"');
-        res.end(fs.readFileSync(absolutePath));
-      } catch (error) {
-        res.statusCode = 400;
-        res.end(error instanceof Error ? error.message : 'Print file request failed.');
-      }
+      });
     });
 
-    server.middlewares.use('/__campusmaas/print-batch', (req, res, next) => {
-      if (req.method !== 'GET') {
-        next();
-        return;
-      }
+    server.middlewares.use('/__campusmaas/print-file',(req,res,next)=>{
+      if(req.method!=='GET')return next();
+      try{
+        const parsed=new URL(req.url||'', 'http://localhost');
+        const orderId=parsed.searchParams.get('order_id');
+        const fileIndex=Number(parsed.searchParams.get('file_index'));
+        if(!orderId||!Number.isInteger(fileIndex)||fileIndex<0)throw Error('Invalid print file request.');
+        const orders=readJsonFile('maps/campus_orders.json');
+        const order=orders.orders.find((item)=>item.id===orderId&&item.vendor_id==='printer'&&Array.isArray(item.files));
+        const file=order?.files?.[fileIndex];
+        if(!order||!file?.stored_path){res.statusCode=404;res.end('Print file not found.');return;}
+        const absolutePath=path.resolve(process.cwd(),file.stored_path);
+        const printRoot=path.resolve(process.cwd(),'maps','print_orders');
+        if(!(absolutePath.startsWith(printRoot+path.sep))||!fs.existsSync(absolutePath)){res.statusCode=404;res.end('Print file not found.');return;}
+        const copies=Math.max(1,Math.min(99,Number(file.copies)||1));
+        const inputs=Array.from({length:copies},()=>absolutePath);
+        const pdf=mergePdfFiles(inputs);
+        res.statusCode=200;
+        res.setHeader('Content-Type','application/pdf');
+        res.setHeader('Content-Disposition','inline; filename="'+safeFileStem(file.name,'print')+'.pdf"');
+        res.setHeader('Cache-Control','no-store');
+        res.end(pdf);
+      }catch(error){res.statusCode=400;res.end(error.message||'Print file request failed.');}
+    });
 
-      try {
-        const parsed = new URL(req.url || '', 'http://localhost');
-        const orderId = parsed.searchParams.get('order_id');
-        const indexes = String(parsed.searchParams.get('indexes') || '')
-          .split(',')
-          .map((value) => Number(value))
-          .filter((value) => Number.isInteger(value) && value >= 0);
-
-        if (!orderId || !indexes.length) {
-          throw new Error('Invalid print batch request.');
-        }
-
-        const orders = readJsonFile('maps/campus_orders.json');
-        const order = orders.orders.find(
-          (item) =>
-            item.id === orderId &&
-            item.vendor_id === 'printer' &&
-            Array.isArray(item.files)
-        );
-
-        if (!order) {
-          res.statusCode = 404;
-          res.end('Print order not found.');
-          return;
-        }
-
-        const uniqueIndexes = [...new Set(indexes)].filter((index) => order.files[index]);
-        const escapeHtml = (value) =>
-          String(value)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
-
-        const items = uniqueIndexes.map((index) => {
-          const file = order.files[index];
-          const url =
-            '/__campusmaas/print-file?order_id=' +
-            encodeURIComponent(order.id) +
-            '&file_index=' +
-            encodeURIComponent(String(index));
-          const name = escapeHtml(file.name || ('File ' + (index + 1)));
-          const copies = Number(file.copies) || 1;
-          const settings =
-            (file.color === 'color' ? 'Colour' : 'Black & White') +
-            ' · ' +
-            (file.sides === 'double' ? 'Both sides' : 'One side') +
-            ' · ' +
-            copies +
-            (copies === 1 ? ' copy' : ' copies');
-
-          const ext = path.extname(String(file.name || '')).toLowerCase();
-          const supportedImage = ['.png','.jpg','.jpeg','.gif','.webp','.svg'].includes(ext);
-          const supportedText = ['.txt','.csv'].includes(ext);
-          const body = supportedImage
-            ? '<img src="' + url + '" alt="' + name + '">'
-            : supportedText
-              ? '<iframe src="' + url + '" title="' + name + '"></iframe>'
-              : '<div class="unsupported"><strong>' + name + '</strong><span>This file type must be opened in its own application.</span><a href="' + url + '" target="_blank" rel="noreferrer">OPEN FILE</a></div>';
-
-          return '<section class="sheet"><header><strong>' + name + '</strong><small>' + escapeHtml(settings) + '</small></header>' + body + '</section>';
-        }).join('');
-
-        const label = escapeHtml(parsed.searchParams.get('label') || ('Order #' + order.id));
-
-        const html='<!doctype html><html><head><meta charset="utf-8"><title>' + label + '</title><style>' +
-          'body{margin:0;background:#e9eef3;color:#102132;font-family:Arial,sans-serif;padding:24px}' +
-          '.toolbar{position:sticky;top:0;display:flex;justify-content:space-between;gap:12px;padding:10px 0 16px;background:#e9eef3;z-index:2}' +
-          '.toolbar strong{font-size:14px}.toolbar button{border:0;border-radius:8px;background:#1687ff;color:#fff;padding:9px 14px;font-weight:700;cursor:pointer}' +
-          '.sheet{background:#fff;margin:0 auto 18px;max-width:760px;min-height:420px;padding:18px;box-sizing:border-box;box-shadow:0 10px 30px rgba(15,35,53,.12);break-after:page}' +
-          '.sheet header{display:flex;justify-content:space-between;gap:12px;margin-bottom:12px}.sheet header strong{font-size:12px}.sheet header small{font-size:9px;color:#6f8395}' +
-          '.sheet img{display:block;max-width:100%;max-height:650px;margin:0 auto}.sheet iframe{width:100%;height:680px;border:0}.unsupported{display:grid;place-items:center;min-height:360px;text-align:center;gap:8px;color:#60778b}.unsupported strong{color:#18344d}.unsupported a{color:#1687ff}' +
-          '@media print{body{padding:0;background:#fff}.toolbar{display:none}.sheet{max-width:none;margin:0;box-shadow:none;min-height:100vh;padding:12mm}.sheet:last-child{break-after:auto}}' +
-          '</style></head><body><div class="toolbar"><strong>' + label + '</strong><button onclick="window.print()">PRINT</button></div>' +
-          items + '<script>setTimeout(function(){try{window.print()}catch(e){}},700)<\/script></body></html>';
-
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(html);
-      } catch (error) {
-        res.statusCode = 400;
-        res.end(error instanceof Error ? error.message : 'Print batch request failed.');
-      }
+    server.middlewares.use('/__campusmaas/print-batch',(req,res,next)=>{
+      if(req.method!=='GET')return next();
+      try{
+        const parsed=new URL(req.url||'', 'http://localhost');
+        const orderId=parsed.searchParams.get('order_id');
+        const indexes=String(parsed.searchParams.get('indexes')||'').split(',').map(Number).filter((value)=>Number.isInteger(value)&&value>=0);
+        if(!orderId||!indexes.length)throw Error('Invalid print batch request.');
+        const orders=readJsonFile('maps/campus_orders.json');
+        const order=orders.orders.find((item)=>item.id===orderId&&item.vendor_id==='printer'&&Array.isArray(item.files));
+        if(!order){res.statusCode=404;res.end('Print order not found.');return;}
+        const unique=[...new Set(indexes)].filter((index)=>order.files[index]);
+        if(!unique.length)throw Error('No print files selected.');
+        const inputs=[];
+        unique.forEach((index)=>{
+          const file=order.files[index];
+          const absolutePath=path.resolve(process.cwd(),file.stored_path);
+          const printRoot=path.resolve(process.cwd(),'maps','print_orders');
+          if(!absolutePath.startsWith(printRoot+path.sep)||!fs.existsSync(absolutePath))throw Error('Print file not found.');
+          const copies=Math.max(1,Math.min(99,Number(file.copies)||1));
+          for(let copy=0;copy<copies;copy+=1)inputs.push(absolutePath);
+        });
+        const pdf=mergePdfFiles(inputs);
+        const label=safeFileStem(parsed.searchParams.get('label')||('Order-'+order.id),'print-order');
+        res.statusCode=200;
+        res.setHeader('Content-Type','application/pdf');
+        res.setHeader('Content-Disposition','inline; filename="'+label+'.pdf"');
+        res.setHeader('Cache-Control','no-store');
+        res.end(pdf);
+      }catch(error){res.statusCode=400;res.end(error.message||'Print batch request failed.');}
     });
 
     server.middlewares.use('/__campusmaas/update-order',(req,res,next)=>{
