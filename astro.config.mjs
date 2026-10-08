@@ -386,14 +386,14 @@ const pedestrianNetworkSavePlugin = () => ({
       if(req.method!=='POST')return next();
       const chunks=[];
       req.on('data',c=>chunks.push(c));
-      req.on('end',()=>{
+      req.on('end',async()=>{
         try{
           const p=jsonBody(chunks);
           const name=String(p?.name||'file').trim();
           const data=decodeBase64(p?.data_base64);
           if(!name)throw Error('Invalid file name.');
           if(data.length>50*1024*1024)throw Error('Print files must be 50 MB or smaller each.');
-          const pdf=convertUploadedFileToPdf(name,data);
+          const pdf=await convertUploadedFileToPdf(name,data);
           res.statusCode=200;
           res.setHeader('Content-Type','application/json');
           res.setHeader('Cache-Control','no-store');
