@@ -2240,12 +2240,57 @@ const start = async () => {
         const preview = document.createElement('button');
         preview.type = 'button';
         preview.className = 'print-preview-button';
-        preview.textContent = 'Preview';
-        preview.setAttribute('aria-label', 'Preview ' + entry.file.name);
-        preview.title = 'Preview';
-        preview.disabled = !entry.selected || entry.conversionStatus !== 'ready';
-        preview.addEventListener('click', () => {
-          void openPrintPreview(entry);
+        preview.textContent = entry.conversionStatus === 'converting'
+          ? 'PROCESSING…'
+          : entry.conversionStatus === 'error'
+            ? 'FAILED'
+            : 'Preview';
+        preview.setAttribute(
+          'aria-label',
+          entry.conversionStatus === 'converting'
+            ? 'Processing PDF for ' + entry.file.name
+            : entry.conversionStatus === 'error'
+              ? 'PDF conversion failed for ' + entry.file.name
+              : 'Preview ' + entry.file.name
+        );
+        preview.title = entry.conversionStatus === 'converting'
+          ? 'PDF conversion in progress'
+          : entry.conversionStatus === 'error'
+            ? (entry.conversionError || 'PDF conversion failed')
+            : 'Preview';
+        preview.disabled = !entry.selected ||
+          entry.conversionStatus !== 'ready';
+        preview.classList.toggle(
+          'is-processing',
+          entry.conversionStatus === 'converting'
+        );
+        preview.classList.toggle(
+          'is-error',
+          entry.conversionStatus === 'error'
+        );
+        preview.addEventListener('click', async () => {
+          if (!entry.selected || entry.conversionStatus !== 'ready') return;
+
+          preview.disabled = true;
+          preview.classList.add('is-processing');
+          preview.textContent = 'PROCESSING…';
+          preview.title = 'Loading print-ready PDF…';
+
+          try {
+            await openPrintPreview(entry);
+          } finally {
+            preview.classList.remove('is-processing');
+            preview.disabled = !entry.selected ||
+              entry.conversionStatus !== 'ready';
+            preview.textContent = entry.conversionStatus === 'ready'
+              ? 'Preview'
+              : entry.conversionStatus === 'error'
+                ? 'FAILED'
+                : 'PROCESSING…';
+            preview.title = entry.conversionStatus === 'error'
+              ? (entry.conversionError || 'PDF conversion failed')
+              : 'Preview';
+          }
         });
 
         controls.append(minus, count, plus, preview);
@@ -3277,6 +3322,10 @@ void start().catch((error) => {
 @keyframes print-conversion-spin{to{transform:rotate(360deg)}}
  .print-preview-button{display:grid;place-items:center;min-width:58px;height:25px;padding:0 8px;border:1px solid rgba(22,135,255,.12);border-radius:6px;background:#fff;color:#1687ff;cursor:pointer;font-size:9px;font-weight:700;line-height:1;white-space:nowrap}
 .print-preview-button:hover{background:#edf6fd}
+.print-preview-button.is-processing{cursor:wait;color:#8a6a12;background:#fffaf0;border-color:rgba(138,106,18,.16)}
+.print-preview-button.is-processing::before{content:'';width:8px;height:8px;border:1px solid currentColor;border-right-color:transparent;border-radius:50%;animation:print-preview-spin .75s linear infinite}
+.print-preview-button.is-error{color:#c33e49;border-color:rgba(195,62,73,.16);background:#fff7f7}
+@keyframes print-preview-spin{to{transform:rotate(360deg)}}
 .user-services-stack{
   position:absolute;
   z-index:1050;
