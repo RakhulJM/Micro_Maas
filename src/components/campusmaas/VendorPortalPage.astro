@@ -307,19 +307,31 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       frame.style.border = '0';
       frame.style.opacity = '0';
       frame.setAttribute('aria-hidden', 'true');
+      let printed = false;
       frame.onload = () => {
+        if (printed) return;
+
         try {
+          const currentUrl = frame.contentWindow?.location?.href || '';
+          if (currentUrl === 'about:blank') return;
+
+          printed = true;
           frame.contentWindow?.focus();
           frame.contentWindow?.print();
-        } finally {
-          setTimeout(() => {
-            URL.revokeObjectURL(blobUrl);
-            frame.remove();
-          }, 15000);
+        } catch (error) {
+          console.error('Print failed:', error);
         }
+
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl);
+          frame.remove();
+        }, 15000);
       };
-      document.body.appendChild(frame);
+
+      // Set the PDF before inserting the iframe so the initial about:blank
+      // document cannot trigger the browser print dialog.
       frame.src = blobUrl;
+      document.body.appendChild(frame);
     };
 
     const openPrintFile = (order, file, index) => {
