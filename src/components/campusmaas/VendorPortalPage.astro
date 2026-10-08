@@ -312,24 +312,27 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         if (printed) return;
 
         try {
-          const currentUrl = frame.contentWindow?.location?.href || '';
-          if (currentUrl === 'about:blank') return;
-
+          // The PDF viewer can expose a restricted location object. Do not
+          // inspect contentWindow.location here; the iframe source is already
+          // explicitly set to the print-ready PDF before insertion.
           printed = true;
           frame.contentWindow?.focus();
           frame.contentWindow?.print();
         } catch (error) {
+          printed = false;
           console.error('Print failed:', error);
         }
 
-        setTimeout(() => {
-          URL.revokeObjectURL(blobUrl);
-          frame.remove();
-        }, 15000);
+        if (printed) {
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+            frame.remove();
+          }, 15000);
+        }
       };
 
-      // Set the PDF before inserting the iframe so the initial about:blank
-      // document cannot trigger the browser print dialog.
+      // Set the PDF before inserting the iframe so the iframe navigates
+      // directly to the print-ready document.
       frame.src = blobUrl;
       document.body.appendChild(frame);
     };
