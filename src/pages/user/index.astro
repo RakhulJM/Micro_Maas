@@ -1,9 +1,9 @@
 ---
-import MainLayout from '../layouts/MainLayout.astro';
-import '../styles/global.css';
+import MainLayout from '../../layouts/MainLayout.astro';
+import '../../styles/global.css';
 import 'leaflet/dist/leaflet.css';
-import FoodOrderPopup from '../components/campusmaas/FoodOrderPopup.astro';
-import PrintOrderPopup from '../components/campusmaas/PrintOrderPopup.astro';
+import FoodOrderPopup from '../../components/campusmaas/FoodOrderPopup.astro';
+import PrintOrderPopup from '../../components/campusmaas/PrintOrderPopup.astro';
 ---
 
 <MainLayout title="CampusMaaS">
@@ -292,6 +292,24 @@ const policyAppliesToGroup = (policy, group) => {
   return false;
 };
 
+const policyDirectionAllows = (policy, direction = '') => {
+  const policyDirection = String(policy?.direction || 'in_out');
+
+  return policyDirection === 'in_out' ||
+    !direction ||
+    policyDirection === direction;
+};
+
+const gatePoliciesForRoute = (gate, accessPolicy, group = 'students', direction = '') =>
+  (accessPolicy?.policies || []).filter(
+    (policy) =>
+      policy?.target?.type === 'gate' &&
+      String(policy?.target?.id) === String(gate?.id) &&
+      policyAppliesToGroup(policy, group) &&
+      policyDirectionAllows(policy, direction) &&
+      policy?.enabled !== false
+  );
+
 const policyHasCondition = (policy) => {
   const windows =
     Array.isArray(policy?.windows)
@@ -452,8 +470,98 @@ const routeSummary = (
   startPoint,
   endPoint,
   accessPolicy,
-  userGroup = 'boys'
+  userGroup = 'boys',
+  gates = []
 ) => {
+  const temporal = policyTemporalState(
+    accessPolicy?.timezone || 'Asia/Kolkata'
+  );
+
+  const gateFeatureIsBlocked = (gate) => {
+    const policies = gatePoliciesForRoute(gate, accessPolicy, userGroup, '');
+    const universalPolicies = policies.filter(
+      (policy) => String(policy?.direction || 'in_out') === 'in_out'
+    );
+
+    if (!universalPolicies.length) return false;
+
+    if (
+      universalPolicies.some(
+        (policy) =>
+          (policy.mode === 'deny' || policy.mode === 'deny_during') &&
+          policyMatchesNow(policy, temporal)
+      )
+    ) {
+      return true;
+    }
+
+    const allowOnly = universalPolicies.filter(
+      (policy) => policy.mode === 'allow_only_during'
+    );
+
+    return allowOnly.length > 0 &&
+      !allowOnly.some((policy) => policyMatchesNow(policy, temporal));
+  };
+
+  const blockedGates = (gates || []).filter(gateFeatureIsBlocked);
+
+  const pointToFeatureDistance = (point, feature) => {
+    const lines =
+      feature?.geometry?.type === 'LineString'
+        ? [feature.geometry.coordinates]
+        : feature?.geometry?.type === 'MultiLineString'
+          ? feature.geometry.coordinates
+          : [];
+
+    let best = Infinity;
+
+    for (const line of lines) {
+      if (!Array.isArray(line) || line.length < 2) continue;
+
+      for (let index = 0; index < line.length - 1; index += 1) {
+        const a = line[index];
+        const b = line[index + 1];
+        const projected = projectPointToPath(
+          {
+            features: [{
+              geometry: {
+                type: 'LineString',
+                coordinates: [a, b]
+              }
+            }]
+          },
+          point
+        );
+
+        if (projected) best = Math.min(best, projected.distance);
+      }
+    }
+
+    return best;
+  };
+
+  const pathPassesBlockedGate = (feature) =>
+    blockedGates.some((gate) => {
+      const coordinate =
+        gate?.properties?.access_point ||
+        gate?.properties?.center;
+
+      if (!Array.isArray(coordinate) || coordinate.length < 2) return false;
+
+      const gatePoint = L.latLng(
+        Number(coordinate[1]),
+        Number(coordinate[0])
+      );
+
+      const radius =
+        Math.max(
+          8,
+          (Number(gate?.properties?.width_m) || 2) * 0.5 + 4
+        );
+
+      return pointToFeatureDistance(gatePoint, feature) <= radius;
+    });
+
   const routablePathData = {
     ...pathData,
     features: (pathData?.features || [])
@@ -467,7 +575,8 @@ const routeSummary = (
         )
       }))
       .filter((feature) =>
-        pathFeatureAllowed(feature, accessPolicy, userGroup)
+        pathFeatureAllowed(feature, accessPolicy, userGroup) &&
+        !pathPassesBlockedGate(feature)
       )
   };
 
@@ -788,8 +897,7 @@ const routeSummary = (
 
       if (distance <= 0) continue;
 
-      const aKey = graphKey(a);
-      const bKey = graphKey(b);
+      const aKey = graphKey(a);      const bKey = graphKey(b);
 
       addNode(aKey, a);
       addNode(bKey, b);
@@ -857,8 +965,126 @@ const routeSummary = (
     };
   };
 
-  const candidateAnchors = (point) => {
+  const preferredGateForPoint = (point, direction) => {
+    const matches = (gates || [])
+      .map((gate) => {
+        const coordinate =
+          gate?.properties?.access_point ||
+          gate?.properties?.center;
+
+        if (!Array.isArray(coordinate) || coordinate.length < 2) return null;
+
+        const policies = gatePoliciesForRoute(
+          gate,
+          accessPolicy,
+          userGroup,
+          direction
+        ).filter((policy) =>
+          policy.mode === 'preferred' &&
+          policyMatchesNow(policy, temporal)
+        );
+
+        if (!policies.length) return null;
+
+        return {
+          gate,
+          distance: L.latLng(
+            Number(coordinate[1]),
+            Number(coordinate[0])
+          ).distanceTo(point),
+          priority: Math.max(
+            ...policies.map((policy) => Number(policy.priority) || 0)
+          )
+        };
+      })
+      .filter(Boolean)
+      .filter((entry) => entry.distance <= 80)
+      .sort((a, b) =>
+        b.priority - a.priority ||
+        a.distance - b.distance
+      );
+
+    return matches[0] || null;
+  };
+
+  const gateAccessAllowed = (gate, direction) => {
+    const policies = gatePoliciesForRoute(
+      gate,
+      accessPolicy,
+      userGroup,
+      direction
+    );
+
+    if (!policies.length) return true;
+
+    const activePolicies = policies.filter((policy) =>
+      policyMatchesNow(policy, temporal)
+    );
+
+    if (
+      activePolicies.some(
+        (policy) =>
+          policy.mode === 'deny' ||
+          policy.mode === 'deny_during'
+      )
+    ) {
+      return false;
+    }
+
+    const allowOnly = policies.filter(
+      (policy) => policy.mode === 'allow_only_during'
+    );
+
+    if (allowOnly.length) {
+      return allowOnly.some((policy) =>
+        activePolicies.includes(policy)
+      );
+    }
+
+    const conditionalAllow = policies.filter(
+      (policy) =>
+        policy.mode === 'allow' &&
+        policyHasCondition(policy)
+    );
+
+    if (conditionalAllow.length) {
+      return conditionalAllow.some((policy) =>
+        activePolicies.includes(policy)
+      );
+    }
+
+    return true;
+  };
+
+  const endpointGateFor = (point) => {
+    let best = null;
+
+    for (const gate of gates || []) {
+      const coordinate =
+        gate?.properties?.access_point ||
+        gate?.properties?.center;
+
+      if (!Array.isArray(coordinate) || coordinate.length < 2) continue;
+
+      const gatePoint = L.latLng(
+        Number(coordinate[1]),
+        Number(coordinate[0])
+      );
+
+      const distance = gatePoint.distanceTo(point);
+      if (!best || distance < best.distance) {
+        best = { gate, point: gatePoint, distance };
+      }
+    }
+
+    return best && best.distance <= USER_GATE_MATCH_RADIUS_M
+      ? best
+      : null;
+  };
+
+  const candidateAnchors = (point, direction) => {
     const candidates = [];
+    const preferredGate = preferredGateForPoint(point, direction);
 
     for (
       let index = 0;
@@ -876,16 +1102,35 @@ const routeSummary = (
         projection.distance <=
         USER_ROUTE_CONNECT_RADIUS_M
       ) {
+        const preferredDistance = preferredGate
+          ? L.latLng(
+              Number(preferredGate.gate?.properties?.access_point?.[1] ??
+                preferredGate.gate?.properties?.center?.[1]),
+              Number(preferredGate.gate?.properties?.access_point?.[0] ??
+                preferredGate.gate?.properties?.center?.[0])
+            ).distanceTo(
+              L.latLng(
+                Number(projection.coordinate[1]),
+                Number(projection.coordinate[0])
+              )
+            )
+          : 0;
+
+        const preferenceWeight = preferredGate
+          ? 0.25 + (100 - Number(preferredGate.priority || 0)) / 200
+          : 0;
+
         candidates.push({
           segment,
           coordinate: projection.coordinate,
           distance: projection.distance,
-          fraction: projection.fraction
+          fraction: projection.fraction,
+          score: projection.distance + preferredDistance * preferenceWeight
         });
       }
     }
 
-    candidates.sort((a, b) => a.distance - b.distance);
+    candidates.sort((a, b) => a.score - b.score || a.distance - b.distance);
 
     /*
      * Keeping a handful of nearby candidates allows the router to choose
@@ -895,8 +1140,25 @@ const routeSummary = (
     return candidates.slice(0, 8);
   };
 
-  const startCandidates = candidateAnchors(startPoint);
-  const endCandidates = candidateAnchors(endPoint);
+  const startGate = endpointGateFor(startPoint);
+  const endGate = endpointGateFor(endPoint);
+
+  if (
+    startGate &&
+    !gateAccessAllowed(startGate.gate, 'in')
+  ) {
+    return null;
+  }
+
+  if (
+    endGate &&
+    !gateAccessAllowed(endGate.gate, 'out')
+  ) {
+    return null;
+  }
+
+  const startCandidates = candidateAnchors(startPoint, 'in');
+  const endCandidates = candidateAnchors(endPoint, 'out');
 
   if (!startCandidates.length || !endCandidates.length) {
     return null;
@@ -1249,13 +1511,17 @@ const start = async () => {
     throw new Error('CampusMaaS map or access-policy data could not be loaded.');
   }
 
-  const [places, pathData, gates, perimeter, accessPolicy] = await Promise.all([
+  const [places, loadedPathData, loadedGates, perimeter, loadedAccessPolicy] = await Promise.all([
     placesResponse.json(),
     pathResponse.json(),
     gatesResponse.json(),
     perimeterResponse.json(),
     accessRulesResponse.json()
   ]);
+
+  let pathData = loadedPathData;
+  let gates = loadedGates;
+  let accessPolicy = loadedAccessPolicy;
 
   const perimeterFeature = perimeter?.features?.[0];
   const perimeterCoordinates = perimeterFeature?.geometry?.coordinates?.[0];
@@ -1504,7 +1770,12 @@ const start = async () => {
               const response = await fetch('/__campusmaas/update-order', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: order.id, status: 'completed' })
+                body: JSON.stringify({
+                  id: order.id,
+                  status: 'completed',
+                  actor: 'user',
+                  user_id: userId
+                })
               });
 
               if (!response.ok) {
@@ -1513,7 +1784,7 @@ const start = async () => {
               }
 
               orders = await (
-                await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+                await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' })
               ).json();
 
               renderOrders();
@@ -1525,8 +1796,7 @@ const start = async () => {
           el.appendChild(confirm);
         }
 
-        el.append(details, side);
-        orderList.appendChild(el);
+        el.append(details, side);        orderList.appendChild(el);
       });
     };
 
@@ -1733,7 +2003,7 @@ const start = async () => {
         if (!response.ok) throw new Error('Food order could not be placed.');
 
         orders = await (
-          await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+          await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' })
         ).json();
 
         closeFoodPopup();
@@ -1944,7 +2214,14 @@ const start = async () => {
           renderPrintFiles();
         });
 
-        controls.append(minus, count, plus);
+        const preview = document.createElement('button');
+        preview.type = 'button';
+        preview.className = 'print-preview-button';
+        preview.textContent = 'Preview';
+        preview.setAttribute('aria-label', 'Preview ' + entry.file.name);
+        preview.title = 'Preview';
+
+        controls.append(minus, count, plus, preview);
 
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -2076,7 +2353,7 @@ const start = async () => {
         }
 
         orders = await (
-          await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+          await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' })
         ).json();
 
         closePrintPopup();
@@ -2220,23 +2497,161 @@ const start = async () => {
     });
 
     try {
-      const [vendorResponse, orderResponse] = await Promise.all([
-        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-        fetch('/maps/campus_orders.json', { cache: 'no-store' })
-      ]);
+      const vendorResponse = await fetch('/maps/campus_vendors.json', { cache: 'no-store' });
+      if (!vendorResponse.ok) throw new Error('Services could not be loaded.');
 
-      if (!vendorResponse.ok || !orderResponse.ok) throw new Error('Services unavailable.');
+      const nextCatalogue = await vendorResponse.json();
+      if (nextCatalogue?.version !== 1 || !Array.isArray(nextCatalogue?.vendors)) {
+        throw new Error('Invalid services catalogue.');
+      }
 
-      catalogue = await vendorResponse.json();
-      orders = await orderResponse.json();
-
+      catalogue = nextCatalogue;
       renderCatalogue();
-      renderOrders();
-    } catch {
+    } catch (error) {
+      console.error('Campus services failed to load:', error);
       vendorList.innerHTML = '<div class="user-services-empty">Services are unavailable.</div>';
     }
+
+    try {
+      const orderResponse = await fetch(
+        '/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId),
+        { cache: 'no-store' }
+      );
+
+      if (!orderResponse.ok) throw new Error('Orders could not be loaded.');
+
+      const nextOrders = await orderResponse.json();
+      if (nextOrders?.version !== 1 || !Array.isArray(nextOrders?.orders)) {
+        throw new Error('Invalid orders response.');
+      }
+
+      orders = nextOrders;
+      renderOrders();
+    } catch (error) {
+      console.error('User orders failed to load:', error);
+      orderList.innerHTML = '<div class="user-services-empty">Orders are temporarily unavailable.</div>';
+    }
+
+    startUserOrderSync();
+    startPolicySync();
   };
   loadVendorOrders();
+
+  let userOrderSyncTimer = null;
+  let userOrderSyncBusy = false;
+
+  const refreshUserOrders = async () => {
+    if (userOrderSyncBusy) return;
+    userOrderSyncBusy = true;
+
+    try {
+      let nextCatalogue = null;
+      let nextOrders = null;
+
+      try {
+        const catalogueResponse = await fetch('/maps/campus_vendors.json', { cache: 'no-store' });
+        if (catalogueResponse.ok) {
+          const candidate = await catalogueResponse.json();
+          if (candidate?.version === 1 && Array.isArray(candidate?.vendors)) {
+            nextCatalogue = candidate;
+          }
+        }
+      } catch (error) {
+        console.error('Campus services sync failed:', error);
+      }
+
+      try {
+        const ordersResponse = await fetch(
+          '/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId),
+          { cache: 'no-store' }
+        );
+        if (ordersResponse.ok) {
+          const candidate = await ordersResponse.json();
+          if (candidate?.version === 1 && Array.isArray(candidate?.orders)) {
+            nextOrders = candidate;
+          }
+        }
+      } catch (error) {
+        console.error('User orders sync failed:', error);
+      }
+
+      const catalogueChanged =
+        nextCatalogue && JSON.stringify(nextCatalogue) !== JSON.stringify(catalogue);
+
+      const ordersChanged =
+        nextOrders && JSON.stringify(nextOrders) !== JSON.stringify(orders);
+
+      if (!catalogueChanged && !ordersChanged) return;
+
+      if (catalogueChanged) {
+        catalogue = nextCatalogue;
+        renderCatalogue();
+      }
+
+      if (ordersChanged) {
+        orders = nextOrders;
+        renderOrders();
+      }
+    } finally {
+      userOrderSyncBusy = false;
+    }
+  };
+
+  const startUserOrderSync = () => {
+    if (userOrderSyncTimer) window.clearInterval(userOrderSyncTimer);
+    userOrderSyncTimer = window.setInterval(() => {
+      void refreshUserOrders();
+    }, 3000);
+  };
+
+  let accessPolicySyncBusy = false;
+  let accessPolicySyncTimer = null;
+
+  const refreshAccessPolicy = async () => {
+    if (accessPolicySyncBusy) return;
+    accessPolicySyncBusy = true;
+
+    try {
+      const response = await fetch('/maps/campus_access_rules.json', { cache: 'no-store' });
+      if (!response.ok) return;
+
+      const nextPolicy = await response.json();
+      if (
+        nextPolicy?.version !== 1 ||
+        !Array.isArray(nextPolicy?.policies)
+      ) return;
+
+      if (JSON.stringify(accessPolicy) === JSON.stringify(nextPolicy)) return;
+
+      accessPolicy.policies = nextPolicy.policies;
+      accessPolicy.timezone =
+        nextPolicy.timezone || accessPolicy.timezone || 'Asia/Kolkata';
+
+      if (pointA && pointB) {
+        clearRouteRendering();
+        renderEndpointMarkers();
+        renderUserRoute();
+      }
+    } finally {
+      accessPolicySyncBusy = false;
+    }
+  };
+
+  const startAccessPolicySync = () => {
+    if (accessPolicySyncTimer) window.clearInterval(accessPolicySyncTimer);
+    accessPolicySyncTimer = window.setInterval(() => {
+      void refreshAccessPolicy();
+    }, 5000);
+  };
+
+  startAccessPolicySync();
+
+  window.addEventListener('pagehide', () => {
+    if (accessPolicySyncTimer) {
+      window.clearInterval(accessPolicySyncTimer);
+      accessPolicySyncTimer = null;
+    }
+  }, { once: true });
 
   const resetTripSummary = () => {
     if (userTripFrom) userTripFrom.textContent = 'Point A';
@@ -2253,7 +2668,8 @@ const start = async () => {
       pointA,
       pointB,
       accessPolicy,
-      selectedUserGroup
+      selectedUserGroup,
+      gates.features
     );
 
     if (!summary) {
@@ -2308,21 +2724,21 @@ const start = async () => {
       hour12: false
     }).formatToParts(new Date());
 
-    const read = (type) => parts.find((part) => part.type === type)?.value || '00';
-    return read('hour') + ':' + read('minute');
+    const read = (type) => parts.find((part) => part.type === type)?.value || '00';    return read('hour') + ':' + read('minute');
   };
 
-  const gatePoliciesFor = (gateId) =>
+  const gatePoliciesFor = (gateId, direction = '') =>
     (accessPolicy?.policies || []).filter(
       (policy) =>
         policy?.target?.type === 'gate' &&
         String(policy?.target?.id) === String(gateId) &&
         policyAppliesToGroup(policy, selectedUserGroup) &&
+        policyDirectionAllows(policy, direction) &&
         policy?.enabled !== false
     );
 
-  const evaluateStudentGate = (gate, time = campusClock()) => {
-    const policies = gatePoliciesFor(gate?.id);
+  const evaluateStudentGate = (gate, time = campusClock(), direction = '') => {
+    const policies = gatePoliciesFor(gate?.id, direction);
 
     if (!policies.length) {
       return {
@@ -2446,7 +2862,7 @@ const start = async () => {
     return best;
   };
 
-  const validateUserGateClick = (point) => {
+  const validateUserGateClick = (point, direction = '') => {
     const nearest = nearestGateForPoint(point);
 
     if (!nearest || nearest.distance > USER_GATE_MATCH_RADIUS_M) {
@@ -2456,11 +2872,12 @@ const start = async () => {
       };
     }
 
-    const evaluation = evaluateStudentGate(nearest.gate);
+    const evaluation = evaluateStudentGate(nearest.gate, campusClock(), direction);
 
     if (!evaluation.allowed) {
-      if (userTripFrom) userTripFrom.textContent = 'Gate 09 is closed';
-      if (userTripTo) userTripTo.textContent = 'Students cannot use it now';
+      const gateName = nearest.gate?.properties?.name || 'This gate';
+      if (userTripFrom) userTripFrom.textContent = gateName + ' is closed';
+      if (userTripTo) userTripTo.textContent = 'You cannot use it now';
       if (userTripTime) userTripTime.textContent = 'Unavailable';
       if (userTripDistance) userTripDistance.textContent = 'Try Gate 06';
 
@@ -2480,7 +2897,8 @@ const start = async () => {
 
   const handleUserMapClick = (event) => {
     const clicked = event.latlng;
-    const gateCheck = validateUserGateClick(clicked);
+    const direction = (!pointA || pointB) ? 'in' : 'out';
+    const gateCheck = validateUserGateClick(clicked, direction);
 
     if (!gateCheck.allowed) return;
 
@@ -2714,6 +3132,8 @@ void start().catch((error) => {
 </MainLayout>
 
 <style is:global>
+ .print-preview-button{display:grid;place-items:center;min-width:58px;height:25px;padding:0 8px;border:1px solid rgba(22,135,255,.12);border-radius:6px;background:#fff;color:#1687ff;cursor:pointer;font-size:9px;font-weight:700;line-height:1;white-space:nowrap}
+.print-preview-button:hover{background:#edf6fd}
 .user-services-stack{
   position:absolute;
   z-index:1050;
@@ -2793,7 +3213,7 @@ void start().catch((error) => {
 }
 .user-vendor-options{
   display:grid;
-  gap:6px;
+  gap:7px;
   margin-top:9px;
 }
 .user-service-option{
@@ -2803,9 +3223,9 @@ void start().catch((error) => {
   justify-content:space-between;
   gap:10px;
   padding:10px;
-  border:1px solid rgba(83,168,255,.09);
+  border:1px solid rgba(83,168,255,.12);
   border-radius:10px;
-  background:rgba(255,255,255,.028);
+  background:rgba(255,255,255,.04);
   color:#dbeaf8;
   text-align:left;
   cursor:pointer;

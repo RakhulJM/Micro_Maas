@@ -5,6 +5,13 @@ import { defineConfig } from 'astro/config';
 const jsonBody=(chunks)=>JSON.parse(Buffer.concat(chunks).toString('utf8'));
 const readJsonFile=(relativePath)=>JSON.parse(fs.readFileSync(path.join(process.cwd(),relativePath),'utf8'));
 const normalizeVendorStatus=(service)=>{const status=String(service?.status||'online').toLowerCase();return status==='offline'||status==='busy'?status:'online'};
+const writePrivateJson=(relativePath,payload)=>{
+  const sourcePath=path.join(process.cwd(),relativePath);
+  const output=JSON.stringify(payload,null,2)+'\n';
+  fs.mkdirSync(path.dirname(sourcePath),{recursive:true});
+  fs.writeFileSync(sourcePath,output,'utf8');
+};
+
 const writeJsonCopies=(relativePath,payload)=>{const sourcePath=path.join(process.cwd(),relativePath);const publicPath=path.join(process.cwd(),'public',relativePath);const output=JSON.stringify(payload,null,2)+'\n';fs.mkdirSync(path.dirname(sourcePath),{recursive:true});fs.mkdirSync(path.dirname(publicPath),{recursive:true});fs.writeFileSync(sourcePath,output,'utf8');fs.writeFileSync(publicPath,output,'utf8')};
 
 const pedestrianNetworkSavePlugin = () => ({
@@ -13,16 +20,83 @@ const pedestrianNetworkSavePlugin = () => ({
     server.middlewares.use('/__campusmaas/vendor-data',(req,res,next)=>{
       if(req.method!=='GET'){next();return;}
       try{
+        const parsed=new URL(req.url||'', 'http://localhost');
+        const vendorId=parsed.searchParams.get('vendor_id');
+        const optionId=parsed.searchParams.get('option_id');
+        const developerScope=parsed.searchParams.get('developer')==='1';
         const catalogue=readJsonFile('maps/campus_vendors.json');
-        const orders=readJsonFile('maps/campus_orders.json');
+        const allOrders=readJsonFile('maps/campus_orders.json');
+        const activeStatuses=new Set(['placed','accepted','preparing']);
+
+        let scopedOrders=[];
+        if(developerScope){
+          scopedOrders=allOrders.orders;
+        }else if(vendorId){
+          scopedOrders=allOrders.orders.filter((order)=>{
+            if(String(order.vendor_id)!==String(vendorId)) return false;
+            return !optionId || String(order.option_id)===String(optionId);
+          });
+        }
+
+        const orderSummary=catalogue.vendors.flatMap((vendor)=>{
+          const vendorOrders=allOrders.orders.filter((order)=>
+            String(order.vendor_id)===String(vendor.id)
+          );
+          return (vendor.options||[]).map((option)=>({
+            vendor_id:vendor.id,
+            option_id:option.id,
+            active:vendorOrders.filter((order)=>
+              String(order.option_id)===String(option.id) &&
+              activeStatuses.has(String(order.status||'').toLowerCase())
+            ).length
+          }));
+        });
+
         res.statusCode=200;
         res.setHeader('Content-Type','application/json');
         res.setHeader('Cache-Control','no-store');
-        res.end(JSON.stringify({catalogue,orders}));
+        res.end(JSON.stringify({
+          catalogue,
+          orders:{
+            version:1,
+            orders:scopedOrders
+          },
+          order_summary:orderSummary
+        }));
       }catch(error){
         res.statusCode=500;
         res.setHeader('Content-Type','application/json');
         res.end(JSON.stringify({ok:false,error:error instanceof Error?error.message:'Vendor data unavailable'}));
+      }
+    });
+
+    server.middlewares.use('/__campusmaas/user-orders',(req,res,next)=>{
+      if(req.method!=='GET'){next();return;}
+      try{
+        const parsed=new URL(req.url||'','http://localhost');
+        const userId=String(parsed.searchParams.get('user_id')||'').trim();
+        if(!userId || userId.length>80){
+          res.statusCode=400;
+          res.setHeader('Content-Type','application/json');
+          res.end(JSON.stringify({ok:false,error:'Invalid user id.'}));
+          return;
+        }
+
+        const orders=readJsonFile('maps/campus_orders.json');
+        if(orders?.version!==1||!Array.isArray(orders?.orders))throw Error('Invalid order database.');
+
+        const mine=orders.orders.filter((order)=>
+          String(order.user_id||'')===userId
+        );
+
+        res.statusCode=200;
+        res.setHeader('Content-Type','application/json');
+        res.setHeader('Cache-Control','no-store');
+        res.end(JSON.stringify({version:1,orders:mine}));
+      }catch(error){
+        res.statusCode=500;
+        res.setHeader('Content-Type','application/json');
+        res.end(JSON.stringify({ok:false,error:error instanceof Error?error.message:'Orders unavailable'}));
       }
     });
 
@@ -99,7 +173,7 @@ const pedestrianNetworkSavePlugin = () => ({
           }
 
           orders.orders.push(order);
-          writeJsonCopies('maps/campus_orders.json',orders);
+          writePrivateJson('maps/campus_orders.json',orders);
           res.statusCode=200;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,order_id:order.id}));
         }catch(e){
           res.statusCode=400;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:false,error:e.message||'Order creation failed'}));
@@ -259,7 +333,59 @@ const pedestrianNetworkSavePlugin = () => ({
       }
     });
 
-    server.middlewares.use('/__campusmaas/update-order',(req,res,next)=>{if(req.method!=='POST')return next();const chunks=[];req.on('data',c=>chunks.push(c));req.on('end',()=>{try{const p=jsonBody(chunks),allowed=new Set(['placed','preparing','ready','completed','cancelled']);if(!p?.id||!allowed.has(p.status))throw Error('Invalid order update.');const orders=readJsonFile('maps/campus_orders.json'),o=orders.orders.find(x=>x.id===p.id);if(!o)throw Error('Order not found.');const current=String(o.status||'');if(p.status==='preparing'&&!['placed','accepted'].includes(current))throw Error('Order cannot be accepted from its current state.');if(p.status==='ready'&&!['preparing','accepted'].includes(current))throw Error('Order cannot be marked ready from its current state.');if(p.status==='completed'&&current!=='ready')throw Error('Order must be ready before collection is confirmed.');o.status=p.status;o.updated_at=new Date().toISOString();writeJsonCopies('maps/campus_orders.json',orders);res.statusCode=200;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true}))}catch(e){res.statusCode=400;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:false,error:e.message||'Order update failed'}))}})});
+    server.middlewares.use('/__campusmaas/update-order',(req,res,next)=>{
+      if(req.method!=='POST')return next();
+      const chunks=[];
+      req.on('data',c=>chunks.push(c));
+      req.on('end',()=>{
+        try{
+          const p=jsonBody(chunks);
+          const allowed=new Set(['preparing','ready','completed','cancelled']);
+          if(!p?.id||!allowed.has(p.status))throw Error('Invalid order update.');
+
+          const orders=readJsonFile('maps/campus_orders.json');
+          if(orders?.version!==1||!Array.isArray(orders?.orders))throw Error('Invalid order database.');
+
+          const o=orders.orders.find(x=>x.id===p.id);
+          if(!o)throw Error('Order not found.');
+
+          const current=String(o.status||'').toLowerCase();
+
+          if(p.status==='preparing'&&!['placed','accepted'].includes(current)){
+            throw Error('Order must be placed before preparation starts.');
+          }
+
+          if(p.status==='ready'&&!['preparing','accepted'].includes(current)){
+            throw Error('Order must be preparing before it can be marked ready.');
+          }
+
+          if(p.status==='completed'){
+            if(current!=='ready')throw Error('Order must be ready before collection is confirmed.');
+            if(!p.user_id||String(o.user_id||'')!==String(p.user_id)){
+              throw Error('Only the order owner can confirm collection.');
+            }
+          }
+
+          if(p.status==='cancelled'&&!['placed','preparing','ready'].includes(current)){
+            throw Error('This order cannot be cancelled from its current state.');
+          }
+
+          o.status=p.status;
+          o.updated_at=new Date().toISOString();
+          writePrivateJson('maps/campus_orders.json',orders);
+
+          res.statusCode=200;
+          res.setHeader('Content-Type','application/json');
+          res.setHeader('Cache-Control','no-store');
+          res.end(JSON.stringify({ok:true}));
+        }catch(e){
+          res.statusCode=400;
+          res.setHeader('Content-Type','application/json');
+          res.end(JSON.stringify({ok:false,error:e.message||'Order update failed'}));
+        }
+      });
+    });
+
     server.middlewares.use('/__campusmaas/save-gates', (req, res, next) => {
       if (req.method !== 'POST') {
         next();
@@ -360,6 +486,23 @@ const pedestrianNetworkSavePlugin = () => ({
             throw new Error('Invalid access rules root.');
           }
 
+          const gatesData = readJsonFile('maps/gates.geojson');
+          const pathsData = readJsonFile('maps/pedestrian_paths_edits.geojson');
+
+          const gateIds = new Set(
+            (gatesData?.features || []).map((feature) => String(feature?.id || '')).filter(Boolean)
+          );
+
+          const pathIds = new Set(
+            (pathsData?.features || []).map((feature, index) =>
+              String(
+                feature?.id ||
+                feature?.properties?.['@id'] ||
+                'path-' + (index + 1)
+              )
+            )
+          );
+
           const policyIds = new Set();
 
           const validPolicies = payload.policies.every((policy) => {
@@ -371,6 +514,11 @@ const pedestrianNetworkSavePlugin = () => ({
               policyIds.has(String(policy.id)) ||
               !target?.id ||
               !validTargetTypes.has(target?.type) ||
+              (
+                target.type === 'gate'
+                  ? !gateIds.has(String(target.id))
+                  : !pathIds.has(String(target.id))
+              ) ||
               !validGroups.has(policy.group) ||
               !validModes.has(policy.mode) ||
               !validDirections.has(policy.direction) ||

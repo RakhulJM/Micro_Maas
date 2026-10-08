@@ -75,6 +75,8 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 </main>
 
 <script>
+  let vendorLiveSyncTimer = null;
+
   const initVendorPortal = () => {
     const root = document.querySelector('.vendor-portal');
     const content = document.getElementById('portalContent');
@@ -105,6 +107,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
     const state = {
       catalogue: { version: 1, vendors: [] },
       orders: { version: 1, orders: [] },
+      orderSummary: [],
       pageCards: { version: 1, root: {}, categories: {} }
     };
     let ordersVendorId = '';
@@ -172,7 +175,8 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 
     const loadData = async () => {
       let catalogue = null;
-      let orders = null;
+      let orders = { version: 1, orders: [] };
+      let orderSummary = [];
       let pageCards = null;
 
       try {
@@ -180,48 +184,60 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
           document.getElementById('vendorPortalInitialData')?.textContent || '{}'
         );
         catalogue = embedded?.catalogue;
-        orders = embedded?.orders;
+        orders = embedded?.orders || orders;
         pageCards = embedded?.pageCards;
       } catch {
-        // Embedded route data will be validated below.
+        // Embedded catalogue/card data will be validated below.
       }
 
-      const valid = (nextCatalogue, nextOrders) =>
-        nextCatalogue?.version === 1 &&
-        Array.isArray(nextCatalogue?.vendors) &&
-        nextOrders?.version === 1 &&
-        Array.isArray(nextOrders?.orders);
+      const validCatalogue = (value) =>
+        value?.version === 1 && Array.isArray(value?.vendors);
 
-      if (!valid(catalogue, orders)) {
+      if (!validCatalogue(catalogue)) {
         throw new Error('Vendor data could not be loaded.');
       }
 
+      const query = new URLSearchParams();
+
+      if (pageKind !== 'root' && vendorId) {
+        query.set('vendor_id', String(vendorId));
+      }
+
+      if (pageKind === 'detail' && optionId) {
+        query.set('option_id', String(optionId));
+      }
+
+      const endpoint = '/__campusmaas/vendor-data' +
+        (query.toString() ? '?' + query.toString() : '');
+
+      const response = await fetch(endpoint, { cache: 'no-store' });
+
+      if (!response.ok) {
+        throw new Error('Vendor data could not be loaded.');
+      }
+
+      const payload = await response.json();
+
+      if (!validCatalogue(payload?.catalogue)) {
+        throw new Error('Invalid CampusMaaS vendor data.');
+      }
+
+      catalogue = payload.catalogue;
+      orders = payload?.orders?.version === 1 &&
+        Array.isArray(payload?.orders?.orders)
+        ? payload.orders
+        : { version: 1, orders: [] };
+
+      orderSummary = Array.isArray(payload?.order_summary)
+        ? payload.order_summary
+        : [];
+
       state.catalogue = catalogue;
       state.orders = orders;
-      state.pageCards = pageCards?.version === 1 ? pageCards : { version: 1, root: {}, categories: {} };
-
-      // Refresh when the public JSON files are available, but never blank the page
-      // when a dev-server/static-file refresh is unavailable.
-      try {
-        const responses = await Promise.all([
-          fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-          fetch('/maps/campus_orders.json', { cache: 'no-store' })
-        ]);
-
-        if (responses[0].ok && responses[1].ok) {
-          const refreshed = await Promise.all([
-            responses[0].json(),
-            responses[1].json()
-          ]);
-
-          if (valid(refreshed[0], refreshed[1])) {
-            state.catalogue = refreshed[0];
-            state.orders = refreshed[1];
-          }
-        }
-      } catch {
-        // Keep the working route snapshot.
-      }
+      state.orderSummary = orderSummary;
+      state.pageCards = pageCards?.version === 1
+        ? pageCards
+        : { version: 1, root: {}, categories: {} };
     };
 
     const vendorOrders = (id, optionId = '', requireFiles = false) =>
@@ -546,11 +562,9 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         const visibleOptions = (item.options || [])
           .filter((child) => child.enabled !== false);
 
-        const activeOrders = state.orders.orders.filter(
-          (order) =>
-            String(order.vendor_id) === String(item.id) &&
-            !['completed', 'cancelled'].includes(order.status)
-        ).length;
+        const activeOrders = state.orderSummary
+          .filter((entry) => String(entry.vendor_id) === String(item.id))
+          .reduce((sum, entry) => sum + (Number(entry.active) || 0), 0);
 
         append(
           card,
@@ -611,7 +625,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
           (order) =>
             String(order.vendor_id) === String(item.id) &&
             String(order.option_id) === String(child.id) &&
-            !['completed', 'cancelled'].includes(order.status)
+            ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
         ).length;
 
         append(
@@ -704,7 +718,13 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
             const response = await fetch('/__campusmaas/update-order', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: order.id, status: next[1] })
+              body: JSON.stringify({
+              id: order.id,
+              status: next[1],
+              actor: 'vendor',
+              vendor_id: ordersVendorId,
+              option_id: ordersOptionId
+            })
             });
 
             if (!response.ok) throw new Error('Order update failed.');
@@ -773,7 +793,13 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
             const response = await fetch('/__campusmaas/update-order', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: order.id, status: next[1] })
+              body: JSON.stringify({
+                id: order.id,
+                status: next[1],
+                actor: 'vendor',
+                vendor_id: ordersVendorId,
+                option_id: ordersOptionId
+              })
             });
 
             if (!response.ok) throw new Error('Order update failed.');
@@ -818,11 +844,15 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
         ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
       );
 
+      const readyOrders = allOrders.filter(
+        (order) => String(order.status || '').toLowerCase() === 'ready'
+      );
+
       const stats = {
         active: active.length,
         placed: active.filter((order) => order.status === 'placed').length,
         preparing: active.filter((order) => ['accepted', 'preparing'].includes(order.status)).length,
-        ready: active.filter((order) => order.status === 'ready').length
+        ready: readyOrders.length
       };
       const serviceStatus = String(child.status || 'online').toLowerCase();
       const serviceStatusMessage = child.status_message || (
@@ -905,11 +935,7 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       const rightColumn = create('div', 'vendor-dashboard-side-column');
 
       const waiting = create('section', 'vendor-history-card vendor-waiting-card');
-      const readyOrders = allOrders.filter(
-        (order) => String(order.status || '').toLowerCase() === 'ready'
-      );
-
-      append(
+            append(
         waiting,
         makeHeader('WAITING', 'Waiting for confirmation', String(readyOrders.length))
       );
@@ -1045,10 +1071,81 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       }
     });
 
+    let liveSyncBusy = false;
+
+    const refreshLiveState = async () => {
+      if (liveSyncBusy) return;
+      liveSyncBusy = true;
+
+      try {
+        const query = new URLSearchParams();
+
+        if (pageKind !== 'root' && vendorId) {
+          query.set('vendor_id', String(vendorId));
+        }
+
+        if (pageKind === 'detail' && optionId) {
+          query.set('option_id', String(optionId));
+        }
+
+        const response = await fetch(
+          '/__campusmaas/vendor-data' +
+            (query.toString() ? '?' + query.toString() : ''),
+          { cache: 'no-store' }
+        );
+
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        if (
+          payload?.catalogue?.version !== 1 ||
+          !Array.isArray(payload?.catalogue?.vendors)
+        ) return;
+
+        const nextOrders =
+          payload?.orders?.version === 1 &&
+          Array.isArray(payload?.orders?.orders)
+            ? payload.orders
+            : { version: 1, orders: [] };
+
+        const nextSummary = Array.isArray(payload?.order_summary)
+          ? payload.order_summary
+          : [];
+
+        const changed =
+          JSON.stringify(payload.catalogue) !== JSON.stringify(state.catalogue) ||
+          JSON.stringify(nextOrders) !== JSON.stringify(state.orders) ||
+          JSON.stringify(nextSummary) !== JSON.stringify(state.orderSummary);
+
+        if (!changed) return;
+
+        state.catalogue = payload.catalogue;
+        state.orders = nextOrders;
+        state.orderSummary = nextSummary;
+
+        const queueWasOpen = printQueue && !printQueue.hidden;
+        render();
+
+        if (queueWasOpen && pageKind === 'detail' && ordersVendorId) {
+          openPrintQueue();
+        }
+      } finally {
+        liveSyncBusy = false;
+      }
+    };
+
+    const startLiveSync = () => {
+      if (vendorLiveSyncTimer) window.clearInterval(vendorLiveSyncTimer);
+      vendorLiveSyncTimer = window.setInterval(() => {
+        void refreshLiveState();
+      }, 3000);
+    };
+
     const start = async () => {
       try {
         await loadData();
         render();
+        startLiveSync();
       } catch {
         title.textContent = 'Vendor portal unavailable';
         subtitle.textContent = 'Check the CampusMaaS vendor data.';
@@ -1060,6 +1157,13 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 
     void start();
   };
+
+  window.addEventListener('pagehide', () => {
+    if (vendorLiveSyncTimer) {
+      window.clearInterval(vendorLiveSyncTimer);
+      vendorLiveSyncTimer = null;
+    }
+  }, { once: true });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initVendorPortal, { once: true });
@@ -1440,7 +1544,16 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
   }
 
   @media(max-width:560px){
-    .vendor-portal-header{align-items:flex-start}
+    /* Detail/service pages keep the header visible while the dashboard scrolls. */
+  .vendor-portal[data-page-kind="detail"] .vendor-portal-header{
+    position:sticky;
+    top:0;
+    z-index:120;
+    background:rgba(247,250,252,.96);
+    backdrop-filter:blur(12px);
+  }
+
+  .vendor-portal-header{align-items:flex-start}
     .vendor-header-actions{align-items:flex-start}
     .vendor-print-queue-button{height:54px;padding:0 12px;font-size:10px}
     .vendor-print-queue-button .vendor-print-queue-icon{font-size:13px}
