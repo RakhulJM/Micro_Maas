@@ -150,6 +150,13 @@
 .print-place-order:hover{background:#0f78e7}
 .print-place-order:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
 .print-order-error{padding:8px 20px 11px;color:#c23b45;background:#fff3f4;border-top:1px solid rgba(194,59,69,.11);font-size:7px}
+.print-file-conversion{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-size:6.5px;font-weight:800;letter-spacing:.08em;line-height:1;text-transform:uppercase}
+.print-file-conversion-converting{color:#8a6a12}
+.print-file-conversion-ready{color:#16834b}
+.print-file-conversion-error{color:#c33e49}
+.print-conversion-dot{width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px color-mix(in srgb,currentColor 12%,transparent)}
+.print-conversion-spinner{width:7px;height:7px;border:1px solid currentColor;border-right-color:transparent;border-radius:50%;animation:print-conversion-spin .75s linear infinite}
+@keyframes print-conversion-spin{to{transform:rotate(360deg)}}
 .print-preview-modal{position:fixed;inset:0;z-index:5300;display:grid;place-items:center;padding:18px}
 .print-preview-modal[hidden]{display:none}
 .print-preview-backdrop{position:absolute;inset:0;background:rgba(2,8,14,.78);backdrop-filter:blur(8px)}
