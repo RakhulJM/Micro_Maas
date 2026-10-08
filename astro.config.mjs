@@ -22,14 +22,14 @@ const decodeBase64=(value)=>{
 
 const safeFileStem=(value,fallback='file')=>String(value||fallback)
   .replace(/[\\/:*?"<>|]+/g,'_')
-  .replace(/\\s+/g,' ')
+  .replace(/\s+/g,' ')
   .trim()
   .slice(0,180)||fallback;
 
 const convertUploadedFileToPdf=(name,data)=>{
   const inputBuffer=Buffer.isBuffer(data)?data:decodeBase64(data);
   if(inputBuffer.length>50*1024*1024) throw Error('Print files must be 50 MB or smaller each.');
-  if(inputBuffer.subarray(0,5).toString('ascii')==='%%PDF') return inputBuffer;
+  if(inputBuffer.subarray(0,5).toString('ascii')==='%PDF-') return inputBuffer;
 
   const workDir=fs.mkdtempSync(path.join(os.tmpdir(),'campusmaas-print-'));
   const inputName=safeFileStem(name,'file') || 'file';
