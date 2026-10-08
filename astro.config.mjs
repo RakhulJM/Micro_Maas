@@ -416,11 +416,15 @@ const pedestrianNetworkSavePlugin = () => ({
             file.cancelled_at = new Date().toISOString();
 
             const remaining = o.files.filter((entry) => !entry.cancelled);
+            const unitPrice = Number(o.quantity) > 0
+              ? Number(o.total_price || 0) / Number(o.quantity)
+              : 0;
             o.quantity = remaining.reduce((sum, entry) => sum + (Number(entry.copies) || 1), 0);
             o.total_price = remaining.reduce(
-              (sum, entry) => sum + (Number(entry.copies) || 1) * Number(o.unit_price || 0),
+              (sum, entry) => sum + (Number(entry.copies) || 1) * unitPrice,
               0
             );
+            o.item_count = remaining.length;
             if (!remaining.length) o.status = 'cancelled';
           } else {
             if (!Array.isArray(o.items) || !o.items[itemIndex]) throw Error('Order item not found.');
@@ -435,6 +439,7 @@ const pedestrianNetworkSavePlugin = () => ({
               (sum, entry) => sum + (Number(entry.quantity) || 1) * Number(entry.unit_price || entry.price || 0),
               0
             );
+            o.item_count = remaining.length;
             if (!remaining.length) o.status = 'cancelled';
           }
 
