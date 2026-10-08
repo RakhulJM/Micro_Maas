@@ -1,8 +1,9 @@
 ---
-const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
+const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = Astro.props;
 ---
 
 <main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId}>
+  <script type="application/json" id="vendorPortalInitialData" set:html={JSON.stringify(initialData || { catalogue: { version: 1, vendors: [] }, orders: { version: 1, orders: [] }, pageCards: { version: 1, root: {}, categories: {} } })}></script>
   <div class="vendor-portal-glow vendor-portal-glow-a" aria-hidden="true"></div>
   <div class="vendor-portal-glow vendor-portal-glow-b" aria-hidden="true"></div>
 
@@ -74,6 +75,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 </main>
 
 <script>
+  let vendorLiveSyncTimer = null;
+
   const initVendorPortal = () => {
     const root = document.querySelector('.vendor-portal');
     const content = document.getElementById('portalContent');
@@ -103,7 +106,9 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
     const state = {
       catalogue: { version: 1, vendors: [] },
-      orders: { version: 1, orders: [] }
+      orders: { version: 1, orders: [] },
+      orderSummary: [],
+      pageCards: { version: 1, root: {}, categories: {} }
     };
     let ordersVendorId = '';
     let ordersVendorName = '';
@@ -169,17 +174,70 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const loadData = async () => {
-      const responses = await Promise.all([
-        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-        fetch('/maps/campus_orders.json', { cache: 'no-store' })
-      ]);
+      let catalogue = null;
+      let orders = { version: 1, orders: [] };
+      let orderSummary = [];
+      let pageCards = null;
 
-      if (!responses[0].ok || !responses[1].ok) {
+      try {
+        const embedded = JSON.parse(
+          document.getElementById('vendorPortalInitialData')?.textContent || '{}'
+        );
+        catalogue = embedded?.catalogue;
+        orders = embedded?.orders || orders;
+        pageCards = embedded?.pageCards;
+      } catch {
+        // Embedded catalogue/card data will be validated below.
+      }
+
+      const validCatalogue = (value) =>
+        value?.version === 1 && Array.isArray(value?.vendors);
+
+      if (!validCatalogue(catalogue)) {
         throw new Error('Vendor data could not be loaded.');
       }
 
-      state.catalogue = await responses[0].json();
-      state.orders = await responses[1].json();
+      const query = new URLSearchParams();
+
+      if (pageKind !== 'root' && vendorId) {
+        query.set('vendor_id', String(vendorId));
+      }
+
+      if (pageKind === 'detail' && optionId) {
+        query.set('option_id', String(optionId));
+      }
+
+      const endpoint = '/__campusmaas/vendor-data' +
+        (query.toString() ? '?' + query.toString() : '');
+
+      const response = await fetch(endpoint, { cache: 'no-store' });
+
+      if (!response.ok) {
+        throw new Error('Vendor data could not be loaded.');
+      }
+
+      const payload = await response.json();
+
+      if (!validCatalogue(payload?.catalogue)) {
+        throw new Error('Invalid CampusMaaS vendor data.');
+      }
+
+      catalogue = payload.catalogue;
+      orders = payload?.orders?.version === 1 &&
+        Array.isArray(payload?.orders?.orders)
+        ? payload.orders
+        : { version: 1, orders: [] };
+
+      orderSummary = Array.isArray(payload?.order_summary)
+        ? payload.order_summary
+        : [];
+
+      state.catalogue = catalogue;
+      state.orders = orders;
+      state.orderSummary = orderSummary;
+      state.pageCards = pageCards?.version === 1
+        ? pageCards
+        : { version: 1, root: {}, categories: {} };
     };
 
     const vendorOrders = (id, optionId = '', requireFiles = false) =>
@@ -305,8 +363,11 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         serviceOrders.forEach((order) => {
           totalQuantity += Number(order.quantity) || 1;
           const service = option(vendor(ordersVendorId), order.option_id);
+          const status = String(service?.status || 'online').toLowerCase();
           list.appendChild(
-            makeOrderCard(order, String(service?.status || 'online').toLowerCase())
+            String(ordersVendorId) === 'food'
+              ? makeFoodOrderCard(order, status)
+              : makeOrderCard(order, status)
           );
         });
 
@@ -488,29 +549,28 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         const card = create('a', 'vendor-large-card');
         card.href = route(item.id);
 
+        const cardData = state.pageCards.root[String(item.id)] || {};
         const top = create('div', 'vendor-large-card-top');
         append(
           top,
-          create('span', 'vendor-card-number', String(item.order || 1).padStart(2, '0')),
+          create('span', 'vendor-card-number', String(cardData.number || item.order || 1).padStart(2, '0')),
           create('span', 'vendor-open-icon', '↗')
         );
 
-        const largeIcon = create('div', 'vendor-large-icon', iconLetter(item.id));
+        const largeIcon = create('div', 'vendor-large-icon', cardData.icon || iconLetter(item.id));
 
         const visibleOptions = (item.options || [])
           .filter((child) => child.enabled !== false);
 
-        const activeOrders = state.orders.orders.filter(
-          (order) =>
-            String(order.vendor_id) === String(item.id) &&
-            !['completed', 'cancelled'].includes(order.status)
-        ).length;
+        const activeOrders = state.orderSummary
+          .filter((entry) => String(entry.vendor_id) === String(item.id))
+          .reduce((sum, entry) => sum + (Number(entry.active) || 0), 0);
 
         append(
           card,
           top,
           largeIcon,
-          create('div', 'vendor-large-title', item.name),
+          create('div', 'vendor-large-title', cardData.title || item.name),
           create('p', '', visibleOptions.length + (visibleOptions.length === 1 ? ' service available' : ' services available'))
         );
 
@@ -518,7 +578,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         append(
           footer,
           create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
-          create('span', '', 'Open dashboard →')
+          create('span', '', cardData.action || 'Open dashboard →')
         );
         append(card, footer);
         content.appendChild(card);
@@ -530,27 +590,27 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const renderCategory = (item) => {
+      const pageData = state.pageCards.categories[String(item.id)] || {};
       const options = (item.options || [])
         .filter((child) => child.enabled !== false)
         .sort((a, b) => Number(a.order) - Number(b.order));
 
       kicker.textContent = 'VENDOR';
-      title.textContent = item.name;
-      headerTitle.textContent = item.name;
-      subtitle.textContent = 'Service list and dedicated dashboards';
+      title.textContent = pageData.title || item.name;
+      headerTitle.textContent = pageData.title || item.name;
+      subtitle.textContent = pageData.subtitle || 'Service list and dedicated dashboards';
       back.href = '/vendor';
       headerServiceControl.hidden = true;
-      ordersVendorId = String(item.id);
-      ordersVendorName = String(item.name || 'Vendor');
+      ordersVendorId = '';
+      ordersVendorName = '';
       ordersOptionId = '';
-      printQueueButton.hidden = false;
-      updateOrdersButton();
-      closePrintQueue();
+      printQueueButton.hidden = true;
 
       content.className = 'vendor-content-grid vendor-category-grid';
       content.innerHTML = '';
 
       options.forEach((child) => {
+        const serviceData = pageData.services?.[String(child.id)] || {};
         const card = create('a', 'vendor-service-card');
         card.href = route(item.id, child.id);
 
@@ -565,15 +625,15 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
           (order) =>
             String(order.vendor_id) === String(item.id) &&
             String(order.option_id) === String(child.id) &&
-            !['completed', 'cancelled'].includes(order.status)
+            ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
         ).length;
 
         append(
           card,
           top,
-          create('div', 'vendor-service-number', String(child.order || 1).padStart(2, '0')),
-          create('h2', '', child.name),
-          create('p', '', 'Dedicated vendor dashboard')
+          create('div', 'vendor-service-number', String(serviceData.number || child.order || 1).padStart(2, '0')),
+          create('h2', '', serviceData.title || child.name),
+          create('p', '', serviceData.description || 'Dedicated vendor dashboard')
         );
 
         const serviceStatus = String(child.status || 'online').toLowerCase();
@@ -593,6 +653,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         );
         append(card, info);
 
+        const footer = create('div', 'vendor-large-footer');
+        append(
+          footer,
+          create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
+          create('span', '', 'Open dashboard →')
+        );
         append(card, footer);
         content.appendChild(card);
       });
@@ -652,7 +718,88 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
             const response = await fetch('/__campusmaas/update-order', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: order.id, status: next[1] })
+              body: JSON.stringify({
+              id: order.id,
+              status: next[1],
+              actor: 'vendor',
+              vendor_id: ordersVendorId,
+              option_id: ordersOptionId
+            })
+            });
+
+            if (!response.ok) throw new Error('Order update failed.');
+
+            order.status = next[1];
+            render();
+          } catch {
+            action.disabled = false;
+            action.textContent = next[0];
+          }
+        });
+        append(card, action);
+      }
+
+      return card;
+    };
+
+    const makeFoodOrderCard = (order, currentServiceStatus = 'online') => {
+      const card = create('article', 'vendor-order-card vendor-food-order-card');
+
+      const top = create('div', 'vendor-order-top');
+      const id = create('strong', '', '#' + order.id);
+      const chip = create('span', orderStatusClass(order.status), orderStatusLabel(order.status));
+      const dot = create('i');
+      chip.prepend(dot);
+      append(top, id, chip);
+
+      const items = create('div', 'vendor-food-order-items');
+      const foodItems = Array.isArray(order.items) ? order.items : [];
+
+      foodItems.forEach((item) => {
+        const row = create('div', 'vendor-food-order-item');
+        append(
+          row,
+          create('span', 'vendor-food-order-item-name', item.menu_item_name || item.name || 'Food item'),
+          create('span', 'vendor-food-order-item-count', '× ' + (Number(item.quantity) || 1))
+        );
+        items.appendChild(row);
+      });
+
+      if (!foodItems.length) {
+        items.appendChild(
+          create('div', 'vendor-food-order-empty', 'No food items listed.')
+        );
+      }
+
+      append(card, top, items);
+
+      const actions = {
+        placed: ['Accept', 'preparing'],
+        accepted: ['Mark ready', 'ready'],
+        preparing: ['Mark ready', 'ready']
+      };
+
+      const next = actions[order.status];
+      if (next && currentServiceStatus !== 'offline') {
+        const action = create('button', 'vendor-order-action', next[0]);
+        action.type = 'button';
+        action.dataset.orderId = order.id;
+        action.dataset.nextStatus = next[1];
+        action.addEventListener('click', async () => {
+          action.disabled = true;
+          action.textContent = 'Saving…';
+
+          try {
+            const response = await fetch('/__campusmaas/update-order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: order.id,
+                status: next[1],
+                actor: 'vendor',
+                vendor_id: ordersVendorId,
+                option_id: ordersOptionId
+              })
             });
 
             if (!response.ok) throw new Error('Order update failed.');
@@ -697,11 +844,15 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
       );
 
+      const readyOrders = allOrders.filter(
+        (order) => String(order.status || '').toLowerCase() === 'ready'
+      );
+
       const stats = {
         active: active.length,
         placed: active.filter((order) => order.status === 'placed').length,
         preparing: active.filter((order) => ['accepted', 'preparing'].includes(order.status)).length,
-        ready: active.filter((order) => order.status === 'ready').length
+        ready: readyOrders.length
       };
       const serviceStatus = String(child.status || 'online').toLowerCase();
       const serviceStatusMessage = child.status_message || (
@@ -784,11 +935,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       const rightColumn = create('div', 'vendor-dashboard-side-column');
 
       const waiting = create('section', 'vendor-history-card vendor-waiting-card');
-      const readyOrders = allOrders.filter(
-        (order) => String(order.status || '').toLowerCase() === 'ready'
-      );
-
-      append(
+            append(
         waiting,
         makeHeader('WAITING', 'Waiting for confirmation', String(readyOrders.length))
       );
@@ -924,10 +1071,81 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       }
     });
 
+    let liveSyncBusy = false;
+
+    const refreshLiveState = async () => {
+      if (liveSyncBusy) return;
+      liveSyncBusy = true;
+
+      try {
+        const query = new URLSearchParams();
+
+        if (pageKind !== 'root' && vendorId) {
+          query.set('vendor_id', String(vendorId));
+        }
+
+        if (pageKind === 'detail' && optionId) {
+          query.set('option_id', String(optionId));
+        }
+
+        const response = await fetch(
+          '/__campusmaas/vendor-data' +
+            (query.toString() ? '?' + query.toString() : ''),
+          { cache: 'no-store' }
+        );
+
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        if (
+          payload?.catalogue?.version !== 1 ||
+          !Array.isArray(payload?.catalogue?.vendors)
+        ) return;
+
+        const nextOrders =
+          payload?.orders?.version === 1 &&
+          Array.isArray(payload?.orders?.orders)
+            ? payload.orders
+            : { version: 1, orders: [] };
+
+        const nextSummary = Array.isArray(payload?.order_summary)
+          ? payload.order_summary
+          : [];
+
+        const changed =
+          JSON.stringify(payload.catalogue) !== JSON.stringify(state.catalogue) ||
+          JSON.stringify(nextOrders) !== JSON.stringify(state.orders) ||
+          JSON.stringify(nextSummary) !== JSON.stringify(state.orderSummary);
+
+        if (!changed) return;
+
+        state.catalogue = payload.catalogue;
+        state.orders = nextOrders;
+        state.orderSummary = nextSummary;
+
+        const queueWasOpen = printQueue && !printQueue.hidden;
+        render();
+
+        if (queueWasOpen && pageKind === 'detail' && ordersVendorId) {
+          openPrintQueue();
+        }
+      } finally {
+        liveSyncBusy = false;
+      }
+    };
+
+    const startLiveSync = () => {
+      if (vendorLiveSyncTimer) window.clearInterval(vendorLiveSyncTimer);
+      vendorLiveSyncTimer = window.setInterval(() => {
+        void refreshLiveState();
+      }, 3000);
+    };
+
     const start = async () => {
       try {
         await loadData();
         render();
+        startLiveSync();
       } catch {
         title.textContent = 'Vendor portal unavailable';
         subtitle.textContent = 'Check the CampusMaaS vendor data.';
@@ -939,6 +1157,13 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
     void start();
   };
+
+  window.addEventListener('pagehide', () => {
+    if (vendorLiveSyncTimer) {
+      window.clearInterval(vendorLiveSyncTimer);
+      vendorLiveSyncTimer = null;
+    }
+  }, { once: true });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initVendorPortal, { once: true });
@@ -1169,6 +1394,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-section-heading>b { padding:5px 7px; border:1px solid rgba(83,168,255,.10); border-radius:999px; background:rgba(255,255,255,.025); color:#79a4c5; font-size:7px; }
 
   .vendor-orders-grid { display:grid; gap:7px; }
+  .vendor-food-order-items{display:grid;gap:4px;margin:12px 0 2px}
+  .vendor-food-order-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 9px;border:1px solid rgba(83,145,190,.12);border-radius:8px;background:rgba(255,255,255,.035)}
+  .vendor-food-order-item-name{min-width:0;color:#dcecf8;font-size:9px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vendor-food-order-item-count{flex:0 0 auto;color:#67c6ff;font-size:9px;font-weight:800}
+  .vendor-food-order-empty{padding:8px 0;color:#8398aa;font-size:8px}
+  .vendor-food-order-card .vendor-order-action{margin-top:8px}
   .vendor-order-card { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 11px; border:1px solid rgba(83,168,255,.08); border-radius:11px; background:rgba(255,255,255,.025); }
   .vendor-order-card-main { min-width:0; }
   .vendor-order-top { display:flex; align-items:center; gap:7px; }
@@ -1288,6 +1519,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     50%,100%{opacity:.34;filter:brightness(.92)}
   }
 
+  .vendor-print-queue-button[hidden],
+  .vendor-header-service-control[hidden]{display:none !important}
   .vendor-header-actions{display:flex;align-items:center;gap:9px}
   .vendor-header-service-control{display:flex;align-items:center;gap:8px;position:relative;z-index:20}
   .vendor-header-status-toggle{display:flex;align-items:center;padding:3px;border:1px solid #d7dee7;border-radius:14px;background:#fff;box-shadow:0 8px 22px rgba(15,23,42,.08)}
@@ -1311,7 +1544,16 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   }
 
   @media(max-width:560px){
-    .vendor-portal-header{align-items:flex-start}
+    /* Detail/service pages keep the header visible while the dashboard scrolls. */
+  .vendor-portal[data-page-kind="detail"] .vendor-portal-header{
+    position:sticky;
+    top:0;
+    z-index:120;
+    background:rgba(247,250,252,.96);
+    backdrop-filter:blur(12px);
+  }
+
+  .vendor-portal-header{align-items:flex-start}
     .vendor-header-actions{align-items:flex-start}
     .vendor-print-queue-button{height:54px;padding:0 12px;font-size:10px}
     .vendor-print-queue-button .vendor-print-queue-icon{font-size:13px}

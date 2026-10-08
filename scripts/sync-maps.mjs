@@ -7,11 +7,13 @@ const publicMapsDir = path.join(root, 'public', 'maps');
 
 const supported = /\.(geojson|json|tif|tiff)$/i;
 const manifestSupported = /\.(geojson|json)$/i;
+const privateMapFiles = new Set(['campus_orders.json']);
 
 fs.rmSync(publicMapsDir, { recursive: true, force: true });
 fs.mkdirSync(publicMapsDir, { recursive: true });
 
 const files = [];
+const hiddenFromPublic = new Set(['campus_orders.json']);
 
 function collectFiles(directory, relativeDirectory = '') {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -30,7 +32,10 @@ function collectFiles(directory, relativeDirectory = '') {
     }
 
     if (supported.test(entry.name)) {
-      files.push(relativePath.replaceAll(path.sep, '/'));
+      const normalizedPath = relativePath.replaceAll(path.sep, '/');
+      if (!hiddenFromPublic.has(normalizedPath)) {
+        files.push(normalizedPath);
+      }
     }
   }
 }
