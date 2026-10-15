@@ -1700,6 +1700,12 @@ const start = async () => {
     const printSelectAll = document.getElementById('printSelectAll');
     const printPopupPlaceOrder = document.getElementById('printPopupPlaceOrder');
     const printPopupError = document.getElementById('printPopupError');
+    const printPreviewModal = document.getElementById('printPreviewModal');
+    const printPreviewBackdrop = document.getElementById('printPreviewBackdrop');
+    const printPreviewClose = document.getElementById('printPreviewClose');
+    const printPreviewFrame = document.getElementById('printPreviewFrame');
+    const printPreviewTitle = document.getElementById('printPreviewTitle');
+    let printPreviewUrl = '';
 
     let catalogue = { vendors: [] };
     let orders = { orders: [] };
@@ -2019,6 +2025,7 @@ const start = async () => {
 
     const closePrintPopup = () => {
       if (!printPopup) return;
+      closePrintPreview();
       printPopup.hidden = true;
       printPopup.setAttribute('aria-hidden', 'true');
       printPopupBusy = false;
@@ -2054,8 +2061,12 @@ const start = async () => {
       }
 
       const offline = normalizeVendorStatus(printService) === 'offline';
+      const allSelectedReady =
+        selectedFiles.length > 0 &&
+        selectedFiles.every((entry) => entry.conversionStatus === 'ready');
+
       printPopupPlaceOrder.disabled =
-        offline || selectedFiles.length === 0 || printPopupBusy;
+        offline || !allSelectedReady || printPopupBusy;
     };
 
     const renderPrintFiles = () => {
@@ -2107,7 +2118,19 @@ const start = async () => {
           (entry.file.type || 'Unknown file type') + ' · ' +
           formatFileSize(entry.file.size);
 
-        main.append(nameLine, meta);
+        const conversion = document.createElement('div');
+        conversion.className = 'print-file-conversion print-file-conversion-' + (entry.conversionStatus || 'converting');
+
+        if (entry.conversionStatus === 'ready') {
+          conversion.innerHTML = '<span class="print-conversion-dot"></span><span>PDF READY</span>';
+        } else if (entry.conversionStatus === 'error') {
+          conversion.innerHTML = '<span class="print-conversion-dot"></span><span>CONVERSION FAILED</span>';
+          conversion.title = entry.conversionError || 'PDF conversion failed.';
+        } else {
+          conversion.innerHTML = '<span class="print-conversion-spinner"></span><span>CONVERTING TO PDF…</span>';
+        }
+
+        main.append(nameLine, meta, conversion);
 
         const settings = document.createElement('div');
         settings.className = 'print-file-settings';
@@ -2217,9 +2240,58 @@ const start = async () => {
         const preview = document.createElement('button');
         preview.type = 'button';
         preview.className = 'print-preview-button';
-        preview.textContent = 'Preview';
-        preview.setAttribute('aria-label', 'Preview ' + entry.file.name);
-        preview.title = 'Preview';
+        preview.textContent = entry.conversionStatus === 'converting'
+          ? 'PROCESSING…'
+          : entry.conversionStatus === 'error'
+            ? 'FAILED'
+            : 'Preview';
+        preview.setAttribute(
+          'aria-label',
+          entry.conversionStatus === 'converting'
+            ? 'Processing PDF for ' + entry.file.name
+            : entry.conversionStatus === 'error'
+              ? 'PDF conversion failed for ' + entry.file.name
+              : 'Preview ' + entry.file.name
+        );
+        preview.title = entry.conversionStatus === 'converting'
+          ? 'PDF conversion in progress'
+          : entry.conversionStatus === 'error'
+            ? (entry.conversionError || 'PDF conversion failed')
+            : 'Preview';
+        preview.disabled = !entry.selected ||
+          entry.conversionStatus !== 'ready';
+        preview.classList.toggle(
+          'is-processing',
+          entry.conversionStatus === 'converting'
+        );
+        preview.classList.toggle(
+          'is-error',
+          entry.conversionStatus === 'error'
+        );
+        preview.addEventListener('click', async () => {
+          if (!entry.selected || entry.conversionStatus !== 'ready') return;
+
+          preview.disabled = true;
+          preview.classList.add('is-processing');
+          preview.textContent = 'PROCESSING…';
+          preview.title = 'Loading print-ready PDF…';
+
+          try {
+            await openPrintPreview(entry);
+          } finally {
+            preview.classList.remove('is-processing');
+            preview.disabled = !entry.selected ||
+              entry.conversionStatus !== 'ready';
+            preview.textContent = entry.conversionStatus === 'ready'
+              ? 'Preview'
+              : entry.conversionStatus === 'error'
+                ? 'FAILED'
+                : 'PROCESSING…';
+            preview.title = entry.conversionStatus === 'error'
+              ? (entry.conversionError || 'PDF conversion failed')
+              : 'Preview';
+          }
+        });
 
         controls.append(minus, count, plus, preview);
 
@@ -2247,13 +2319,27 @@ const start = async () => {
       if (!selected.length) return;
 
       selected.forEach((file) => {
-        printFiles.push({
+        const entry = {
           file,
           copies: 1,
           selected: true,
           sides: 'single',
-          color: 'bw'
-        });
+          color: 'bw',
+          conversionStatus: 'converting',
+          conversionError: ''
+        };
+        printFiles.push(entry);
+        void convertPrintFile(entry)
+          .then(() => {
+            entry.conversionStatus = 'ready';
+            entry.conversionError = '';
+            renderPrintFiles();
+          })
+          .catch((error) => {
+            entry.conversionStatus = 'error';
+            entry.conversionError = error?.message || 'PDF conversion failed.';
+            renderPrintFiles();
+          });
       });
 
       printPopupError.hidden = true;
@@ -2270,6 +2356,94 @@ const start = async () => {
         reader.onerror = () => reject(new Error('Could not read ' + file.name + '.'));
         reader.readAsDataURL(file);
       });
+
+    const convertPrintFile = async (entry) => {
+      if (entry.printPdfBase64) {
+        entry.conversionStatus = 'ready';
+        return entry.printPdfBase64;
+      }
+      if (entry.conversionPromise) return entry.conversionPromise;
+
+      entry.conversionStatus = 'converting';
+      entry.conversionError = '';
+
+      entry.conversionPromise = (async () => {
+        const dataBase64 = await readFileAsBase64(entry.file);
+      const response = await fetch('/__campusmaas/convert-print-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: entry.file.name,
+          type: entry.file.type || 'application/octet-stream',
+          size: Number(entry.file.size) || 0,
+          data_base64: dataBase64
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || 'File could not be converted to PDF.');
+      }
+
+      const payload = await response.json();
+      if (!payload?.pdf_base64) throw new Error('PDF conversion returned no file.');
+
+        entry.printPdfBase64 = String(payload.pdf_base64);
+        entry.printPdfSize = Number(payload.size) || 0;
+        entry.conversionStatus = 'ready';
+        return entry.printPdfBase64;
+      })();
+
+      try {
+        return await entry.conversionPromise;
+      } catch (error) {
+        entry.conversionStatus = 'error';
+        entry.conversionError = error?.message || 'PDF conversion failed.';
+        throw error;
+      } finally {
+        entry.conversionPromise = null;
+      }
+    };
+
+    const closePrintPreview = () => {
+      if (!printPreviewModal) return;
+      printPreviewModal.hidden = true;
+      printPreviewModal.setAttribute('aria-hidden', 'true');
+      if (printPreviewFrame) printPreviewFrame.removeAttribute('src');
+      if (printPreviewUrl) {
+        URL.revokeObjectURL(printPreviewUrl);
+        printPreviewUrl = '';
+      }
+    };
+
+    const openPrintPreview = async (entry) => {
+      if (!printPreviewModal || !printPreviewFrame || !entry?.selected) return;
+
+      printPopupError.hidden = true;
+      printPreviewTitle.textContent = entry.file.name;
+      printPreviewModal.hidden = false;
+      printPreviewModal.setAttribute('aria-hidden', 'false');
+      printPreviewFrame.removeAttribute('src');
+
+      try {
+        const pdfBase64 = await convertPrintFile(entry);
+        const binary = atob(pdfBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+
+        if (printPreviewUrl) URL.revokeObjectURL(printPreviewUrl);
+        printPreviewUrl = URL.createObjectURL(blob);
+        printPreviewFrame.src = printPreviewUrl;
+      } catch (error) {
+        closePrintPreview();
+        printPopupError.textContent = error.message || 'Preview could not be generated.';
+        printPopupError.hidden = false;
+      }
+    };
+
+    printPreviewClose?.addEventListener('click', closePrintPreview);
+    printPreviewBackdrop?.addEventListener('click', closePrintPreview);
 
     const openPrintPopup = (vendor, option) => {
       printVendor = vendor;
@@ -2304,6 +2478,7 @@ const start = async () => {
         !printVendor ||
         !printService ||
         !printFiles.some((entry) => entry.selected) ||
+        printFiles.some((entry) => entry.selected && entry.conversionStatus !== 'ready') ||
         normalizeVendorStatus(printService) === 'offline'
       ) {
         return;
@@ -2317,14 +2492,20 @@ const start = async () => {
       try {
         const files = [];
         for (const entry of printFiles.filter((item) => item.selected)) {
+          if (entry.conversionStatus !== 'ready' || !entry.printPdfBase64) {
+            throw new Error('Please wait for all files to finish PDF conversion.');
+          }
+          const pdfBase64 = entry.printPdfBase64;
           files.push({
             name: entry.file.name,
-            type: entry.file.type || 'application/octet-stream',
-            size: Number(entry.file.size) || 0,
+            type: 'application/pdf',
+            original_type: entry.file.type || 'application/octet-stream',
+            original_size: Number(entry.file.size) || 0,
+            size: Number(entry.printPdfSize) || 0,
             copies: entry.copies,
             sides: entry.sides,
             color: entry.color,
-            data_base64: await readFileAsBase64(entry.file)
+            data_base64: pdfBase64
           });
         }
 
@@ -3132,8 +3313,19 @@ void start().catch((error) => {
 </MainLayout>
 
 <style is:global>
+.print-file-conversion{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-size:6.5px;font-weight:800;letter-spacing:.08em;line-height:1;text-transform:uppercase}
+.print-file-conversion-converting{color:#8a6a12}
+.print-file-conversion-ready{color:#16834b}
+.print-file-conversion-error{color:#c33e49}
+.print-conversion-dot{width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px color-mix(in srgb,currentColor 12%,transparent)}
+.print-conversion-spinner{width:7px;height:7px;border:1px solid currentColor;border-right-color:transparent;border-radius:50%;animation:print-conversion-spin .75s linear infinite}
+@keyframes print-conversion-spin{to{transform:rotate(360deg)}}
  .print-preview-button{display:grid;place-items:center;min-width:58px;height:25px;padding:0 8px;border:1px solid rgba(22,135,255,.12);border-radius:6px;background:#fff;color:#1687ff;cursor:pointer;font-size:9px;font-weight:700;line-height:1;white-space:nowrap}
 .print-preview-button:hover{background:#edf6fd}
+.print-preview-button.is-processing{cursor:wait;color:#8a6a12;background:#fffaf0;border-color:rgba(138,106,18,.16)}
+.print-preview-button.is-processing::before{content:'';width:8px;height:8px;border:1px solid currentColor;border-right-color:transparent;border-radius:50%;animation:print-preview-spin .75s linear infinite}
+.print-preview-button.is-error{color:#c33e49;border-color:rgba(195,62,73,.16);background:#fff7f7}
+@keyframes print-preview-spin{to{transform:rotate(360deg)}}
 .user-services-stack{
   position:absolute;
   z-index:1050;

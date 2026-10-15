@@ -23,8 +23,8 @@
         <strong>DROP FILES HERE</strong>
         <span>or</span>
         <button type="button" class="print-select-button" id="printSelectFiles">SELECT FILE</button>
-        <small>All file types supported · multiple files allowed</small>
-        <input id="printFileInput" type="file" multiple hidden />
+        <small>PDF, images and supported Office files · multiple files allowed</small>
+        <input id="printFileInput" type="file" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,.doc,.docx,.dot,.dotm,.dotx,.ppt,.pptm,.pptx,.pps,.ppsm,.ppsx,.xls,.xlsm,.xlsx,.odp,.ods,.odt,.rtf" />
       </div>
 
       <section class="print-files-section" aria-label="Selected print files">
@@ -56,6 +56,19 @@
     </footer>
 
     <div class="print-order-error" id="printPopupError" role="alert" hidden></div>
+    <div class="print-preview-modal" id="printPreviewModal" hidden aria-hidden="true">
+      <div class="print-preview-backdrop" id="printPreviewBackdrop"></div>
+      <section class="print-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="printPreviewTitle">
+        <header class="print-preview-header">
+          <div>
+            <span>PRINT PREVIEW</span>
+            <strong id="printPreviewTitle">Generated PDF</strong>
+          </div>
+          <button type="button" id="printPreviewClose" aria-label="Close preview">×</button>
+        </header>
+        <iframe id="printPreviewFrame" title="Generated print preview"></iframe>
+      </section>
+    </div>
   </section>
 </aside>
 
@@ -137,6 +150,23 @@
 .print-place-order:hover{background:#0f78e7}
 .print-place-order:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
 .print-order-error{padding:8px 20px 11px;color:#c23b45;background:#fff3f4;border-top:1px solid rgba(194,59,69,.11);font-size:7px}
+.print-file-conversion{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-size:6.5px;font-weight:800;letter-spacing:.08em;line-height:1;text-transform:uppercase}
+.print-file-conversion-converting{color:#8a6a12}
+.print-file-conversion-ready{color:#16834b}
+.print-file-conversion-error{color:#c33e49}
+.print-conversion-dot{width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px color-mix(in srgb,currentColor 12%,transparent)}
+.print-conversion-spinner{width:7px;height:7px;border:1px solid currentColor;border-right-color:transparent;border-radius:50%;animation:print-conversion-spin .75s linear infinite}
+@keyframes print-conversion-spin{to{transform:rotate(360deg)}}
+.print-preview-modal{position:fixed;inset:0;z-index:5300;display:grid;place-items:center;padding:18px}
+.print-preview-modal[hidden]{display:none}
+.print-preview-backdrop{position:absolute;inset:0;background:rgba(2,8,14,.78);backdrop-filter:blur(8px)}
+.print-preview-dialog{position:relative;z-index:1;width:min(980px,calc(100vw - 28px));height:min(780px,calc(100dvh - 28px));display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden;border:1px solid rgba(66,126,170,.24);border-radius:16px;background:#e8eef4;box-shadow:0 32px 96px rgba(0,0,0,.52)}
+.print-preview-header{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:#f9fcff;border-bottom:1px solid rgba(31,91,138,.12)}
+.print-preview-header span{display:block;color:#1687ff;font-size:6.5px;font-weight:900;letter-spacing:.14em}
+.print-preview-header strong{display:block;margin-top:3px;color:#17324a;font:650 12px/1 'Space Grotesk',sans-serif;max-width:min(70vw,650px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.print-preview-header button{width:30px;height:30px;border:1px solid rgba(26,73,108,.12);border-radius:8px;background:#fff;color:#607589;cursor:pointer;font-size:17px;line-height:1}
+.print-preview-frame{min-width:0;min-height:0}
+#printPreviewFrame{width:100%;height:100%;border:0;background:#697887}
 @media(max-width:560px){
   .print-order-popup{padding:10px}
   .print-order-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:16px}
