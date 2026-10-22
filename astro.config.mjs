@@ -53,12 +53,22 @@ const convertOfficeDocumentToPdf=(name,inputBuffer)=>{
   fs.mkdirSync(profileDir,{recursive:true});
   fs.writeFileSync(inputPath,inputBuffer);
 
+  // Select the native headless PDF exporter for each Office document family.
+  const ext=extensionOf(name);
+  const PRESENTATION_EXTS=new Set(['ppt','pptx','pptm','odp','otp','pps','ppsx','ppsm']);
+  const SPREADSHEET_EXTS=new Set(['xls','xlsx','xlsm','ods','ots','csv']);
+  const pdfFilter=PRESENTATION_EXTS.has(ext)
+    ?'pdf:impress_pdf_Export'
+    :SPREADSHEET_EXTS.has(ext)
+      ?'pdf:calc_pdf_Export'
+      :'pdf:writer_pdf_Export';
+
   try{
     // LibreOffice runs headlessly: the source presentation/document is rendered
     // directly to PDF without opening an interactive Office application.
     execFileSync('soffice',[
       '--headless',
-      '--convert-to','pdf:impress_pdf_Export',
+      '--convert-to',pdfFilter,
       '--outdir',outputDir,
       '-env:UserInstallation=file://'+profileDir,
       inputPath
@@ -132,21 +142,6 @@ const convertUploadedFileToPdf=async(name,data,type='')=>{
 
   throw Error('This file format is not accepted because its layout cannot be safely preserved. Upload a PDF, image, or supported Office document.');
 };
-const convertUploadedFileToPdf=async(name,data)=>{
-  const inputBuffer=Buffer.isBuffer(data)?data:decodeBase64(data);
-  if(inputBuffer.length>50*1024*1024) throw Error('Print files must be 50 MB or smaller each.');
-
-  // Existing PDFs are never re-rendered. Their original bytes are preserved.
-  if(inputBuffer.subarray(0,5).toString('ascii')==='%PDF-') return inputBuffer;
-
-  const extension=extensionOf(name);
-  if(!OFFICE_PDF_EXTENSIONS.has(extension)){
-    throw Error('This file format is not accepted because its layout cannot be safely preserved. Upload a PDF or a supported Office document.');
-  }
-
-  return convertOfficeDocumentToPdf(name,inputBuffer);
-};
-
 const mergePdfFiles=(files)=>{
   if(!files.length) throw Error('No PDF files selected.');
   if(files.length===1) return fs.readFileSync(files[0]);
