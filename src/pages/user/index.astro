@@ -1,8 +1,9 @@
 ---
-import MainLayout from '../layouts/MainLayout.astro';
-import '../styles/global.css';
+import MainLayout from '../../layouts/MainLayout.astro';
+import '../../styles/global.css';
 import 'leaflet/dist/leaflet.css';
-import FoodOrderPopup from '../components/campusmaas/FoodOrderPopup.astro';
+import FoodOrderPopup from '../../components/campusmaas/FoodOrderPopup.astro';
+import PrintOrderPopup from '../../components/campusmaas/PrintOrderPopup.astro';
 ---
 
 <MainLayout title="CampusMaaS">
@@ -75,6 +76,7 @@ import FoodOrderPopup from '../components/campusmaas/FoodOrderPopup.astro';
     </aside>
 
     <FoodOrderPopup />
+    <PrintOrderPopup />
 
     <script>
       import L from 'leaflet';
@@ -122,6 +124,32 @@ const escapeHtml = (value) =>
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+
+const normalizeVendorStatus = (service) => {
+  const status = String(service?.status || 'online').toLowerCase();
+  return status === 'offline' || status === 'busy' ? status : 'online';
+};
+
+const vendorStatusLabel = (service) => {
+  const status = normalizeVendorStatus(service);
+  return status === 'offline' ? 'Offline' : status === 'busy' ? 'Busy' : 'Online';
+};
+
+const vendorStatusMessage = (service) => {
+  const status = normalizeVendorStatus(service);
+  return service?.status_message ||
+    (status === 'offline'
+      ? 'Currently unavailable'
+      : status === 'busy'
+        ? 'Currently serving customers'
+        : 'Accepting new orders');
+};
+
+const vendorStatusMarkup = (service) => {
+  const status = normalizeVendorStatus(service);
+  return '<span class="user-vendor-status user-vendor-status-' + status + '">' +
+    '<i aria-hidden="true"></i><span>' + vendorStatusLabel(service) + '</span></span>';
+};
 
 const distanceMeters = (a, b) =>
   L.latLng(Number(a[1]), Number(a[0]))
@@ -263,6 +291,24 @@ const policyAppliesToGroup = (policy, group) => {
 
   return false;
 };
+
+const policyDirectionAllows = (policy, direction = '') => {
+  const policyDirection = String(policy?.direction || 'in_out');
+
+  return policyDirection === 'in_out' ||
+    !direction ||
+    policyDirection === direction;
+};
+
+const gatePoliciesForRoute = (gate, accessPolicy, group = 'students', direction = '') =>
+  (accessPolicy?.policies || []).filter(
+    (policy) =>
+      policy?.target?.type === 'gate' &&
+      String(policy?.target?.id) === String(gate?.id) &&
+      policyAppliesToGroup(policy, group) &&
+      policyDirectionAllows(policy, direction) &&
+      policy?.enabled !== false
+  );
 
 const policyHasCondition = (policy) => {
   const windows =
@@ -424,8 +470,98 @@ const routeSummary = (
   startPoint,
   endPoint,
   accessPolicy,
-  userGroup = 'boys'
+  userGroup = 'boys',
+  gates = []
 ) => {
+  const temporal = policyTemporalState(
+    accessPolicy?.timezone || 'Asia/Kolkata'
+  );
+
+  const gateFeatureIsBlocked = (gate) => {
+    const policies = gatePoliciesForRoute(gate, accessPolicy, userGroup, '');
+    const universalPolicies = policies.filter(
+      (policy) => String(policy?.direction || 'in_out') === 'in_out'
+    );
+
+    if (!universalPolicies.length) return false;
+
+    if (
+      universalPolicies.some(
+        (policy) =>
+          (policy.mode === 'deny' || policy.mode === 'deny_during') &&
+          policyMatchesNow(policy, temporal)
+      )
+    ) {
+      return true;
+    }
+
+    const allowOnly = universalPolicies.filter(
+      (policy) => policy.mode === 'allow_only_during'
+    );
+
+    return allowOnly.length > 0 &&
+      !allowOnly.some((policy) => policyMatchesNow(policy, temporal));
+  };
+
+  const blockedGates = (gates || []).filter(gateFeatureIsBlocked);
+
+  const pointToFeatureDistance = (point, feature) => {
+    const lines =
+      feature?.geometry?.type === 'LineString'
+        ? [feature.geometry.coordinates]
+        : feature?.geometry?.type === 'MultiLineString'
+          ? feature.geometry.coordinates
+          : [];
+
+    let best = Infinity;
+
+    for (const line of lines) {
+      if (!Array.isArray(line) || line.length < 2) continue;
+
+      for (let index = 0; index < line.length - 1; index += 1) {
+        const a = line[index];
+        const b = line[index + 1];
+        const projected = projectPointToPath(
+          {
+            features: [{
+              geometry: {
+                type: 'LineString',
+                coordinates: [a, b]
+              }
+            }]
+          },
+          point
+        );
+
+        if (projected) best = Math.min(best, projected.distance);
+      }
+    }
+
+    return best;
+  };
+
+  const pathPassesBlockedGate = (feature) =>
+    blockedGates.some((gate) => {
+      const coordinate =
+        gate?.properties?.access_point ||
+        gate?.properties?.center;
+
+      if (!Array.isArray(coordinate) || coordinate.length < 2) return false;
+
+      const gatePoint = L.latLng(
+        Number(coordinate[1]),
+        Number(coordinate[0])
+      );
+
+      const radius =
+        Math.max(
+          8,
+          (Number(gate?.properties?.width_m) || 2) * 0.5 + 4
+        );
+
+      return pointToFeatureDistance(gatePoint, feature) <= radius;
+    });
+
   const routablePathData = {
     ...pathData,
     features: (pathData?.features || [])
@@ -439,7 +575,8 @@ const routeSummary = (
         )
       }))
       .filter((feature) =>
-        pathFeatureAllowed(feature, accessPolicy, userGroup)
+        pathFeatureAllowed(feature, accessPolicy, userGroup) &&
+        !pathPassesBlockedGate(feature)
       )
   };
 
@@ -760,8 +897,7 @@ const routeSummary = (
 
       if (distance <= 0) continue;
 
-      const aKey = graphKey(a);
-      const bKey = graphKey(b);
+      const aKey = graphKey(a);      const bKey = graphKey(b);
 
       addNode(aKey, a);
       addNode(bKey, b);
@@ -829,8 +965,126 @@ const routeSummary = (
     };
   };
 
-  const candidateAnchors = (point) => {
+  const preferredGateForPoint = (point, direction) => {
+    const matches = (gates || [])
+      .map((gate) => {
+        const coordinate =
+          gate?.properties?.access_point ||
+          gate?.properties?.center;
+
+        if (!Array.isArray(coordinate) || coordinate.length < 2) return null;
+
+        const policies = gatePoliciesForRoute(
+          gate,
+          accessPolicy,
+          userGroup,
+          direction
+        ).filter((policy) =>
+          policy.mode === 'preferred' &&
+          policyMatchesNow(policy, temporal)
+        );
+
+        if (!policies.length) return null;
+
+        return {
+          gate,
+          distance: L.latLng(
+            Number(coordinate[1]),
+            Number(coordinate[0])
+          ).distanceTo(point),
+          priority: Math.max(
+            ...policies.map((policy) => Number(policy.priority) || 0)
+          )
+        };
+      })
+      .filter(Boolean)
+      .filter((entry) => entry.distance <= 80)
+      .sort((a, b) =>
+        b.priority - a.priority ||
+        a.distance - b.distance
+      );
+
+    return matches[0] || null;
+  };
+
+  const gateAccessAllowed = (gate, direction) => {
+    const policies = gatePoliciesForRoute(
+      gate,
+      accessPolicy,
+      userGroup,
+      direction
+    );
+
+    if (!policies.length) return true;
+
+    const activePolicies = policies.filter((policy) =>
+      policyMatchesNow(policy, temporal)
+    );
+
+    if (
+      activePolicies.some(
+        (policy) =>
+          policy.mode === 'deny' ||
+          policy.mode === 'deny_during'
+      )
+    ) {
+      return false;
+    }
+
+    const allowOnly = policies.filter(
+      (policy) => policy.mode === 'allow_only_during'
+    );
+
+    if (allowOnly.length) {
+      return allowOnly.some((policy) =>
+        activePolicies.includes(policy)
+      );
+    }
+
+    const conditionalAllow = policies.filter(
+      (policy) =>
+        policy.mode === 'allow' &&
+        policyHasCondition(policy)
+    );
+
+    if (conditionalAllow.length) {
+      return conditionalAllow.some((policy) =>
+        activePolicies.includes(policy)
+      );
+    }
+
+    return true;
+  };
+
+  const endpointGateFor = (point) => {
+    let best = null;
+
+    for (const gate of gates || []) {
+      const coordinate =
+        gate?.properties?.access_point ||
+        gate?.properties?.center;
+
+      if (!Array.isArray(coordinate) || coordinate.length < 2) continue;
+
+      const gatePoint = L.latLng(
+        Number(coordinate[1]),
+        Number(coordinate[0])
+      );
+
+      const distance = gatePoint.distanceTo(point);
+      if (!best || distance < best.distance) {
+        best = { gate, point: gatePoint, distance };
+      }
+    }
+
+    return best && best.distance <= USER_GATE_MATCH_RADIUS_M
+      ? best
+      : null;
+  };
+
+  const candidateAnchors = (point, direction) => {
     const candidates = [];
+    const preferredGate = preferredGateForPoint(point, direction);
 
     for (
       let index = 0;
@@ -848,16 +1102,35 @@ const routeSummary = (
         projection.distance <=
         USER_ROUTE_CONNECT_RADIUS_M
       ) {
+        const preferredDistance = preferredGate
+          ? L.latLng(
+              Number(preferredGate.gate?.properties?.access_point?.[1] ??
+                preferredGate.gate?.properties?.center?.[1]),
+              Number(preferredGate.gate?.properties?.access_point?.[0] ??
+                preferredGate.gate?.properties?.center?.[0])
+            ).distanceTo(
+              L.latLng(
+                Number(projection.coordinate[1]),
+                Number(projection.coordinate[0])
+              )
+            )
+          : 0;
+
+        const preferenceWeight = preferredGate
+          ? 0.25 + (100 - Number(preferredGate.priority || 0)) / 200
+          : 0;
+
         candidates.push({
           segment,
           coordinate: projection.coordinate,
           distance: projection.distance,
-          fraction: projection.fraction
+          fraction: projection.fraction,
+          score: projection.distance + preferredDistance * preferenceWeight
         });
       }
     }
 
-    candidates.sort((a, b) => a.distance - b.distance);
+    candidates.sort((a, b) => a.score - b.score || a.distance - b.distance);
 
     /*
      * Keeping a handful of nearby candidates allows the router to choose
@@ -867,8 +1140,25 @@ const routeSummary = (
     return candidates.slice(0, 8);
   };
 
-  const startCandidates = candidateAnchors(startPoint);
-  const endCandidates = candidateAnchors(endPoint);
+  const startGate = endpointGateFor(startPoint);
+  const endGate = endpointGateFor(endPoint);
+
+  if (
+    startGate &&
+    !gateAccessAllowed(startGate.gate, 'in')
+  ) {
+    return null;
+  }
+
+  if (
+    endGate &&
+    !gateAccessAllowed(endGate.gate, 'out')
+  ) {
+    return null;
+  }
+
+  const startCandidates = candidateAnchors(startPoint, 'in');
+  const endCandidates = candidateAnchors(endPoint, 'out');
 
   if (!startCandidates.length || !endCandidates.length) {
     return null;
@@ -1208,69 +1498,30 @@ const start = async () => {
     fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'no-store' }),
     fetch('/maps/gates.geojson', { cache: 'no-store' }),
     fetch('/maps/perimeter.geojson', { cache: 'no-store' }),
-    fetch('/maps/campus_access_rules.json', { cache: 'no-store' }).catch(() => null)
+    fetch('/maps/campus_access_rules.json', { cache: 'no-store' })
   ]);
 
   if (
     !placesResponse.ok ||
     !pathResponse.ok ||
     !gatesResponse.ok ||
-    !perimeterResponse.ok
+    !perimeterResponse.ok ||
+    !accessRulesResponse.ok
   ) {
-    throw new Error('CampusMaaS user map data could not be loaded.');
+    throw new Error('CampusMaaS map or access-policy data could not be loaded.');
   }
 
-  const [places, pathData, gates, perimeter, loadedAccessPolicy] = await Promise.all([
+  const [places, loadedPathData, loadedGates, perimeter, loadedAccessPolicy] = await Promise.all([
     placesResponse.json(),
     pathResponse.json(),
     gatesResponse.json(),
     perimeterResponse.json(),
-    accessRulesResponse
-      ? (accessRulesResponse.ok
-        ? accessRulesResponse.json()
-        : Promise.resolve(null))
-      : Promise.resolve(null)
+    accessRulesResponse.json()
   ]);
 
-  /*
-   * The walking map must remain usable even if the editable access-policy
-   * file is temporarily unavailable. The fallback mirrors the currently
-   * configured student policy and is only used when the JSON cannot load.
-   */
-  const accessPolicy = loadedAccessPolicy || {
-    version: 1,
-    timezone: 'Asia/Kolkata',
-    policies: [
-      {
-        id: 'students-gate-06-preferred',
-        target: {
-          type: 'gate',
-          id: 'gate-1791182325069',
-          name: 'Gate - 06'
-        },
-        group: 'students',
-        direction: 'in_out',
-        mode: 'preferred',
-        priority: 85
-      },
-      {
-        id: 'students-gate-09-time',
-        target: {
-          type: 'gate',
-          id: 'gate-1791182233958',
-          name: 'Gate - 09'
-        },
-        group: 'students',
-        direction: 'in_out',
-        mode: 'allow_only_during',
-        windows: [
-          { start: '07:00', end: '08:45' },
-          { start: '12:25', end: '13:25' },
-          { start: '16:15', end: '18:00' }
-        ]
-      }
-    ]
-  };
+  let pathData = loadedPathData;
+  let gates = loadedGates;
+  let accessPolicy = loadedAccessPolicy;
 
   const perimeterFeature = perimeter?.features?.[0];
   const perimeterCoordinates = perimeterFeature?.geometry?.coordinates?.[0];
@@ -1433,6 +1684,29 @@ const start = async () => {
     const foodPopupPlaceOrder = document.getElementById('foodPopupPlaceOrder');
     const foodPopupError = document.getElementById('foodPopupError');
 
+    const printPopup = document.getElementById('printOrderPopup');
+    const printPopupBackdrop = document.getElementById('printOrderPopupBackdrop');
+    const printPopupClose = document.getElementById('printOrderPopupClose');
+    const printPopupVendor = document.getElementById('printPopupVendor');
+    const printPopupService = document.getElementById('printPopupService');
+    const printPopupStatus = document.getElementById('printPopupStatus');
+    const printPopupPrepSummary = document.getElementById('printPopupPrepSummary');
+    const printDropZone = document.getElementById('printDropZone');
+    const printSelectFiles = document.getElementById('printSelectFiles');
+    const printFileInput = document.getElementById('printFileInput');
+    const printFileSummary = document.getElementById('printFileSummary');
+    const printFileList = document.getElementById('printFileList');
+    const printClearFiles = document.getElementById('printClearFiles');
+    const printSelectAll = document.getElementById('printSelectAll');
+    const printPopupPlaceOrder = document.getElementById('printPopupPlaceOrder');
+    const printPopupError = document.getElementById('printPopupError');
+    const printPreviewModal = document.getElementById('printPreviewModal');
+    const printPreviewBackdrop = document.getElementById('printPreviewBackdrop');
+    const printPreviewClose = document.getElementById('printPreviewClose');
+    const printPreviewFrame = document.getElementById('printPreviewFrame');
+    const printPreviewTitle = document.getElementById('printPreviewTitle');
+    let printPreviewUrl = '';
+
     let catalogue = { vendors: [] };
     let orders = { orders: [] };
     let foodMenu = { menu: [] };
@@ -1440,6 +1714,10 @@ const start = async () => {
     let foodService = null;
     let foodCart = new Map();
     let foodPopupBusy = false;
+    let printVendor = null;
+    let printService = null;
+    let printFiles = [];
+    let printPopupBusy = false;
 
     const key = 'campusmaas-user-id';
     let userId = localStorage.getItem(key);
@@ -1470,12 +1748,61 @@ const start = async () => {
       mine.forEach((order) => {
         const el = document.createElement('article');
         el.className = 'user-order-item';
-        el.innerHTML =
-          '<div><strong>#' + esc(order.id) +
+
+        const details = document.createElement('div');
+        const quantityText = Array.isArray(order.files)
+          ? ('Files ' + order.files.length + ' · Copies ' + (Number(order.quantity) || 0))
+          : ('Qty ' + (Number(order.quantity) || 1));
+
+        details.innerHTML =
+          '<strong>#' + esc(order.id) +
           '</strong><span>' + esc(order.vendor_name) + ' · ' + esc(order.option_name) +
-          '</span><small>Qty ' + (Number(order.quantity) || 1) + ' · ' +
-          esc(order.status) + '</small></div><b>' + money(order.total_price) + '</b>';
-        orderList.appendChild(el);
+          '</span><small>' + quantityText + ' · ' + esc(order.status) + '</small>';
+
+        const side = document.createElement('div');
+        side.className = 'user-order-side';
+        side.innerHTML = '<b>' + money(order.total_price) + '</b>';
+
+        if (String(order.status || '').toLowerCase() === 'ready') {
+          const confirm = document.createElement('button');
+          confirm.type = 'button';
+          confirm.className = 'user-order-confirm';
+          confirm.textContent = 'CONFIRM COLLECTED';
+          confirm.addEventListener('click', async () => {
+            confirm.disabled = true;
+            confirm.textContent = 'CONFIRMING…';
+
+            try {
+              const response = await fetch('/__campusmaas/update-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: order.id,
+                  status: 'completed',
+                  actor: 'user',
+                  user_id: userId
+                })
+              });
+
+              if (!response.ok) {
+                const data = await response.json().catch(() => null);
+                throw new Error(data?.error || 'Order could not be updated.');
+              }
+
+              orders = await (
+                await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' })
+              ).json();
+
+              renderOrders();
+            } catch {
+              confirm.disabled = false;
+              confirm.textContent = 'CONFIRM COLLECTED';
+            }
+          });
+          el.appendChild(confirm);
+        }
+
+        el.append(details, side);        orderList.appendChild(el);
       });
     };
 
@@ -1603,6 +1930,11 @@ const start = async () => {
 
       foodPopupVendor.textContent = vendor.name;
       foodPopupService.textContent = service.name;
+      const popupStatus = document.getElementById('foodPopupStatus');
+      if (popupStatus) {
+        popupStatus.className = 'food-popup-status food-popup-status-' + normalizeVendorStatus(service);
+        popupStatus.innerHTML = '<i aria-hidden="true"></i><span>' + vendorStatusLabel(service) + '</span><small>' + esc(vendorStatusMessage(service)) + '</small>';
+      }
       foodMenuList.innerHTML = '<div class="food-menu-empty">Loading menu…</div>';
       foodPopupError.hidden = true;
       foodPopup.hidden = false;
@@ -1677,7 +2009,7 @@ const start = async () => {
         if (!response.ok) throw new Error('Food order could not be placed.');
 
         orders = await (
-          await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+          await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' })
         ).json();
 
         closeFoodPopup();
@@ -1691,67 +2023,529 @@ const start = async () => {
       }
     };
 
-    const openPrinterComposer = (vendor, option) => {
-      composer.hidden = false;
-      composer.innerHTML =
-        '<div class="user-order-compose-head"><div><span>' + esc(vendor.name) +
-        '</span><strong>' + esc(option.name) +
-        '</strong></div><button type="button" id="closeOrderComposer">×</button></div>' +
-        '<div class="user-order-compose-meta"><div><span>Service</span><strong>' +
-        (Number(option.service_minutes) || 0) + ' min</strong></div><div><span>Price</span><strong>' +
-        money(option.price) + '</strong></div></div>' +
-        '<div class="user-qty-row"><span>Quantity</span><div><button type="button" data-qty="-1">−</button>' +
-        '<strong id="userOrderQty">1</strong><button type="button" data-qty="1">+</button></div></div>' +
-        '<button type="button" class="user-place-order" id="placeUserOrder">PLACE ORDER</button>';
+    const closePrintPopup = () => {
+      if (!printPopup) return;
+      closePrintPreview();
+      printPopup.hidden = true;
+      printPopup.setAttribute('aria-hidden', 'true');
+      printPopupBusy = false;
+      printFiles = [];
+      if (printSelectAll) {
+        printSelectAll.checked = false;
+        printSelectAll.indeterminate = false;
+      }
+    };
 
-      let quantity = 1;
-      const qText = composer.querySelector('#userOrderQty');
+    const formatFileSize = (bytes) => {
+      const size = Number(bytes) || 0;
+      if (size < 1024) return size + ' B';
+      if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
+      if (size < 1024 * 1024 * 1024) return (size / (1024 * 1024)).toFixed(1) + ' MB';
+      return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+    };
 
-      composer.querySelectorAll('[data-qty]').forEach((button) => {
-        button.onclick = () => {
-          quantity = Math.max(1, quantity + Number(button.dataset.qty));
-          qText.textContent = String(quantity);
-        };
+    const printSummary = () => {
+      const selectedFiles = printFiles.filter((entry) => entry.selected);
+      const copies = selectedFiles.reduce((sum, entry) => sum + entry.copies, 0);
+      printFileSummary.textContent =
+        selectedFiles.length + (selectedFiles.length === 1 ? ' file · ' : ' files · ') +
+        copies + (copies === 1 ? ' copy' : ' copies');
+
+      printClearFiles.hidden = printFiles.length === 0;
+
+      if (printSelectAll) {
+        printSelectAll.checked =
+          printFiles.length > 0 && selectedFiles.length === printFiles.length;
+        printSelectAll.indeterminate =
+          selectedFiles.length > 0 && selectedFiles.length < printFiles.length;
+      }
+
+      const offline = normalizeVendorStatus(printService) === 'offline';
+      const allSelectedReady =
+        selectedFiles.length > 0 &&
+        selectedFiles.every((entry) => entry.conversionStatus === 'ready');
+
+      printPopupPlaceOrder.disabled =
+        offline || !allSelectedReady || printPopupBusy;
+    };
+
+    const renderPrintFiles = () => {
+      printFileList.innerHTML = '';
+
+      if (!printFiles.length) {
+        printFileList.appendChild(
+          Object.assign(document.createElement('div'), {
+            className: 'print-files-empty',
+            textContent: 'Select or drop files to add them to your order.'
+          })
+        );
+        printSummary();
+        return;
+      }
+
+      printFiles.forEach((entry, index) => {
+        const row = document.createElement('article');
+        row.className = 'print-file-row' + (entry.selected ? '' : ' is-unselected');
+
+        const main = document.createElement('div');
+        main.className = 'print-file-main';
+
+        const nameLine = document.createElement('div');
+        nameLine.className = 'print-file-name-wrap';
+
+        const selectLabel = document.createElement('label');
+        selectLabel.className = 'print-file-select';
+
+        const select = document.createElement('input');
+        select.type = 'checkbox';
+        select.checked = entry.selected;
+        select.setAttribute('aria-label', 'Select ' + entry.file.name);
+        select.addEventListener('change', () => {
+          entry.selected = select.checked;
+          renderPrintFiles();
+        });
+
+        selectLabel.appendChild(select);
+
+        const name = document.createElement('div');
+        name.className = 'print-file-name';
+        name.textContent = entry.file.name;
+        nameLine.append(selectLabel, name);
+
+        const meta = document.createElement('div');
+        meta.className = 'print-file-meta';
+        meta.textContent =
+          (entry.file.type || 'Unknown file type') + ' · ' +
+          formatFileSize(entry.file.size);
+
+        const conversion = document.createElement('div');
+        conversion.className = 'print-file-conversion print-file-conversion-' + (entry.conversionStatus || 'converting');
+
+        if (entry.conversionStatus === 'ready') {
+          conversion.innerHTML = '<span class="print-conversion-dot"></span><span>PDF READY</span>';
+        } else if (entry.conversionStatus === 'error') {
+          conversion.innerHTML = '<span class="print-conversion-dot"></span><span>CONVERSION FAILED</span>';
+          conversion.title = entry.conversionError || 'PDF conversion failed.';
+        } else {
+          conversion.innerHTML = '<span class="print-conversion-spinner"></span><span>CONVERTING TO PDF…</span>';
+        }
+
+        main.append(nameLine, meta, conversion);
+
+        const settings = document.createElement('div');
+        settings.className = 'print-file-settings';
+
+        const sidesGroup = document.createElement('div');
+        sidesGroup.className = 'print-file-option-group';
+
+        const sidesLabel = document.createElement('span');
+        sidesLabel.className = 'print-file-option-label';
+        sidesLabel.textContent = 'Sides';
+
+        const sideSingle = document.createElement('label');
+        sideSingle.className = 'print-file-option';
+        const sideSingleInput = document.createElement('input');
+        sideSingleInput.type = 'radio';
+        sideSingleInput.name = 'print-sides-' + index;
+        sideSingleInput.value = 'single';
+        sideSingleInput.checked = entry.sides === 'single';
+        sideSingleInput.disabled = !entry.selected;
+        sideSingleInput.addEventListener('change', () => {
+          if (sideSingleInput.checked) entry.sides = 'single';
+        });
+        sideSingle.append(sideSingleInput, document.createTextNode('One side'));
+
+        const sideDouble = document.createElement('label');
+        sideDouble.className = 'print-file-option';
+        const sideDoubleInput = document.createElement('input');
+        sideDoubleInput.type = 'radio';
+        sideDoubleInput.name = 'print-sides-' + index;
+        sideDoubleInput.value = 'double';
+        sideDoubleInput.checked = entry.sides === 'double';
+        sideDoubleInput.disabled = !entry.selected;
+        sideDoubleInput.addEventListener('change', () => {
+          if (sideDoubleInput.checked) entry.sides = 'double';
+        });
+        sideDouble.append(sideDoubleInput, document.createTextNode('Both sides'));
+
+        sidesGroup.append(sidesLabel, sideSingle, sideDouble);
+
+        const colorGroup = document.createElement('div');
+        colorGroup.className = 'print-file-option-group';
+
+        const colorLabel = document.createElement('span');
+        colorLabel.className = 'print-file-option-label';
+        colorLabel.textContent = 'Colour';
+
+        const bw = document.createElement('label');
+        bw.className = 'print-file-option';
+        const bwInput = document.createElement('input');
+        bwInput.type = 'radio';
+        bwInput.name = 'print-colour-' + index;
+        bwInput.value = 'bw';
+        bwInput.checked = entry.color === 'bw';
+        bwInput.disabled = !entry.selected;
+        bwInput.addEventListener('change', () => {
+          if (bwInput.checked) entry.color = 'bw';
+        });
+        bw.append(bwInput, document.createTextNode('Black & White'));
+
+        const color = document.createElement('label');
+        color.className = 'print-file-option';
+        const colorInput = document.createElement('input');
+        colorInput.type = 'radio';
+        colorInput.name = 'print-colour-' + index;
+        colorInput.value = 'color';
+        colorInput.checked = entry.color === 'color';
+        colorInput.disabled = !entry.selected;
+        colorInput.addEventListener('change', () => {
+          if (colorInput.checked) entry.color = 'color';
+        });
+        color.append(colorInput, document.createTextNode('Colour'));
+
+        colorGroup.append(colorLabel, bw, color);
+        settings.append(sidesGroup, colorGroup);
+
+        const controls = document.createElement('div');
+        controls.className = 'print-copy-controls';
+
+        const minus = document.createElement('button');
+        minus.type = 'button';
+        minus.className = 'print-copy-button';
+        minus.textContent = '−';
+        minus.disabled = !entry.selected;
+        minus.setAttribute('aria-label', 'Decrease copies for ' + entry.file.name);
+
+        const count = document.createElement('span');
+        count.className = 'print-copy-count';
+        count.textContent = String(entry.copies);
+
+        const plus = document.createElement('button');
+        plus.type = 'button';
+        plus.className = 'print-copy-button';
+        plus.textContent = '+';
+        plus.disabled = !entry.selected;
+        plus.setAttribute('aria-label', 'Increase copies for ' + entry.file.name);
+
+        minus.addEventListener('click', () => {
+          entry.copies = Math.max(1, entry.copies - 1);
+          renderPrintFiles();
+        });
+
+        plus.addEventListener('click', () => {
+          entry.copies = Math.min(99, entry.copies + 1);
+          renderPrintFiles();
+        });
+
+        const preview = document.createElement('button');
+        preview.type = 'button';
+        preview.className = 'print-preview-button';
+        preview.textContent = entry.conversionStatus === 'converting'
+          ? 'PROCESSING…'
+          : entry.conversionStatus === 'error'
+            ? 'FAILED'
+            : 'Preview';
+        preview.setAttribute(
+          'aria-label',
+          entry.conversionStatus === 'converting'
+            ? 'Processing PDF for ' + entry.file.name
+            : entry.conversionStatus === 'error'
+              ? 'PDF conversion failed for ' + entry.file.name
+              : 'Preview ' + entry.file.name
+        );
+        preview.title = entry.conversionStatus === 'converting'
+          ? 'PDF conversion in progress'
+          : entry.conversionStatus === 'error'
+            ? (entry.conversionError || 'PDF conversion failed')
+            : 'Preview';
+        preview.disabled = !entry.selected ||
+          entry.conversionStatus !== 'ready';
+        preview.classList.toggle(
+          'is-processing',
+          entry.conversionStatus === 'converting'
+        );
+        preview.classList.toggle(
+          'is-error',
+          entry.conversionStatus === 'error'
+        );
+        preview.addEventListener('click', async () => {
+          if (!entry.selected || entry.conversionStatus !== 'ready') return;
+
+          preview.disabled = true;
+          preview.classList.add('is-processing');
+          preview.textContent = 'PROCESSING…';
+          preview.title = 'Loading print-ready PDF…';
+
+          try {
+            await openPrintPreview(entry);
+          } finally {
+            preview.classList.remove('is-processing');
+            preview.disabled = !entry.selected ||
+              entry.conversionStatus !== 'ready';
+            preview.textContent = entry.conversionStatus === 'ready'
+              ? 'Preview'
+              : entry.conversionStatus === 'error'
+                ? 'FAILED'
+                : 'PROCESSING…';
+            preview.title = entry.conversionStatus === 'error'
+              ? (entry.conversionError || 'PDF conversion failed')
+              : 'Preview';
+          }
+        });
+
+        controls.append(minus, count, plus, preview);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'print-remove-file';
+        remove.textContent = '×';
+        remove.setAttribute('aria-label', 'Remove ' + entry.file.name);
+        remove.addEventListener('click', () => {
+          printFiles.splice(index, 1);
+          renderPrintFiles();
+        });
+
+        row.append(main, settings, controls, remove);
+        printFileList.appendChild(row);
       });
 
-      composer.querySelector('#closeOrderComposer').onclick = () => {
-        composer.hidden = true;
-      };
+      printSummary();
+    };
 
-      composer.querySelector('#placeUserOrder').onclick = async () => {
-        const button = composer.querySelector('#placeUserOrder');
-        button.disabled = true;
-        button.textContent = 'PLACING…';
+    const addPrintFiles = (fileList) => {
+      if (normalizeVendorStatus(printService) === 'offline') return;
+
+      const selected = Array.from(fileList || []);
+      if (!selected.length) return;
+
+      selected.forEach((file) => {
+        const entry = {
+          file,
+          copies: 1,
+          selected: true,
+          sides: 'single',
+          color: 'bw',
+          conversionStatus: 'converting',
+          conversionError: ''
+        };
+        printFiles.push(entry);
+        void convertPrintFile(entry)
+          .then(() => {
+            entry.conversionStatus = 'ready';
+            entry.conversionError = '';
+            renderPrintFiles();
+          })
+          .catch((error) => {
+            entry.conversionStatus = 'error';
+            entry.conversionError = error?.message || 'PDF conversion failed.';
+            renderPrintFiles();
+          });
+      });
+
+      printPopupError.hidden = true;
+      renderPrintFiles();
+    };
+
+    const readFileAsBase64 = (file) =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result);
+        };
+        reader.onerror = () => reject(new Error('Could not read ' + file.name + '.'));
+        reader.readAsDataURL(file);
+      });
+
+    const convertPrintFile = async (entry) => {
+      if (entry.printPdfBase64) {
+        entry.conversionStatus = 'ready';
+        return entry.printPdfBase64;
+      }
+      if (entry.conversionPromise) return entry.conversionPromise;
+
+      entry.conversionStatus = 'converting';
+      entry.conversionError = '';
+
+      entry.conversionPromise = (async () => {
+        const dataBase64 = await readFileAsBase64(entry.file);
+      const response = await fetch('/__campusmaas/convert-print-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: entry.file.name,
+          type: entry.file.type || 'application/octet-stream',
+          size: Number(entry.file.size) || 0,
+          data_base64: dataBase64
+        })
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || 'File could not be converted to PDF.');
+      }
+
+      const payload = await response.json();
+      if (!payload?.pdf_base64) throw new Error('PDF conversion returned no file.');
+
+        entry.printPdfBase64 = String(payload.pdf_base64);
+        entry.printPdfSize = Number(payload.size) || 0;
+        entry.conversionStatus = 'ready';
+        return entry.printPdfBase64;
+      })();
+
+      try {
+        return await entry.conversionPromise;
+      } catch (error) {
+        entry.conversionStatus = 'error';
+        entry.conversionError = error?.message || 'PDF conversion failed.';
+        throw error;
+      } finally {
+        entry.conversionPromise = null;
+      }
+    };
+
+    const closePrintPreview = () => {
+      if (!printPreviewModal) return;
+      printPreviewModal.hidden = true;
+      printPreviewModal.setAttribute('aria-hidden', 'true');
+      if (printPreviewFrame) printPreviewFrame.removeAttribute('src');
+      if (printPreviewUrl) {
+        URL.revokeObjectURL(printPreviewUrl);
+        printPreviewUrl = '';
+      }
+    };
+
+    const openPrintPreview = async (entry) => {
+      if (!printPreviewModal || !printPreviewFrame || !entry?.selected) return;
+
+      printPopupError.hidden = true;
+      printPreviewTitle.textContent = entry.file.name;
+      printPreviewModal.hidden = false;
+      printPreviewModal.setAttribute('aria-hidden', 'false');
+      printPreviewFrame.removeAttribute('src');
+
+      try {
+        const pdfBase64 = await convertPrintFile(entry);
+        const binary = atob(pdfBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+
+        if (printPreviewUrl) URL.revokeObjectURL(printPreviewUrl);
+        printPreviewUrl = URL.createObjectURL(blob);
+        printPreviewFrame.src = printPreviewUrl;
+      } catch (error) {
+        closePrintPreview();
+        printPopupError.textContent = error.message || 'Preview could not be generated.';
+        printPopupError.hidden = false;
+      }
+    };
+
+    printPreviewClose?.addEventListener('click', closePrintPreview);
+    printPreviewBackdrop?.addEventListener('click', closePrintPreview);
+
+    const openPrintPopup = (vendor, option) => {
+      printVendor = vendor;
+      printService = option;
+      printFiles = [];
+
+      printPopupVendor.textContent = vendor.name;
+      printPopupService.textContent = option.name;
+      printPopupPrepSummary.textContent =
+        (Number(option.service_minutes) || 0) + ' min service';
+
+      const status = normalizeVendorStatus(option);
+      printPopupStatus.className = 'print-popup-status print-popup-status-' + status;
+      printPopupStatus.innerHTML =
+        '<i aria-hidden="true"></i><span>' + vendorStatusLabel(option) +
+        '</span><small>' + esc(vendorStatusMessage(option)) + '</small>';
+
+      const offline = status === 'offline';
+      printSelectFiles.disabled = offline;
+      printDropZone.classList.toggle('is-disabled', offline);
+      printPopupError.hidden = true;
+      printPopup.hidden = false;
+      printPopup.setAttribute('aria-hidden', 'false');
+
+      if (printFileInput) printFileInput.value = '';
+      renderPrintFiles();
+    };
+
+    const placePrintOrder = async () => {
+      if (
+        printPopupBusy ||
+        !printVendor ||
+        !printService ||
+        !printFiles.some((entry) => entry.selected) ||
+        printFiles.some((entry) => entry.selected && entry.conversionStatus !== 'ready') ||
+        normalizeVendorStatus(printService) === 'offline'
+      ) {
+        return;
+      }
+
+      printPopupBusy = true;
+      printPopupError.hidden = true;
+      printPopupPlaceOrder.disabled = true;
+      printPopupPlaceOrder.textContent = 'ORDERING…';
+
+      try {
+        const files = [];
+        for (const entry of printFiles.filter((item) => item.selected)) {
+          if (entry.conversionStatus !== 'ready' || !entry.printPdfBase64) {
+            throw new Error('Please wait for all files to finish PDF conversion.');
+          }
+          const pdfBase64 = entry.printPdfBase64;
+          files.push({
+            name: entry.file.name,
+            type: 'application/pdf',
+            original_type: entry.file.type || 'application/octet-stream',
+            original_size: Number(entry.file.size) || 0,
+            size: Number(entry.printPdfSize) || 0,
+            copies: entry.copies,
+            sides: entry.sides,
+            color: entry.color,
+            data_base64: pdfBase64
+          });
+        }
+
+        const totalCopies = files.reduce((sum, file) => sum + file.copies, 0);
 
         const response = await fetch('/__campusmaas/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user_id: userId,
-            vendor_id: vendor.id,
-            vendor_name: vendor.name,
-            option_id: option.id,
-            option_name: option.name,
-            quantity,
-            unit_price: Number(option.price) || 0,
-            total_price: (Number(option.price) || 0) * quantity,
-            service_minutes: Number(option.service_minutes) || 0
+            vendor_id: printVendor.id,
+            vendor_name: printVendor.name,
+            option_id: printService.id,
+            option_name: printService.name,
+            quantity: totalCopies,
+            unit_price: Number(printService.price) || 0,
+            total_price: (Number(printService.price) || 0) * totalCopies,
+            service_minutes: Number(printService.service_minutes) || 0,
+            files
           })
         });
 
         if (!response.ok) {
-          button.disabled = false;
-          button.textContent = 'TRY AGAIN';
-          return;
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.error || 'Print order could not be placed.');
         }
 
         orders = await (
-          await fetch('/maps/campus_orders.json', { cache: 'no-store' })
+          await fetch('/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId), { cache: 'no-store' })
         ).json();
 
-        composer.hidden = true;
+        closePrintPopup();
         renderOrders();
-      };
+      } catch (error) {
+        printPopupBusy = false;
+        printPopupError.textContent = error.message || 'Print order could not be placed.';
+        printPopupError.hidden = false;
+        printPopupPlaceOrder.disabled = false;
+        printPopupPlaceOrder.textContent = 'ORDER PRINT';
+      }
     };
 
     const renderCatalogue = () => {
@@ -1778,8 +2572,10 @@ const start = async () => {
             .sort((a, b) => Number(a.order) - Number(b.order))
             .forEach((service) => {
               const button = document.createElement('button');
+              const serviceStatus = normalizeVendorStatus(service);
+              const serviceOffline = serviceStatus === 'offline';
               button.type = 'button';
-              button.className = 'user-service-option';
+              button.className = 'user-service-option' + (serviceOffline ? ' is-offline' : '') + (serviceStatus === 'busy' ? ' is-busy' : '');
 
               const secondary =
                 Number(service.service_minutes) > 0
@@ -1788,17 +2584,24 @@ const start = async () => {
                   : (Number(service.price) === 0 ? 'Free' : money(service.price));
 
               button.innerHTML =
-                '<span><strong>' + esc(service.name) +
+                '<span class="user-service-main"><strong>' + esc(service.name) +
                 '</strong><small>' + esc(secondary) +
-                '</small></span><b>›</b>';
+                '</small></span><span class="user-service-tail">' + vendorStatusMarkup(service) +
+                '<b>›</b></span>';
 
-              button.onclick = () => {
-                if (vendor.id === 'food') {
-                  openFoodPopup(vendor, service);
-                } else {
-                  openPrinterComposer(vendor, service);
-                }
-              };
+              if (serviceOffline) {
+                button.disabled = true;
+                button.title = vendorStatusMessage(service);
+                button.setAttribute('aria-disabled', 'true');
+              } else {
+                button.onclick = () => {
+                  if (vendor.id === 'food') {
+                    openFoodPopup(vendor, service);
+                  } else {
+                    openPrintPopup(vendor, service);
+                  }
+                };
+              }
 
               wrap.appendChild(button);
             });
@@ -1811,30 +2614,225 @@ const start = async () => {
     foodPopupBackdrop?.addEventListener('click', closeFoodPopup);
     foodPopupPlaceOrder?.addEventListener('click', placeFoodOrder);
 
+    printPopupClose?.addEventListener('click', closePrintPopup);
+    printPopupBackdrop?.addEventListener('click', closePrintPopup);
+    printPopupPlaceOrder?.addEventListener('click', placePrintOrder);
+    printClearFiles?.addEventListener('click', () => {
+      printFiles = [];
+      renderPrintFiles();
+    });
+    printSelectAll?.addEventListener('change', () => {
+      const selected = printSelectAll.checked;
+      printFiles.forEach((entry) => {
+        entry.selected = selected;
+      });
+      renderPrintFiles();
+    });
+    printSelectFiles?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      printFileInput?.click();
+    });
+    printFileInput?.addEventListener('change', () => {
+      addPrintFiles(printFileInput.files);
+      printFileInput.value = '';
+    });
+    printDropZone?.addEventListener('click', (event) => {
+      if (
+        event.target === printSelectFiles ||
+        event.target?.closest?.('#printSelectFiles')
+      ) return;
+      printFileInput?.click();
+    });
+    printDropZone?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        printFileInput?.click();
+      }
+    });
+    ['dragenter', 'dragover'].forEach((type) => {
+      printDropZone?.addEventListener(type, (event) => {
+        event.preventDefault();
+        if (normalizeVendorStatus(printService) !== 'offline') {
+          printDropZone.classList.add('is-dragover');
+        }
+      });
+    });
+    ['dragleave', 'drop'].forEach((type) => {
+      printDropZone?.addEventListener(type, (event) => {
+        event.preventDefault();
+        printDropZone.classList.remove('is-dragover');
+      });
+    });
+    printDropZone?.addEventListener('drop', (event) => {
+      if (normalizeVendorStatus(printService) === 'offline') return;
+      addPrintFiles(event.dataTransfer?.files);
+    });
+
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && foodPopup && !foodPopup.hidden) {
         closeFoodPopup();
       }
+      if (event.key === 'Escape' && printPopup && !printPopup.hidden) {
+        closePrintPopup();
+      }
     });
 
     try {
-      const [vendorResponse, orderResponse] = await Promise.all([
-        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-        fetch('/maps/campus_orders.json', { cache: 'no-store' })
-      ]);
+      const vendorResponse = await fetch('/maps/campus_vendors.json', { cache: 'no-store' });
+      if (!vendorResponse.ok) throw new Error('Services could not be loaded.');
 
-      if (!vendorResponse.ok || !orderResponse.ok) throw new Error('Services unavailable.');
+      const nextCatalogue = await vendorResponse.json();
+      if (nextCatalogue?.version !== 1 || !Array.isArray(nextCatalogue?.vendors)) {
+        throw new Error('Invalid services catalogue.');
+      }
 
-      catalogue = await vendorResponse.json();
-      orders = await orderResponse.json();
-
+      catalogue = nextCatalogue;
       renderCatalogue();
-      renderOrders();
-    } catch {
+    } catch (error) {
+      console.error('Campus services failed to load:', error);
       vendorList.innerHTML = '<div class="user-services-empty">Services are unavailable.</div>';
     }
+
+    try {
+      const orderResponse = await fetch(
+        '/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId),
+        { cache: 'no-store' }
+      );
+
+      if (!orderResponse.ok) throw new Error('Orders could not be loaded.');
+
+      const nextOrders = await orderResponse.json();
+      if (nextOrders?.version !== 1 || !Array.isArray(nextOrders?.orders)) {
+        throw new Error('Invalid orders response.');
+      }
+
+      orders = nextOrders;
+      renderOrders();
+    } catch (error) {
+      console.error('User orders failed to load:', error);
+      orderList.innerHTML = '<div class="user-services-empty">Orders are temporarily unavailable.</div>';
+    }
+
+    startUserOrderSync();
+    startPolicySync();
   };
   loadVendorOrders();
+
+  let userOrderSyncTimer = null;
+  let userOrderSyncBusy = false;
+
+  const refreshUserOrders = async () => {
+    if (userOrderSyncBusy) return;
+    userOrderSyncBusy = true;
+
+    try {
+      let nextCatalogue = null;
+      let nextOrders = null;
+
+      try {
+        const catalogueResponse = await fetch('/maps/campus_vendors.json', { cache: 'no-store' });
+        if (catalogueResponse.ok) {
+          const candidate = await catalogueResponse.json();
+          if (candidate?.version === 1 && Array.isArray(candidate?.vendors)) {
+            nextCatalogue = candidate;
+          }
+        }
+      } catch (error) {
+        console.error('Campus services sync failed:', error);
+      }
+
+      try {
+        const ordersResponse = await fetch(
+          '/__campusmaas/user-orders?user_id=' + encodeURIComponent(userId),
+          { cache: 'no-store' }
+        );
+        if (ordersResponse.ok) {
+          const candidate = await ordersResponse.json();
+          if (candidate?.version === 1 && Array.isArray(candidate?.orders)) {
+            nextOrders = candidate;
+          }
+        }
+      } catch (error) {
+        console.error('User orders sync failed:', error);
+      }
+
+      const catalogueChanged =
+        nextCatalogue && JSON.stringify(nextCatalogue) !== JSON.stringify(catalogue);
+
+      const ordersChanged =
+        nextOrders && JSON.stringify(nextOrders) !== JSON.stringify(orders);
+
+      if (!catalogueChanged && !ordersChanged) return;
+
+      if (catalogueChanged) {
+        catalogue = nextCatalogue;
+        renderCatalogue();
+      }
+
+      if (ordersChanged) {
+        orders = nextOrders;
+        renderOrders();
+      }
+    } finally {
+      userOrderSyncBusy = false;
+    }
+  };
+
+  const startUserOrderSync = () => {
+    if (userOrderSyncTimer) window.clearInterval(userOrderSyncTimer);
+    userOrderSyncTimer = window.setInterval(() => {
+      void refreshUserOrders();
+    }, 3000);
+  };
+
+  let accessPolicySyncBusy = false;
+  let accessPolicySyncTimer = null;
+
+  const refreshAccessPolicy = async () => {
+    if (accessPolicySyncBusy) return;
+    accessPolicySyncBusy = true;
+
+    try {
+      const response = await fetch('/maps/campus_access_rules.json', { cache: 'no-store' });
+      if (!response.ok) return;
+
+      const nextPolicy = await response.json();
+      if (
+        nextPolicy?.version !== 1 ||
+        !Array.isArray(nextPolicy?.policies)
+      ) return;
+
+      if (JSON.stringify(accessPolicy) === JSON.stringify(nextPolicy)) return;
+
+      accessPolicy.policies = nextPolicy.policies;
+      accessPolicy.timezone =
+        nextPolicy.timezone || accessPolicy.timezone || 'Asia/Kolkata';
+
+      if (pointA && pointB) {
+        clearRouteRendering();
+        renderEndpointMarkers();
+        renderUserRoute();
+      }
+    } finally {
+      accessPolicySyncBusy = false;
+    }
+  };
+
+  const startAccessPolicySync = () => {
+    if (accessPolicySyncTimer) window.clearInterval(accessPolicySyncTimer);
+    accessPolicySyncTimer = window.setInterval(() => {
+      void refreshAccessPolicy();
+    }, 5000);
+  };
+
+  startAccessPolicySync();
+
+  window.addEventListener('pagehide', () => {
+    if (accessPolicySyncTimer) {
+      window.clearInterval(accessPolicySyncTimer);
+      accessPolicySyncTimer = null;
+    }
+  }, { once: true });
 
   const resetTripSummary = () => {
     if (userTripFrom) userTripFrom.textContent = 'Point A';
@@ -1851,7 +2849,8 @@ const start = async () => {
       pointA,
       pointB,
       accessPolicy,
-      selectedUserGroup
+      selectedUserGroup,
+      gates.features
     );
 
     if (!summary) {
@@ -1906,21 +2905,21 @@ const start = async () => {
       hour12: false
     }).formatToParts(new Date());
 
-    const read = (type) => parts.find((part) => part.type === type)?.value || '00';
-    return read('hour') + ':' + read('minute');
+    const read = (type) => parts.find((part) => part.type === type)?.value || '00';    return read('hour') + ':' + read('minute');
   };
 
-  const gatePoliciesFor = (gateId) =>
+  const gatePoliciesFor = (gateId, direction = '') =>
     (accessPolicy?.policies || []).filter(
       (policy) =>
         policy?.target?.type === 'gate' &&
         String(policy?.target?.id) === String(gateId) &&
         policyAppliesToGroup(policy, selectedUserGroup) &&
+        policyDirectionAllows(policy, direction) &&
         policy?.enabled !== false
     );
 
-  const evaluateStudentGate = (gate, time = campusClock()) => {
-    const policies = gatePoliciesFor(gate?.id);
+  const evaluateStudentGate = (gate, time = campusClock(), direction = '') => {
+    const policies = gatePoliciesFor(gate?.id, direction);
 
     if (!policies.length) {
       return {
@@ -2044,7 +3043,7 @@ const start = async () => {
     return best;
   };
 
-  const validateUserGateClick = (point) => {
+  const validateUserGateClick = (point, direction = '') => {
     const nearest = nearestGateForPoint(point);
 
     if (!nearest || nearest.distance > USER_GATE_MATCH_RADIUS_M) {
@@ -2054,11 +3053,12 @@ const start = async () => {
       };
     }
 
-    const evaluation = evaluateStudentGate(nearest.gate);
+    const evaluation = evaluateStudentGate(nearest.gate, campusClock(), direction);
 
     if (!evaluation.allowed) {
-      if (userTripFrom) userTripFrom.textContent = 'Gate 09 is closed';
-      if (userTripTo) userTripTo.textContent = 'Students cannot use it now';
+      const gateName = nearest.gate?.properties?.name || 'This gate';
+      if (userTripFrom) userTripFrom.textContent = gateName + ' is closed';
+      if (userTripTo) userTripTo.textContent = 'You cannot use it now';
       if (userTripTime) userTripTime.textContent = 'Unavailable';
       if (userTripDistance) userTripDistance.textContent = 'Try Gate 06';
 
@@ -2078,7 +3078,8 @@ const start = async () => {
 
   const handleUserMapClick = (event) => {
     const clicked = event.latlng;
-    const gateCheck = validateUserGateClick(clicked);
+    const direction = (!pointA || pointB) ? 'in' : 'out';
+    const gateCheck = validateUserGateClick(clicked, direction);
 
     if (!gateCheck.allowed) return;
 
@@ -2312,6 +3313,19 @@ void start().catch((error) => {
 </MainLayout>
 
 <style is:global>
+.print-file-conversion{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-size:6.5px;font-weight:800;letter-spacing:.08em;line-height:1;text-transform:uppercase}
+.print-file-conversion-converting{color:#8a6a12}
+.print-file-conversion-ready{color:#16834b}
+.print-file-conversion-error{color:#c33e49}
+.print-conversion-dot{width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px color-mix(in srgb,currentColor 12%,transparent)}
+.print-conversion-spinner{width:7px;height:7px;border:1px solid currentColor;border-right-color:transparent;border-radius:50%;animation:print-conversion-spin .75s linear infinite}
+@keyframes print-conversion-spin{to{transform:rotate(360deg)}}
+ .print-preview-button{display:grid;place-items:center;min-width:58px;height:25px;padding:0 8px;border:1px solid rgba(22,135,255,.12);border-radius:6px;background:#fff;color:#1687ff;cursor:pointer;font-size:9px;font-weight:700;line-height:1;white-space:nowrap}
+.print-preview-button:hover{background:#edf6fd}
+.print-preview-button.is-processing{cursor:wait;color:#8a6a12;background:#fffaf0;border-color:rgba(138,106,18,.16)}
+.print-preview-button.is-processing::before{content:'';width:8px;height:8px;border:1px solid currentColor;border-right-color:transparent;border-radius:50%;animation:print-preview-spin .75s linear infinite}
+.print-preview-button.is-error{color:#c33e49;border-color:rgba(195,62,73,.16);background:#fff7f7}
+@keyframes print-preview-spin{to{transform:rotate(360deg)}}
 .user-services-stack{
   position:absolute;
   z-index:1050;
@@ -2391,7 +3405,7 @@ void start().catch((error) => {
 }
 .user-vendor-options{
   display:grid;
-  gap:6px;
+  gap:7px;
   margin-top:9px;
 }
 .user-service-option{
@@ -2401,9 +3415,9 @@ void start().catch((error) => {
   justify-content:space-between;
   gap:10px;
   padding:10px;
-  border:1px solid rgba(83,168,255,.09);
+  border:1px solid rgba(83,168,255,.12);
   border-radius:10px;
-  background:rgba(255,255,255,.028);
+  background:rgba(255,255,255,.04);
   color:#dbeaf8;
   text-align:left;
   cursor:pointer;
@@ -2414,19 +3428,20 @@ void start().catch((error) => {
   border-color:rgba(83,168,255,.25);
   background:rgba(31,136,242,.09);
 }
-.user-service-option span strong,
-.user-service-option span small{display:block}
-.user-service-option span strong{
+ .user-service-main strong,
+.user-service-main small{display:block}
+.user-service-main strong{
   color:#edf6ff;
   font-size:10px;
   font-weight:650;
 }
-.user-service-option span small{
+ .user-service-main small{
   margin-top:3px;
   color:#728ba3;
   font-size:8px;
 }
-.user-service-option>b{
+ .user-service-tail{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+.user-service-option .user-service-tail>b{
   display:grid;
   place-items:center;
   width:22px;
@@ -2436,6 +3451,18 @@ void start().catch((error) => {
   color:#67c6ff;
   font-size:15px;
 }
+.user-service-option.is-offline{opacity:.62;cursor:not-allowed}
+.user-service-option.is-offline:hover{transform:none;border-color:rgba(83,168,255,.09);background:rgba(255,255,255,.018)}
+.user-service-option.is-busy{border-color:rgba(245,158,11,.16)}
+.user-vendor-status{display:inline-flex;align-items:center;gap:5px;color:#68d391;font-size:6px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+.user-vendor-status i,.user-order-compose-status i{display:block;width:6px;height:6px;border-radius:50%;background:#35d27b;box-shadow:0 0 7px rgba(53,210,123,.45)}
+.user-vendor-status-busy,.user-order-compose-status-busy{color:#f6b84a}
+.user-vendor-status-busy i,.user-order-compose-status-busy i{background:#f59e0b;box-shadow:0 0 7px rgba(245,158,11,.4)}
+.user-vendor-status-offline,.user-order-compose-status-offline{color:#ff6f78}
+.user-vendor-status-offline i,.user-order-compose-status-offline i{background:#ef4444;box-shadow:0 0 7px rgba(239,68,68,.4)}
+.user-order-compose-status{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:7px;font-weight:800;text-transform:uppercase}
+.user-order-compose-message{margin-top:8px;padding:7px 8px;border:1px solid rgba(83,168,255,.08);border-radius:7px;background:rgba(255,255,255,.025);color:#7890a7;font-size:7px}
+.user-qty-row button:disabled{opacity:.4;cursor:not-allowed}
 .user-order-composer{
   padding:11px;
   border:1px solid rgba(83,168,255,.19);
@@ -2485,6 +3512,10 @@ void start().catch((error) => {
 }
 .user-orders-head>span{color:#748ca5;font-size:8px}
 .user-orders-title{display:none}
+  .user-order-side{display:flex;flex-direction:column;align-items:flex-end;gap:7px}
+  .user-order-confirm{display:block;width:fit-content;min-width:150px;margin:10px auto 0;padding:8px 12px;border:1px solid #16a34a;border-radius:8px;background:#fff;color:#15803d;font-size:7px;font-weight:800;letter-spacing:.04em;cursor:pointer;text-align:center}
+  .user-order-confirm:hover{background:#f0fdf4}
+  .user-order-confirm:disabled{opacity:.55;cursor:wait}
 .user-order-list{display:grid;gap:6px;margin-top:9px}
 .user-order-item{padding:9px 10px;border:1px solid rgba(83,168,255,.08);border-radius:9px;background:rgba(255,255,255,.025)}
 .user-order-item strong,.user-order-item span,.user-order-item small{display:block}

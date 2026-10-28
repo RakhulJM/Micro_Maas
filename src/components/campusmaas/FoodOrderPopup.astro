@@ -10,6 +10,9 @@
         <span class="food-popup-kicker">FOOD ORDER</span>
         <strong id="foodPopupVendor">Food</strong>
         <h2 id="foodPopupService">Select a service</h2>
+        <div id="foodPopupStatus" class="food-popup-status food-popup-status-online">
+          <i aria-hidden="true"></i><span>Online</span><small>Accepting new orders</small>
+        </div>
       </div>
       <button type="button" class="food-order-close" id="foodOrderPopupClose" aria-label="Close food order">×</button>
     </header>
@@ -36,6 +39,47 @@
 </aside>
 
 <style is:global>
+  .food-popup-status{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    margin-top:9px;
+    padding:6px 8px;
+    border:1px solid rgba(53,210,123,.16);
+    border-radius:999px;
+    background:rgba(53,210,123,.06);
+    color:#159447;
+    font-size:7px;
+    font-weight:900;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+  }
+  .food-popup-status i{
+    width:6px;
+    height:6px;
+    border-radius:50%;
+    background:#35b96d;
+    box-shadow:0 0 7px rgba(53,185,109,.38);
+  }
+  .food-popup-status small{
+    color:#6f8497;
+    font-size:7px;
+    font-weight:600;
+    letter-spacing:0;
+    text-transform:none;
+  }
+  .food-popup-status-busy{
+    border-color:rgba(245,158,11,.18);
+    background:rgba(245,158,11,.07);
+    color:#b56a00;
+  }
+  .food-popup-status-busy i{background:#f59e0b;box-shadow:0 0 7px rgba(245,158,11,.38)}
+  .food-popup-status-offline{
+    border-color:rgba(239,68,68,.18);
+    background:rgba(239,68,68,.06);
+    color:#c53d45;
+  }
+  .food-popup-status-offline i{background:#ef4444;box-shadow:0 0 7px rgba(239,68,68,.38)}
   .food-order-popup{
     position:fixed;
     inset:0;

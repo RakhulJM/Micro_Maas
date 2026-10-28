@@ -1,8 +1,9 @@
 ---
-const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
+const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = Astro.props;
 ---
 
 <main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId}>
+  <script type="application/json" id="vendorPortalInitialData" set:html={JSON.stringify(initialData || { catalogue: { version: 1, vendors: [] }, orders: { version: 1, orders: [] }, pageCards: { version: 1, root: {}, categories: {} } })}></script>
   <div class="vendor-portal-glow vendor-portal-glow-a" aria-hidden="true"></div>
   <div class="vendor-portal-glow vendor-portal-glow-b" aria-hidden="true"></div>
 
@@ -15,9 +16,23 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         <strong id="portalHeaderTitle">Vendors</strong>
       </div>
     </div>
-    <div class="vendor-header-status">
-      <span class="vendor-live-dot"></span>
-      <span>Live workspace</span>
+    <div class="vendor-header-actions">
+      <button class="vendor-print-queue-button" id="vendorPrintQueueButton" type="button" hidden aria-label="Open Order's" title="Order's">
+        <span class="vendor-print-queue-icon" aria-hidden="true">🖨</span>
+        <span>Order's</span>
+      </button>
+      <div class="vendor-header-service-control" id="vendorHeaderServiceControl" hidden>
+        <div class="vendor-header-status-toggle" id="vendorHeaderStatusToggle" role="group" aria-label="Service status">
+          <button type="button" class="vendor-header-status-choice status-online" data-status="online">Online</button>
+          <button type="button" class="vendor-header-status-choice status-busy" data-status="busy">Busy</button>
+          <button type="button" class="vendor-header-status-choice status-offline" data-status="offline">Offline</button>
+        </div>
+        <span class="vendor-header-status-message" id="vendorHeaderStatusMessage">Accepting new orders</span>
+      </div>
+      <div class="vendor-header-status">
+        <span class="vendor-live-dot"></span>
+        <span>Live workspace</span>
+      </div>
     </div>
   </header>
 
@@ -26,6 +41,27 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     <h1 id="portalTitle">Vendors</h1>
     <p id="portalSubtitle">Campus service dashboards</p>
   </section>
+
+  <aside class="vendor-print-queue" id="vendorPrintQueue" hidden aria-hidden="true">
+    <div class="vendor-print-queue-backdrop" id="vendorPrintQueueBackdrop"></div>
+    <section class="vendor-print-queue-dialog" role="dialog" aria-modal="true" aria-labelledby="vendorPrintQueueTitle">
+      <header class="vendor-print-queue-header">
+        <div>
+          <span class="vendor-print-queue-kicker">ORDERS</span>
+          <strong id="vendorPrintQueueTitle">Print orders</strong>
+          <small id="vendorPrintQueueSummary">0 active orders</small>
+        </div>
+        <div class="vendor-print-queue-header-actions">
+          <button type="button" class="vendor-print-queue-all" id="vendorPrintQueueAll" disabled>Print all</button>
+          <button type="button" class="vendor-print-queue-close" id="vendorPrintQueueClose" aria-label="Close print queue">×</button>
+        </div>
+      </header>
+      <div class="vendor-print-queue-list" id="vendorPrintQueueList"></div>
+      <footer class="vendor-print-queue-footer">
+        <span id="vendorPrintQueueFooterText">Orders are grouped by customer.</span>
+      </footer>
+    </section>
+  </aside>
 
   <section class="vendor-content" aria-live="polite">
     <div id="portalContent" class="vendor-content-grid">
@@ -39,6 +75,8 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 </main>
 
 <script>
+  let vendorLiveSyncTimer = null;
+
   const initVendorPortal = () => {
     const root = document.querySelector('.vendor-portal');
     const content = document.getElementById('portalContent');
@@ -47,6 +85,18 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     const subtitle = document.getElementById('portalSubtitle');
     const kicker = document.getElementById('portalKicker');
     const back = document.getElementById('vendorBack');
+    const headerServiceControl = document.getElementById('vendorHeaderServiceControl');
+    const headerStatusToggle = document.getElementById('vendorHeaderStatusToggle');
+    const headerStatusMessage = document.getElementById('vendorHeaderStatusMessage');
+    const headerStatusChoices = Array.from(document.querySelectorAll('.vendor-header-status-choice'));
+    const printQueueButton = document.getElementById('vendorPrintQueueButton');
+    const printQueue = document.getElementById('vendorPrintQueue');
+    const printQueueBackdrop = document.getElementById('vendorPrintQueueBackdrop');
+    const printQueueClose = document.getElementById('vendorPrintQueueClose');
+    const printQueueList = document.getElementById('vendorPrintQueueList');
+    const printQueueSummary = document.getElementById('vendorPrintQueueSummary');
+    const printQueueAll = document.getElementById('vendorPrintQueueAll');
+    const printQueueFooterText = document.getElementById('vendorPrintQueueFooterText');
 
     if (!root || !content) return;
 
@@ -56,8 +106,13 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
     const state = {
       catalogue: { version: 1, vendors: [] },
-      orders: { version: 1, orders: [] }
+      orders: { version: 1, orders: [] },
+      orderSummary: [],
+      pageCards: { version: 1, root: {}, categories: {} }
     };
+    let ordersVendorId = '';
+    let ordersVendorName = '';
+    let ordersOptionId = '';
 
     const create = (tag, className, text) => {
       const node = document.createElement(tag);
@@ -79,10 +134,18 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         ? item.options.find((child) => String(child.id) === String(id))
         : null;
 
-    const route = (parentId, childId) =>
-      childId
-        ? '/vendor/' + encodeURIComponent(parentId) + '/' + encodeURIComponent(childId)
-        : '/vendor/' + encodeURIComponent(parentId);
+    const routeParent = (parentId) =>
+      String(parentId) === 'printer' ? 'print' : String(parentId);
+
+    const route = (parentId, childId) => {
+      const parent = routeParent(parentId);
+      const child = String(parentId) === 'printer'
+        ? String(childId || '').replace(/^printer-/, '')
+        : String(childId || '');
+      return child
+        ? '/vendor/' + encodeURIComponent(parent) + '/' + encodeURIComponent(child)
+        : '/vendor/' + encodeURIComponent(parent);
+    };
 
     const iconLetter = (id) =>
       String(id).toLowerCase() === 'food' ? 'F' :
@@ -111,17 +174,407 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const loadData = async () => {
-      const responses = await Promise.all([
-        fetch('/maps/campus_vendors.json', { cache: 'no-store' }),
-        fetch('/maps/campus_orders.json', { cache: 'no-store' })
-      ]);
+      let catalogue = null;
+      let orders = { version: 1, orders: [] };
+      let orderSummary = [];
+      let pageCards = null;
 
-      if (!responses[0].ok || !responses[1].ok) {
+      try {
+        const embedded = JSON.parse(
+          document.getElementById('vendorPortalInitialData')?.textContent || '{}'
+        );
+        catalogue = embedded?.catalogue;
+        orders = embedded?.orders || orders;
+        pageCards = embedded?.pageCards;
+      } catch {
+        // Embedded catalogue/card data will be validated below.
+      }
+
+      const validCatalogue = (value) =>
+        value?.version === 1 && Array.isArray(value?.vendors);
+
+      if (!validCatalogue(catalogue)) {
         throw new Error('Vendor data could not be loaded.');
       }
 
-      state.catalogue = await responses[0].json();
-      state.orders = await responses[1].json();
+      const query = new URLSearchParams();
+
+      if (pageKind !== 'root' && vendorId) {
+        query.set('vendor_id', String(vendorId));
+      }
+
+      if (pageKind === 'detail' && optionId) {
+        query.set('option_id', String(optionId));
+      }
+
+      const endpoint = '/__campusmaas/vendor-data' +
+        (query.toString() ? '?' + query.toString() : '');
+
+      const response = await fetch(endpoint, { cache: 'no-store' });
+
+      if (!response.ok) {
+        throw new Error('Vendor data could not be loaded.');
+      }
+
+      const payload = await response.json();
+
+      if (!validCatalogue(payload?.catalogue)) {
+        throw new Error('Invalid CampusMaaS vendor data.');
+      }
+
+      catalogue = payload.catalogue;
+      orders = payload?.orders?.version === 1 &&
+        Array.isArray(payload?.orders?.orders)
+        ? payload.orders
+        : { version: 1, orders: [] };
+
+      orderSummary = Array.isArray(payload?.order_summary)
+        ? payload.order_summary
+        : [];
+
+      state.catalogue = catalogue;
+      state.orders = orders;
+      state.orderSummary = orderSummary;
+      state.pageCards = pageCards?.version === 1
+        ? pageCards
+        : { version: 1, root: {}, categories: {} };
+    };
+
+    const vendorOrders = (id, optionId = '', requireFiles = false) =>
+      state.orders.orders.filter((order) => {
+        if (String(order.vendor_id) !== String(id)) return false;
+        if (optionId && String(order.option_id) !== String(optionId)) return false;
+        const status = String(order.status || '').toLowerCase();
+        if (!['placed', 'accepted', 'preparing'].includes(status)) return false;
+        return !requireFiles || (Array.isArray(order.files) && order.files.length);
+      });
+
+    const scopedOrders = (id, requireFiles = false) =>
+      vendorOrders(id, ordersOptionId, requireFiles);
+
+    const orderButtonLevels = ['order-level-idle', 'order-level-green', 'order-level-blue', 'order-level-yellow', 'order-level-orange', 'order-level-red', 'order-level-critical'];
+
+    const updateOrdersButton = () => {
+      if (!ordersVendorId) {
+        printQueueButton.hidden = true;
+        return;
+      }
+
+      const count = scopedOrders(ordersVendorId).length;
+      const level =
+        count <= 0 ? 'order-level-idle' :
+        count === 1 ? 'order-level-green' :
+        count === 2 ? 'order-level-blue' :
+        count === 3 ? 'order-level-yellow' :
+        count === 4 ? 'order-level-orange' :
+        count === 5 ? 'order-level-red' :
+        'order-level-critical';
+
+      printQueueButton.classList.remove(...orderButtonLevels);
+      printQueueButton.classList.add(level);
+      printQueueButton.dataset.orderCount = String(count);
+
+      const label = count === 1 ? '1 active order' : count + ' active orders';
+      printQueueButton.setAttribute('aria-label', "Open Order's · " + label);
+      printQueueButton.setAttribute('title', "Order's · " + label);
+    };
+
+    const printableOrders = () => scopedOrders('printer', true);
+
+    const printGroupKey = (file) =>
+      String(file?.color || 'bw').toLowerCase() + '-' +
+      String(file?.sides || 'single').toLowerCase();
+
+    const printGroupLabel = (key) => {
+      const [color, sides] = String(key).split('-');
+      const colourLabel = color === 'color' ? 'Colour' : 'Black & White';
+      const sidesLabel = sides === 'double' ? 'Both sides' : 'One side';
+      return colourLabel + ' · ' + sidesLabel;
+    };
+
+    const printPdfInBrowser = async (url) => {
+      const response = await fetch(url, { cache: 'no-store' });
+      if (!response.ok) throw new Error('Print-ready PDF is unavailable.');
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      const frame = document.createElement('iframe');
+      frame.style.position = 'fixed';
+      frame.style.left = '0';
+      frame.style.bottom = '0';
+      frame.style.width = '1px';
+      frame.style.height = '1px';
+      frame.style.border = '0';
+      frame.style.opacity = '0';
+      frame.setAttribute('aria-hidden', 'true');
+      let printed = false;
+      frame.onload = () => {
+        if (printed) return;
+
+        try {
+          // The PDF viewer can expose a restricted location object. Do not
+          // inspect contentWindow.location here; the iframe source is already
+          // explicitly set to the print-ready PDF before insertion.
+          printed = true;
+          frame.contentWindow?.focus();
+          frame.contentWindow?.print();
+        } catch (error) {
+          printed = false;
+          console.error('Print failed:', error);
+        }
+
+        if (printed) {
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+            frame.remove();
+          }, 15000);
+        }
+      };
+
+      // Set the PDF before inserting the iframe so the iframe navigates
+      // directly to the print-ready document.
+      frame.src = blobUrl;
+      document.body.appendChild(frame);
+    };
+
+    const openPrintFile = (order, file, index) => {
+      void printPdfInBrowser(
+        '/__campusmaas/print-file?order_id=' +
+        encodeURIComponent(order.id) +
+        '&file_index=' +
+        encodeURIComponent(String(index))
+      ).catch((error) => console.error('Print failed:', error));
+    };
+
+    const openPrintBatch = (order, entries, label) => {
+      const indexes = entries.map((entry) => String(entry.index)).join(',');
+      void printPdfInBrowser(
+        '/__campusmaas/print-batch?order_id=' +
+        encodeURIComponent(order.id) +
+        '&indexes=' +
+        encodeURIComponent(indexes) +
+        '&label=' +
+        encodeURIComponent(label)
+      ).catch((error) => console.error('Print failed:', error));
+    };
+
+    const renderVendorOrderList = () => {
+      const isPrinter = String(ordersVendorId) === 'printer';
+      if (isPrinter) {
+        renderPrintQueue();
+        return;
+      }
+
+      const orders = scopedOrders(ordersVendorId);
+      printQueueList.innerHTML = '';
+      printQueueSummary.textContent =
+        orders.length + (orders.length === 1 ? ' active order' : ' active orders');
+
+      printQueueAll.hidden = true;
+
+      if (!orders.length) {
+        printQueueList.appendChild(
+          create('div', 'vendor-empty-card', 'No active orders for ' + (ordersVendorName || 'this vendor') + '.')
+        );
+        printQueueFooterText.textContent = 'New orders for this vendor will appear here automatically.';
+        return;
+      }
+
+      const grouped = new Map();
+      orders.forEach((order) => {
+        const key = String(order.option_name || 'Service');
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(order);
+      });
+
+      let totalQuantity = 0;
+
+      grouped.forEach((serviceOrders, serviceName) => {
+        const serviceSection = create('section', 'vendor-print-order-section');
+        const serviceHeader = create('header', 'vendor-print-order-header');
+        const heading = create('div');
+
+        append(
+          heading,
+          create('span', 'vendor-print-order-kicker', ordersVendorName.toUpperCase()),
+          create('strong', '', serviceName),
+          create('small', '', serviceOrders.length + (serviceOrders.length === 1 ? ' active order' : ' active orders'))
+        );
+
+        append(serviceHeader, heading);
+        serviceSection.appendChild(serviceHeader);
+
+        const list = create('div', 'vendor-orders-grid');
+        serviceOrders.forEach((order) => {
+          totalQuantity += Number(order.quantity) || 1;
+          const service = option(vendor(ordersVendorId), order.option_id);
+          const status = String(service?.status || 'online').toLowerCase();
+          list.appendChild(
+            String(ordersVendorId) === 'food'
+              ? makeFoodOrderCard(order, status)
+              : makeOrderCard(order, status)
+          );
+        });
+
+        serviceSection.appendChild(list);
+        printQueueList.appendChild(serviceSection);
+      });
+
+      printQueueFooterText.textContent =
+        orders.length + (orders.length === 1 ? ' order · ' : ' orders · ') +
+        totalQuantity + (totalQuantity === 1 ? ' item' : ' items') +
+        ' waiting.';
+    };
+
+    const renderPrintQueue = () => {
+      const orders = printableOrders();
+      printQueueAll.hidden = false;
+
+      printQueueList.innerHTML = '';
+      printQueueSummary.textContent =
+        orders.length + (orders.length === 1 ? ' active order' : ' active orders');
+
+      const enabled = orders.length > 0;
+      printQueueAll.disabled = !enabled;
+
+      if (!orders.length) {
+        printQueueList.appendChild(
+          create('div', 'vendor-empty-card', 'No active print orders for this service.')
+        );
+        printQueueFooterText.textContent = 'New print orders for this service will appear here automatically.';
+        return;
+      }
+
+      let totalFiles = 0;
+      let totalCopies = 0;
+
+      orders.forEach((order) => {
+        const files = Array.isArray(order.files) ? order.files : [];
+        totalFiles += files.length;
+        totalCopies += files.reduce((sum, file) => sum + (Number(file.copies) || 1), 0);
+
+        const orderCard = create('section', 'vendor-print-order-section');
+        const orderHeader = create('header', 'vendor-print-order-header');
+
+        const orderHeading = create('div');
+        append(
+          orderHeading,
+          create('span', 'vendor-print-order-kicker', '#' + order.id),
+          create('strong', '', String(order.option_name || 'Print service')),
+          create('small', '', String(order.status || 'placed').replace(/^./, (char) => char.toUpperCase()) + ' · ' +
+            new Date(order.created_at).toLocaleString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
+              day: '2-digit',
+              month: 'short'
+            }))
+        );
+
+        const orderPrint = create('button', 'vendor-print-order-all', 'PRINT THIS ORDER');
+        orderPrint.type = 'button';
+
+        const orderEntries = files.map((file, index) => ({ file, index }));
+        orderPrint.addEventListener('click', () => {
+          openPrintBatch(order, orderEntries, 'Order #' + order.id);
+        });
+
+        const orderCancel = create('button', 'vendor-print-order-cancel', 'CANCEL ORDER');
+        orderCancel.type = 'button';
+        orderCancel.addEventListener('click', () => cancelWholeOrder(order, orderCancel));
+        append(orderHeader, orderHeading, orderPrint, orderCancel);
+        orderCard.appendChild(orderHeader);
+
+        const groups = new Map();
+        orderEntries.forEach((entry) => {
+          const key = printGroupKey(entry.file);
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(entry);
+        });
+
+        const showGroupHeadings = groups.size > 1;
+
+        groups.forEach((entries, key) => {
+          if (showGroupHeadings) {
+            const groupHeader = create('div', 'vendor-print-group-header');
+            append(
+              groupHeader,
+              create('strong', '', printGroupLabel(key))
+            );
+            const groupPrint = create('button', 'vendor-print-group-all', 'PRINT ALL');
+            groupPrint.type = 'button';
+            groupPrint.addEventListener('click', () => {
+              openPrintBatch(order, entries, printGroupLabel(key));
+            });
+            groupHeader.appendChild(groupPrint);
+            orderCard.appendChild(groupHeader);
+          } else {
+            const groupTools = create('div', 'vendor-print-group-tools');
+            const groupPrint = create('button', 'vendor-print-group-all', 'PRINT ALL');
+            groupPrint.type = 'button';
+            groupPrint.addEventListener('click', () => {
+              openPrintBatch(order, entries, printGroupLabel(key));
+            });
+            groupTools.appendChild(groupPrint);
+            orderCard.appendChild(groupTools);
+          }
+
+          entries.forEach(({ file, index }) => {
+            const fileCard = create('article', 'vendor-print-file-card');
+
+            const fileMain = create('div', 'vendor-print-file-main');
+            append(
+              fileMain,
+              create('strong', '', file.name || ('File ' + (index + 1))),
+              create('span', '', (file.type || 'Unknown file') + ' · ' +
+                (Number(file.copies) || 1) + ((Number(file.copies) || 1) === 1 ? ' copy' : ' copies'))
+            );
+
+            const fileSettings = create('div', 'vendor-print-file-settings');
+            append(
+              fileSettings,
+              create('span', '', file.color === 'color' ? 'COLOUR' : 'B&W'),
+              create('span', '', file.sides === 'double' ? 'BOTH SIDES' : 'ONE SIDE')
+            );
+
+            const filePrint = create('button', 'vendor-print-file-button', 'PRINT');
+            filePrint.type = 'button';
+            filePrint.addEventListener('click', () => openPrintFile(order, file, index));
+
+            const fileCancel = create('button', 'vendor-print-file-cancel', file.cancelled ? 'CANCELLED' : 'CANCEL');
+            fileCancel.type = 'button';
+            fileCancel.disabled = Boolean(file.cancelled) || !['placed','accepted','preparing'].includes(String(order.status || '').toLowerCase());
+            if (!fileCancel.disabled) fileCancel.addEventListener('click', () => cancelOrderItem(order, index, fileCancel));
+
+            append(fileCard, fileMain, fileSettings, filePrint, fileCancel);
+            orderCard.appendChild(fileCard);
+          });
+        });
+
+        printQueueList.appendChild(orderCard);
+      });
+
+      printQueueFooterText.textContent =
+        totalFiles + (totalFiles === 1 ? ' file · ' : ' files · ') +
+        totalCopies + (totalCopies === 1 ? ' copy' : ' copies') +
+        ' waiting to print.';
+    };
+
+    const openPrintQueue = () => {
+      const scopeName = ordersOptionId
+        ? String(option(vendor(ordersVendorId), ordersOptionId)?.name || ordersVendorName)
+        : ordersVendorName;
+      printQueue.querySelector('.vendor-print-queue-kicker').textContent = scopeName.toUpperCase() + ' ORDERS';
+      document.getElementById('vendorPrintQueueTitle').textContent = scopeName + ' orders';
+      renderVendorOrderList();
+      printQueue.hidden = false;
+      printQueue.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('vendor-print-queue-open');
+    };
+
+    const closePrintQueue = () => {
+      printQueue.hidden = true;
+      printQueue.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('vendor-print-queue-open');
     };
 
     const renderRoot = () => {
@@ -135,6 +588,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       subtitle.textContent = 'Choose a service workspace';
       back.href = '/';
       back.setAttribute('aria-label', 'Back to map');
+      headerServiceControl.hidden = true;
+      printQueueButton.hidden = true;
+      ordersVendorId = '';
+      ordersVendorName = '';
+      ordersOptionId = '';
+      closePrintQueue();
 
       content.className = 'vendor-content-grid vendor-root-grid';
       content.innerHTML = '';
@@ -143,29 +602,28 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         const card = create('a', 'vendor-large-card');
         card.href = route(item.id);
 
+        const cardData = state.pageCards.root[String(item.id)] || {};
         const top = create('div', 'vendor-large-card-top');
         append(
           top,
-          create('span', 'vendor-card-number', String(item.order || 1).padStart(2, '0')),
+          create('span', 'vendor-card-number', String(cardData.number || item.order || 1).padStart(2, '0')),
           create('span', 'vendor-open-icon', '↗')
         );
 
-        const largeIcon = create('div', 'vendor-large-icon', iconLetter(item.id));
+        const largeIcon = create('div', 'vendor-large-icon', cardData.icon || iconLetter(item.id));
 
         const visibleOptions = (item.options || [])
           .filter((child) => child.enabled !== false);
 
-        const activeOrders = state.orders.orders.filter(
-          (order) =>
-            String(order.vendor_id) === String(item.id) &&
-            !['completed', 'cancelled'].includes(order.status)
-        ).length;
+        const activeOrders = state.orderSummary
+          .filter((entry) => String(entry.vendor_id) === String(item.id))
+          .reduce((sum, entry) => sum + (Number(entry.active) || 0), 0);
 
         append(
           card,
           top,
           largeIcon,
-          create('div', 'vendor-large-title', item.name),
+          create('div', 'vendor-large-title', cardData.title || item.name),
           create('p', '', visibleOptions.length + (visibleOptions.length === 1 ? ' service available' : ' services available'))
         );
 
@@ -173,7 +631,7 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         append(
           footer,
           create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
-          create('span', '', 'Open dashboard →')
+          create('span', '', cardData.action || 'Open dashboard →')
         );
         append(card, footer);
         content.appendChild(card);
@@ -185,20 +643,27 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     };
 
     const renderCategory = (item) => {
+      const pageData = state.pageCards.categories[String(item.id)] || {};
       const options = (item.options || [])
         .filter((child) => child.enabled !== false)
         .sort((a, b) => Number(a.order) - Number(b.order));
 
       kicker.textContent = 'VENDOR';
-      title.textContent = item.name;
-      headerTitle.textContent = item.name;
-      subtitle.textContent = 'Service list and dedicated dashboards';
+      title.textContent = pageData.title || item.name;
+      headerTitle.textContent = pageData.title || item.name;
+      subtitle.textContent = pageData.subtitle || 'Service list and dedicated dashboards';
       back.href = '/vendor';
+      headerServiceControl.hidden = true;
+      ordersVendorId = '';
+      ordersVendorName = '';
+      ordersOptionId = '';
+      printQueueButton.hidden = true;
 
       content.className = 'vendor-content-grid vendor-category-grid';
       content.innerHTML = '';
 
       options.forEach((child) => {
+        const serviceData = pageData.services?.[String(child.id)] || {};
         const card = create('a', 'vendor-service-card');
         card.href = route(item.id, child.id);
 
@@ -213,18 +678,27 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
           (order) =>
             String(order.vendor_id) === String(item.id) &&
             String(order.option_id) === String(child.id) &&
-            !['completed', 'cancelled'].includes(order.status)
+            ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
         ).length;
 
         append(
           card,
           top,
-          create('div', 'vendor-service-number', String(child.order || 1).padStart(2, '0')),
-          create('h2', '', child.name),
-          create('p', '', 'Dedicated vendor dashboard')
+          create('div', 'vendor-service-number', String(serviceData.number || child.order || 1).padStart(2, '0')),
+          create('h2', '', serviceData.title || child.name),
+          create('p', '', serviceData.description || 'Dedicated vendor dashboard')
         );
 
+        const serviceStatus = String(child.status || 'online').toLowerCase();
+        const statusLabel = serviceStatus === 'offline' ? 'OFFLINE' : serviceStatus === 'busy' ? 'BUSY' : 'ONLINE';
+        const statusText = child.status_message || (
+          serviceStatus === 'offline' ? 'Currently unavailable' :
+          serviceStatus === 'busy' ? 'Currently serving customers' : 'Accepting new orders'
+        );
+        const statusBadge = create('div', 'vendor-service-status status-' + serviceStatus);
+        append(statusBadge, create('span', 'vendor-service-status-dot'), create('strong', statusLabel), create('small', '', statusText));
         const info = create('div', 'vendor-service-info');
+        card.appendChild(statusBadge);
         append(
           info,
           create('span', '', (Number(child.service_minutes) || 0) + ' min service'),
@@ -232,11 +706,11 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
         );
         append(card, info);
 
-        const footer = create('div', 'vendor-service-footer');
+        const footer = create('div', 'vendor-large-footer');
         append(
           footer,
           create('span', '', activeOrders + (activeOrders === 1 ? ' active order' : ' active orders')),
-          create('span', '', 'Open →')
+          create('span', '', 'Open dashboard →')
         );
         append(card, footer);
         content.appendChild(card);
@@ -247,7 +721,63 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       }
     };
 
-    const makeOrderCard = (order) => {
+    const cancelWholeOrder = async (order, button) => {
+      button.disabled = true;
+      button.textContent = 'Cancelling…';
+      try {
+        const response = await fetch('/__campusmaas/update-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: order.id,
+            status: 'cancelled',
+            actor: 'vendor',
+            vendor_id: ordersVendorId,
+            option_id: ordersOptionId
+          })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Order cancellation failed.');
+        order.status = 'cancelled';
+        renderVendorOrderList();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Cancel Order';
+        button.title = error?.message || 'Order cancellation failed.';
+      }
+    };
+
+    const cancelOrderItem = async (order, itemIndex, button) => {
+      button.disabled = true;
+      button.textContent = 'Cancelling…';
+      try {
+        const response = await fetch('/__campusmaas/cancel-order-item', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: order.id,
+            item_index: itemIndex,
+            actor: 'vendor',
+            vendor_id: ordersVendorId,
+            option_id: ordersOptionId
+          })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Item cancellation failed.');
+        order.status = payload.order?.status || order.status;
+        if (payload.order?.items) order.items = payload.order.items;
+        if (payload.order?.files) order.files = payload.order.files;
+        order.quantity = payload.order?.quantity ?? order.quantity;
+        order.total_price = payload.order?.total_price ?? order.total_price;
+        renderVendorOrderList();
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Cancel';
+        button.title = error?.message || 'Item cancellation failed.';
+      }
+    };
+
+    const makeOrderCard = (order, currentServiceStatus = 'online') => {
       const card = create('article', 'vendor-order-card');
       const main = create('div', 'vendor-order-card-main');
 
@@ -275,17 +805,19 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       );
 
       append(main, top, service, meta);
-      append(card, main);
+      const cancelOrder = create('button', 'vendor-order-cancel', 'Cancel Order');
+      cancelOrder.type = 'button';
+      cancelOrder.addEventListener('click', () => cancelWholeOrder(order, cancelOrder));
+      append(card, main, cancelOrder);
 
       const actions = {
-        placed: ['Accept', 'accepted'],
-        accepted: ['Start preparing', 'preparing'],
-        preparing: ['Mark ready', 'ready'],
-        ready: ['Complete', 'completed']
+        placed: ['Accept', 'preparing'],
+        accepted: ['Mark ready', 'ready'],
+        preparing: ['Mark ready', 'ready']
       };
 
       const next = actions[order.status];
-      if (next) {
+      if (next && currentServiceStatus !== 'offline') {
         const action = create('button', 'vendor-order-action', next[0]);
         action.type = 'button';
         action.dataset.orderId = order.id;
@@ -298,7 +830,13 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
             const response = await fetch('/__campusmaas/update-order', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: order.id, status: next[1] })
+              body: JSON.stringify({
+              id: order.id,
+              status: next[1],
+              actor: 'vendor',
+              vendor_id: ordersVendorId,
+              option_id: ordersOptionId
+            })
             });
 
             if (!response.ok) throw new Error('Order update failed.');
@@ -316,6 +854,106 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       return card;
     };
 
+    const makeFoodOrderCard = (order, currentServiceStatus = 'online') => {
+      const card = create('article', 'vendor-order-card vendor-food-order-card');
+
+      const top = create('div', 'vendor-order-top');
+      const id = create('strong', '', '#' + order.id);
+      const chip = create('span', orderStatusClass(order.status), orderStatusLabel(order.status));
+      const dot = create('i');
+      chip.prepend(dot);
+      append(top, id, chip);
+
+      const items = create('div', 'vendor-food-order-items');
+      const foodItems = Array.isArray(order.items) ? order.items : [];
+
+      foodItems.forEach((item, itemIndex) => {
+        const row = create('div', 'vendor-food-order-item');
+        const itemInfo = create('div', 'vendor-food-order-item-info');
+        append(
+          itemInfo,
+          create('span', 'vendor-food-order-item-name', item.menu_item_name || item.name || 'Food item'),
+          create('span', 'vendor-food-order-item-count', '× ' + (Number(item.quantity) || 1))
+        );
+        const itemCancel = create('button', 'vendor-order-item-cancel', item.cancelled ? 'Cancelled' : 'Cancel');
+        itemCancel.type = 'button';
+        itemCancel.disabled = Boolean(item.cancelled) || !['placed','accepted','preparing'].includes(String(order.status || '').toLowerCase());
+        if (!itemCancel.disabled) itemCancel.addEventListener('click', () => cancelOrderItem(order, itemIndex, itemCancel));
+        append(row, itemInfo, itemCancel);
+        items.appendChild(row);
+      });
+
+      if (!foodItems.length) {
+        items.appendChild(
+          create('div', 'vendor-food-order-empty', 'No food items listed.')
+        );
+      }
+
+      const cancelOrder = create('button', 'vendor-order-cancel', 'Cancel Order');
+      cancelOrder.type = 'button';
+      cancelOrder.addEventListener('click', () => cancelWholeOrder(order, cancelOrder));
+      append(card, top, items, cancelOrder);
+
+      const actions = {
+        placed: ['Accept', 'preparing'],
+        accepted: ['Mark ready', 'ready'],
+        preparing: ['Mark ready', 'ready']
+      };
+
+      const next = actions[order.status];
+      if (next && currentServiceStatus !== 'offline') {
+        const action = create('button', 'vendor-order-action', next[0]);
+        action.type = 'button';
+        action.dataset.orderId = order.id;
+        action.dataset.nextStatus = next[1];
+        action.addEventListener('click', async () => {
+          action.disabled = true;
+          action.textContent = 'Saving…';
+
+          try {
+            const response = await fetch('/__campusmaas/update-order', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: order.id,
+                status: next[1],
+                actor: 'vendor',
+                vendor_id: ordersVendorId,
+                option_id: ordersOptionId
+              })
+            });
+
+            if (!response.ok) throw new Error('Order update failed.');
+
+            order.status = next[1];
+            render();
+          } catch {
+            action.disabled = false;
+            action.textContent = next[0];
+          }
+        });
+        append(card, action);
+      }
+
+      return card;
+    };
+
+    const saveServiceStatus = async (item, child, value) => {
+      const nextCatalogue = structuredClone(state.catalogue);
+      const targetVendor = nextCatalogue.vendors.find((v) => String(v.id) === String(item.id));
+      const target = targetVendor?.options?.find((o) => String(o.id) === String(child.id));
+      if (!target) throw new Error('Service not found.');
+      target.status = value;
+      target.status_message = value === 'offline' ? 'Currently unavailable' : value === 'busy' ? 'Currently serving customers' : 'Accepting new orders';
+      const response = await fetch('/__campusmaas/save-vendors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextCatalogue)
+      });
+      if (!response.ok) throw new Error('Status update failed.');
+      state.catalogue = nextCatalogue;
+    };
+
     const renderDetail = (item, child) => {
       const allOrders = state.orders.orders.filter(
         (order) =>
@@ -323,22 +961,44 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
           String(order.option_id) === String(child.id)
       );
 
-      const active = allOrders.filter(
-        (order) => !['completed', 'cancelled'].includes(order.status)
+      const active = allOrders.filter((order) =>
+        ['placed', 'accepted', 'preparing'].includes(String(order.status || '').toLowerCase())
+      );
+
+      const readyOrders = allOrders.filter(
+        (order) => String(order.status || '').toLowerCase() === 'ready'
       );
 
       const stats = {
         active: active.length,
         placed: active.filter((order) => order.status === 'placed').length,
         preparing: active.filter((order) => ['accepted', 'preparing'].includes(order.status)).length,
-        ready: active.filter((order) => order.status === 'ready').length
+        ready: readyOrders.length
       };
+      const serviceStatus = String(child.status || 'online').toLowerCase();
+      const serviceStatusMessage = child.status_message || (
+        serviceStatus === 'offline' ? 'Currently unavailable' :
+        serviceStatus === 'busy' ? 'Currently serving customers' : 'Accepting new orders'
+      );
 
       kicker.textContent = String(item.name).toUpperCase();
       title.textContent = child.name;
       headerTitle.textContent = child.name;
       subtitle.textContent = 'Vendor dashboard';
-      back.href = '/vendor/' + encodeURIComponent(item.id);
+      back.href = route(item.id);
+      ordersVendorId = String(item.id);
+      ordersVendorName = String(item.name || 'Vendor');
+      ordersOptionId = String(child.id);
+      printQueueButton.hidden = false;
+      updateOrdersButton();
+      closePrintQueue();
+
+      headerServiceControl.hidden = false;
+      headerStatusMessage.textContent = serviceStatusMessage;
+      headerStatusChoices.forEach((button) => {
+        button.classList.toggle('is-active', String(button.dataset.status) === serviceStatus);
+        button.disabled = false;
+      });
 
       content.className = 'vendor-content-grid vendor-dashboard-grid';
       content.innerHTML = '';
@@ -386,12 +1046,47 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       );
 
       const ordersGrid = create('div', 'vendor-orders-grid');
-      active.forEach((order) => ordersGrid.appendChild(makeOrderCard(order)));
+      active.forEach((order) => ordersGrid.appendChild(makeOrderCard(order, serviceStatus)));
       if (!active.length) {
         ordersGrid.appendChild(create('div', 'vendor-empty-card', 'No active orders for this service.'));
       }
       live.appendChild(ordersGrid);
       content.appendChild(live);
+
+      const rightColumn = create('div', 'vendor-dashboard-side-column');
+
+      const waiting = create('section', 'vendor-history-card vendor-waiting-card');
+            append(
+        waiting,
+        makeHeader('WAITING', 'Waiting for confirmation', String(readyOrders.length))
+      );
+
+      const waitingList = create('div', 'vendor-history-list');
+      readyOrders.forEach((order) => {
+        const row = create('div', 'vendor-history-row vendor-waiting-row');
+        append(
+          row,
+          create('span', '', '#' + order.id),
+          create('span', '', order.vendor_name + ' · ' + order.option_name),
+          create('span', '', 'Ready · ' + new Date(order.created_at).toLocaleTimeString('en-IN', {
+            hour: '2-digit',
+            minute: '2-digit'
+          }))
+        );
+        const chip = create('span', 'vendor-status-chip status-ready', 'Waiting');
+        chip.prepend(create('i'));
+        row.appendChild(chip);
+        waitingList.appendChild(row);
+      });
+
+      if (!readyOrders.length) {
+        waitingList.appendChild(
+          create('div', 'vendor-empty-card', 'No orders are waiting for user confirmation.')
+        );
+      }
+
+      waiting.appendChild(waitingList);
+      rightColumn.appendChild(waiting);
 
       const history = create('section', 'vendor-history-card');
       const completed = allOrders.filter((order) => order.status === 'completed').slice(0, 8);
@@ -420,8 +1115,27 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       }
 
       history.appendChild(historyList);
-      content.appendChild(history);
+      rightColumn.appendChild(history);
+      content.appendChild(rightColumn);
     };
+
+    headerStatusChoices.forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+        if (headerServiceControl.hidden || button.classList.contains('is-active')) return;
+        const value = String(button.dataset.status || '').toLowerCase();
+        const item = vendor(vendorId);
+        const child = option(item, optionId);
+        if (!item || !child) return;
+        headerStatusChoices.forEach((choice) => { choice.disabled = true; });
+        try {
+          await saveServiceStatus(item, child, value);
+          render();
+        } catch {
+          headerStatusChoices.forEach((choice) => { choice.disabled = false; });
+        }
+      });
+    });
 
     const render = () => {
       if (pageKind === 'root') {
@@ -457,10 +1171,102 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
       renderDetail(item, child);
     };
 
+    printQueueButton?.addEventListener('click', openPrintQueue);
+    printQueueClose?.addEventListener('click', closePrintQueue);
+    printQueueBackdrop?.addEventListener('click', closePrintQueue);
+
+    const printAllOrders = () => {
+      const orders = printableOrders();
+      if (!orders.length) return;
+      orders.forEach((order) => {
+        const entries = (order.files || []).map((file, index) => ({ file, index }));
+        openPrintBatch(order, entries, 'All pending print jobs');
+      });
+    };
+
+    printQueueAll?.addEventListener('click', printAllOrders);
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && printQueue && !printQueue.hidden) {
+        closePrintQueue();
+      }
+    });
+
+    let liveSyncBusy = false;
+
+    const refreshLiveState = async () => {
+      if (liveSyncBusy) return;
+      liveSyncBusy = true;
+
+      try {
+        const query = new URLSearchParams();
+
+        if (pageKind !== 'root' && vendorId) {
+          query.set('vendor_id', String(vendorId));
+        }
+
+        if (pageKind === 'detail' && optionId) {
+          query.set('option_id', String(optionId));
+        }
+
+        const response = await fetch(
+          '/__campusmaas/vendor-data' +
+            (query.toString() ? '?' + query.toString() : ''),
+          { cache: 'no-store' }
+        );
+
+        if (!response.ok) return;
+
+        const payload = await response.json();
+        if (
+          payload?.catalogue?.version !== 1 ||
+          !Array.isArray(payload?.catalogue?.vendors)
+        ) return;
+
+        const nextOrders =
+          payload?.orders?.version === 1 &&
+          Array.isArray(payload?.orders?.orders)
+            ? payload.orders
+            : { version: 1, orders: [] };
+
+        const nextSummary = Array.isArray(payload?.order_summary)
+          ? payload.order_summary
+          : [];
+
+        const changed =
+          JSON.stringify(payload.catalogue) !== JSON.stringify(state.catalogue) ||
+          JSON.stringify(nextOrders) !== JSON.stringify(state.orders) ||
+          JSON.stringify(nextSummary) !== JSON.stringify(state.orderSummary);
+
+        if (!changed) return;
+
+        state.catalogue = payload.catalogue;
+        state.orders = nextOrders;
+        state.orderSummary = nextSummary;
+
+        const queueWasOpen = printQueue && !printQueue.hidden;
+        render();
+
+        if (queueWasOpen && pageKind === 'detail' && ordersVendorId) {
+          openPrintQueue();
+        }
+      } finally {
+        liveSyncBusy = false;
+      }
+    };
+
+    const startLiveSync = () => {
+      if (vendorLiveSyncTimer) window.clearInterval(vendorLiveSyncTimer);
+      vendorLiveSyncTimer = window.setInterval(() => {
+        void refreshLiveState();
+      }, 3000);
+    };
+
     const start = async () => {
       try {
         await loadData();
         render();
+        startLiveSync();
       } catch {
         title.textContent = 'Vendor portal unavailable';
         subtitle.textContent = 'Check the CampusMaaS vendor data.';
@@ -472,6 +1278,13 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
 
     void start();
   };
+
+  window.addEventListener('pagehide', () => {
+    if (vendorLiveSyncTimer) {
+      window.clearInterval(vendorLiveSyncTimer);
+      vendorLiveSyncTimer = null;
+    }
+  }, { once: true });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initVendorPortal, { once: true });
@@ -668,7 +1481,10 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   }
   .vendor-large-footer span:last-child,.vendor-service-footer span:last-child { color:#67c6ff; font-weight:700; }
 
-  .vendor-service-card { min-height:250px; padding:20px; }
+  .vendor-service-card { min-height:250px; padding:20px; text-decoration:none; }
+  .vendor-service-card:hover,
+  .vendor-service-card:focus,
+  .vendor-service-card:visited { text-decoration:none; }
   .vendor-service-card-head .vendor-service-icon { margin-top:0; width:48px; height:48px; border-radius:13px; }
   .vendor-service-number { margin-top:30px; width:29px; height:29px; font-size:8px; }
   .vendor-service-card h2 { margin:10px 0 0; color:#f2f7fb; font:600 27px/1.05 'Space Grotesk',sans-serif; }
@@ -699,6 +1515,12 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-section-heading>b { padding:5px 7px; border:1px solid rgba(83,168,255,.10); border-radius:999px; background:rgba(255,255,255,.025); color:#79a4c5; font-size:7px; }
 
   .vendor-orders-grid { display:grid; gap:7px; }
+  .vendor-food-order-items{display:grid;gap:4px;margin:12px 0 2px}
+  .vendor-food-order-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 9px;border:1px solid rgba(83,145,190,.12);border-radius:8px;background:rgba(255,255,255,.035)}
+  .vendor-food-order-item-name{min-width:0;color:#dcecf8;font-size:9px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .vendor-food-order-item-count{flex:0 0 auto;color:#67c6ff;font-size:9px;font-weight:800}
+  .vendor-food-order-empty{padding:8px 0;color:#8398aa;font-size:8px}
+  .vendor-food-order-card .vendor-order-action{margin-top:8px}
   .vendor-order-card { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 11px; border:1px solid rgba(83,168,255,.08); border-radius:11px; background:rgba(255,255,255,.025); }
   .vendor-order-card-main { min-width:0; }
   .vendor-order-top { display:flex; align-items:center; gap:7px; }
@@ -733,6 +1555,107 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   .vendor-loading-line.short { width:34%; }
   @keyframes vendorShimmer { 50% { opacity:.45; } }
 
+  .vendor-service-status {
+    display:flex; align-items:center; gap:7px; margin:10px 0;
+    padding:9px 11px; border:1px solid rgba(83,168,255,.12);
+    border-radius:10px; background:rgba(255,255,255,.025);
+  }
+  .vendor-service-status-dot { width:8px; height:8px; border-radius:50%; flex:0 0 auto; background:#22c55e; box-shadow:0 0 10px rgba(34,197,94,.45); }
+  .vendor-service-status strong { font-size:8px; letter-spacing:.1em; color:#b8d7ed; }
+  .vendor-service-status small { margin-left:auto; color:#728ba2; font-size:8px; }
+  .vendor-service-status.status-busy { border-color:rgba(245,158,11,.18); }
+  .vendor-service-status.status-busy .vendor-service-status-dot { background:#f59e0b; box-shadow:0 0 10px rgba(245,158,11,.4); }
+  .vendor-service-status.status-offline { border-color:rgba(239,68,68,.18); }
+  .vendor-service-status.status-offline .vendor-service-status-dot { background:#ef4444; box-shadow:0 0 10px rgba(239,68,68,.4); }
+  .vendor-service-status.status-offline strong { color:#ff9a9a; }
+
+  .vendor-service-status{display:flex;align-items:center;gap:7px;margin:10px 0;padding:9px 11px;border:1px solid rgba(83,168,255,.12);border-radius:10px;background:rgba(255,255,255,.025)}
+  .vendor-service-status-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:#22c55e;box-shadow:0 0 10px rgba(34,197,94,.45)}
+  .vendor-service-status strong{font-size:8px;letter-spacing:.1em;color:#b8d7ed}.vendor-service-status small{margin-left:auto;color:#728ba2;font-size:8px}
+  .vendor-service-status.status-busy{border-color:rgba(245,158,11,.18)}.vendor-service-status.status-busy .vendor-service-status-dot{background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,.4)}
+  .vendor-service-status.status-offline{border-color:rgba(239,68,68,.18)}.vendor-service-status.status-offline .vendor-service-status-dot{background:#ef4444;box-shadow:0 0 10px rgba(239,68,68,.4)}
+  .vendor-service-status.status-offline strong{color:#ff9a9a}
+  .vendor-service-status-controls{display:flex;gap:6px;margin:8px 0 10px}.vendor-status-button{border:1px solid rgba(83,168,255,.12);border-radius:7px;background:#0d2035;color:#91aac1;padding:6px 9px;font-size:8px;cursor:pointer}.vendor-status-button.is-active{background:#1687ff;border-color:#1687ff;color:#fff}
+  .vendor-print-queue-open{overflow:hidden}
+  .vendor-print-queue{position:fixed;inset:0;z-index:6200;display:grid;place-items:center;padding:20px}
+  .vendor-print-queue[hidden]{display:none}
+  .vendor-print-queue-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.34);backdrop-filter:blur(4px)}
+  .vendor-print-queue-dialog{position:relative;z-index:1;width:min(960px,calc(100vw - 30px));max-height:min(820px,calc(100dvh - 30px));overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border:1px solid #dbe3ea;border-radius:16px;background:#fff;color:#111827;box-shadow:0 20px 60px rgba(15,23,42,.18)}
+  .vendor-print-queue-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid #e5e7eb;background:#fff}
+  .vendor-print-queue-kicker{display:block;color:#2563eb;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+  .vendor-print-queue-header strong{display:block;margin-top:4px;color:#111827;font:600 22px/1.15 'Space Grotesk',sans-serif}
+  .vendor-print-queue-header small{display:block;margin-top:5px;color:#6b7280;font-size:11px}
+  .vendor-print-queue-header-actions{display:flex;align-items:center;gap:8px}
+  .vendor-print-queue-all,.vendor-print-order-all,.vendor-print-group-all,.vendor-print-file-button{border:1px solid #2563eb;border-radius:8px;background:#fff;color:#1d4ed8;font-size:11px;font-weight:700;cursor:pointer}
+  .vendor-print-queue-all,.vendor-print-group-all{background:#2563eb;color:#fff}
+  .vendor-print-queue-all{padding:9px 13px}
+  .vendor-print-queue-all:hover,.vendor-print-group-all:hover{background:#1d4ed8}
+  .vendor-print-queue-all:disabled{opacity:.5;cursor:not-allowed}
+  .vendor-print-queue-close{display:grid;place-items:center;width:34px;height:34px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;cursor:pointer;font-size:18px}
+  .vendor-print-queue-close:hover{background:#f3f4f6}
+  .vendor-print-queue-list{min-height:0;overflow:auto;padding:16px;display:grid;gap:12px;background:#f8fafc}
+  .vendor-print-order-section{padding:14px;border:1px solid #e5e7eb;border-radius:12px;background:#fff}
+  .vendor-print-order-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid #edf0f2}
+  .vendor-print-order-kicker{display:block;color:#2563eb;font-size:10px;font-weight:800;letter-spacing:.04em}
+  .vendor-print-order-header strong{display:block;margin-top:4px;color:#111827;font:600 15px/1.15 'Space Grotesk',sans-serif}
+  .vendor-print-order-header small{display:block;margin-top:4px;color:#6b7280;font-size:10px}
+  .vendor-print-order-all{padding:8px 11px}
+  .vendor-print-order-all:hover,.vendor-print-group-all:hover,.vendor-print-file-button:hover{background:#eff6ff}
+  .vendor-print-group-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:8px 2px}
+  .vendor-print-group-header strong{color:#111827;font-size:11px;font-weight:700}
+  .vendor-print-group-all{padding:7px 10px}
+  .vendor-print-group-tools{display:flex;justify-content:flex-end;margin-top:10px}
+  .vendor-print-file-card{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:11px 12px;margin-top:7px;border:1px solid #e5e7eb;border-radius:9px;background:#fff}
+  .vendor-print-file-main{min-width:0}
+  .vendor-print-file-main strong{display:block;overflow:hidden;color:#111827;font-size:13px;font-weight:650;text-overflow:ellipsis;white-space:nowrap}
+  .vendor-print-file-main span{display:block;margin-top:4px;color:#6b7280;font-size:10px}
+  .vendor-print-file-settings{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .vendor-print-file-settings span{padding:5px 7px;border:1px solid #dbe3ea;border-radius:6px;background:#f8fafc;color:#374151;font-size:9px;font-weight:700;letter-spacing:.02em}
+  .vendor-print-file-button{padding:8px 11px;min-width:58px}
+  .vendor-print-queue-footer{display:flex;align-items:center;justify-content:flex-start;gap:12px;padding:11px 16px;border-top:1px solid #e5e7eb;background:#fff}
+  .vendor-print-queue-footer>span{color:#6b7280;font-size:10px}
+  .vendor-print-queue-button{
+    display:inline-flex;align-items:center;gap:7px;height:54px;padding:0 15px;
+    border:1px solid #d1d5db;border-radius:14px;background:#fff;color:#111827;
+    font:600 11px/1 'Space Grotesk',sans-serif;letter-spacing:.02em;cursor:pointer;
+    box-shadow:0 8px 22px rgba(15,23,42,.08)
+  }
+  .vendor-print-queue-button:hover{border-color:#2563eb;color:#1d4ed8;background:#f8fbff}
+  .vendor-print-queue-icon{font-size:14px;line-height:1;color:#2563eb}
+  .vendor-print-queue-button.order-level-idle{background:#fff;color:#111827;border-color:#d1d5db}
+  .vendor-print-queue-button.order-level-green{background:#f0fdf4;color:#15803d;border-color:#86efac}
+  .vendor-print-queue-button.order-level-blue{background:#eff6ff;color:#1d4ed8;border-color:#93c5fd}
+  .vendor-print-queue-button.order-level-yellow{background:#fefce8;color:#a16207;border-color:#fde047}
+  .vendor-print-queue-button.order-level-orange{background:#fff7ed;color:#c2410c;border-color:#fdba74}
+  .vendor-print-queue-button.order-level-red{background:#fef2f2;color:#b91c1c;border-color:#fca5a5}
+  .vendor-print-queue-button.order-level-critical{background:#dc2626;color:#fff;border-color:#b91c1c;animation:vendorOrdersCriticalBlink .42s steps(2,end) infinite}
+  .vendor-print-queue-button.order-level-green:hover{background:#dcfce7;color:#166534;border-color:#4ade80}
+  .vendor-print-queue-button.order-level-blue:hover{background:#dbeafe;color:#1e40af;border-color:#60a5fa}
+  .vendor-print-queue-button.order-level-yellow:hover{background:#fef9c3;color:#854d0e;border-color:#facc15}
+  .vendor-print-queue-button.order-level-orange:hover{background:#ffedd5;color:#9a3412;border-color:#fb923c}
+  .vendor-print-queue-button.order-level-red:hover{background:#fee2e2;color:#991b1b;border-color:#f87171}
+  .vendor-print-queue-button.order-level-critical:hover{background:#ef4444;color:#fff;border-color:#dc2626}
+  @keyframes vendorOrdersCriticalBlink{
+    0%,49%{opacity:1;filter:none}
+    50%,100%{opacity:.34;filter:brightness(.92)}
+  }
+
+  .vendor-print-queue-button[hidden],
+  .vendor-header-service-control[hidden]{display:none !important}
+  .vendor-header-actions{display:flex;align-items:center;gap:9px}
+  .vendor-header-service-control{display:flex;align-items:center;gap:8px;position:relative;z-index:20}
+  .vendor-header-status-toggle{display:flex;align-items:center;padding:3px;border:1px solid #d7dee7;border-radius:14px;background:#fff;box-shadow:0 8px 22px rgba(15,23,42,.08)}
+  .vendor-header-status-choice{min-width:70px;height:42px;padding:0 11px;border:0;border-radius:10px;background:transparent;color:#64748b;font:700 9px/1 'Space Grotesk',sans-serif;letter-spacing:.05em;cursor:pointer;transition:background .15s ease,color .15s ease}
+  .vendor-header-status-choice:hover{background:#f1f5f9;color:#0f172a}
+  .vendor-header-status-choice.is-active.status-online{background:#dcfce7;color:#15803d;box-shadow:inset 0 0 0 1px #86efac}
+  .vendor-header-status-choice.is-active.status-busy{background:#fef3c7;color:#b45309;box-shadow:inset 0 0 0 1px #fcd34d}
+  .vendor-header-status-choice.is-active.status-offline{background:#fee2e2;color:#b91c1c;box-shadow:inset 0 0 0 1px #fca5a5}
+  .vendor-header-status-choice:disabled{opacity:.55;cursor:wait}
+  .vendor-header-status-message{max-width:130px;color:#64748b;font-size:7px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vendor-dashboard-side-column{display:grid;gap:12px;min-width:0}
+  .vendor-waiting-card{border-color:rgba(245,158,11,.16)}
+  .vendor-waiting-row{grid-template-columns:1fr 1.2fr auto auto}
+  .vendor-waiting-row .vendor-status-chip.status-ready{color:#b45309;border-color:rgba(245,158,11,.22);background:rgba(245,158,11,.07)}
   @media(max-width:850px){
     .vendor-portal{padding:22px 16px 34px}
     .vendor-hero{padding-top:38px}
@@ -742,8 +1665,34 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
   }
 
   @media(max-width:560px){
-    .vendor-portal-header{align-items:flex-start}
-    .vendor-header-status{padding:6px 8px}
+    /* Detail/service pages keep the header visible while the dashboard scrolls. */
+  .vendor-portal[data-page-kind="detail"] .vendor-portal-header{
+    position:sticky;
+    top:0;
+    z-index:120;
+    background:rgba(247,250,252,.96);
+    backdrop-filter:blur(12px);
+  }
+
+  .vendor-portal-header{align-items:flex-start}
+    .vendor-header-actions{align-items:flex-start}
+    .vendor-print-queue-button{height:54px;padding:0 12px;font-size:10px}
+    .vendor-print-queue-button .vendor-print-queue-icon{font-size:13px}
+    .vendor-header-service-control{max-width:100%;gap:4px}
+    .vendor-header-status-toggle{padding:2px;border-radius:11px}
+    .vendor-header-status-choice{min-width:54px;height:40px;padding:0 8px;font-size:8px}
+    .vendor-header-status-message{display:none}
+    .vendor-header-status{display:none}
+    .vendor-print-queue{padding:10px}
+    .vendor-print-queue-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);border-radius:14px}
+    .vendor-print-queue-header{padding:14px}
+    .vendor-print-queue-header strong{font-size:18px}
+    .vendor-print-queue-header-actions .vendor-print-queue-all{padding:8px 10px}
+    .vendor-print-order-header{align-items:flex-start}
+    .vendor-print-file-card{grid-template-columns:minmax(0,1fr) auto;gap:8px}
+    .vendor-print-file-settings{grid-column:1/-1;justify-content:flex-start}
+    .vendor-print-file-button{grid-column:2;grid-row:1;align-self:center}
+    .vendor-print-queue-footer{padding:9px 12px}
     .vendor-hero{padding:32px 0 21px}
     .vendor-large-card{min-height:245px;padding:20px}
     .vendor-large-icon{margin-top:30px}
@@ -753,4 +1702,10 @@ const { pageKind = 'root', vendorId = '', optionId = '' } = Astro.props;
     .vendor-order-action{margin-top:23px}
     .vendor-history-row{grid-template-columns:1fr 1fr}
   }
+      .vendor-order-cancel,.vendor-print-order-cancel{border:1px solid rgba(195,62,73,.18);background:#fff7f7;color:#c33e49;border-radius:6px;padding:6px 10px;font-size:9px;font-weight:800;cursor:pointer}
+      .vendor-order-cancel:disabled,.vendor-print-order-cancel:disabled{opacity:.55;cursor:default}
+      .vendor-order-item-info{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+      .vendor-order-item-cancel,.vendor-print-file-cancel{border:1px solid rgba(195,62,73,.18);background:#fff7f7;color:#c33e49;border-radius:6px;padding:5px 8px;font-size:9px;font-weight:800;cursor:pointer}
+      .vendor-order-item-cancel:disabled,.vendor-print-file-cancel:disabled{opacity:.55;cursor:default}
+      .vendor-print-file-card{position:relative}
 </style>

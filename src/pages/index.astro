@@ -32,7 +32,9 @@ import VendorManagerCard from '../components/campusmaas/VendorManagerCard.astro'
     <DeletePathModal />
     <DeveloperPanel />
     <div class="developer-side-workspace" aria-label="Developer workspace">
-      <VendorManagerCard />
+      <div class="developer-vendor-column">
+        <VendorManagerCard />
+      </div>
       <AccessRulesCard />
     </div>
 
@@ -45,22 +47,42 @@ import VendorManagerCard from '../components/campusmaas/VendorManagerCard.astro'
     position: absolute;
     z-index: 1800;
     top: 58px;
+    left: 14px;
     right: 14px;
-    width: min(430px, calc(100vw - 28px));
-    max-height: calc(100dvh - 72px);
-    overflow: auto;
     display: grid;
-    gap: 8px;
+    grid-template-columns: minmax(360px, 410px) minmax(430px, 470px);
+    justify-content: space-between;
+    align-items: start;
+    gap: 16px;
+    pointer-events: none;
+  }
+
+  .developer-vendor-column,
+  .developer-side-workspace > .access-rules-card {
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+    overflow: auto;
+    box-sizing: border-box;
     pointer-events: auto;
     scrollbar-width: thin;
   }
 
-  .developer-side-workspace > * {
-    min-width: 0;
+  /* Reserve the lower-right map-control stack so the vendor panel never covers its icons. */
+  .developer-vendor-column {
+    max-height: calc(100dvh - 330px);
+    min-height: 220px;
   }
 
-  :global(.developer-side-workspace .vendor-manager),
-  :global(.developer-side-workspace .access-rules-card) {
+  .developer-vendor-column .vendor-manager {
+    max-height: none;
+  }
+
+  .developer-side-workspace > .access-rules-card {
+    max-height: calc(100dvh - 100px);
+  }
+
+  :global(.developer-side-workspace .vendor-manager) {
     position: relative;
     inset: auto;
     top: auto;
@@ -70,24 +92,54 @@ import VendorManagerCard from '../components/campusmaas/VendorManagerCard.astro'
     width: 100%;
     max-width: none;
     max-height: none;
-    box-sizing: border-box;
     margin: 0;
-  }
-
-  :global(.developer-side-workspace .vendor-manager) {
-    box-shadow: 0 16px 42px rgba(0, 0, 0, .28);
+    box-sizing: border-box;
+    box-shadow: 0 18px 52px rgba(0, 0, 0, .30);
   }
 
   :global(.developer-side-workspace .access-rules-card) {
-    box-shadow: 0 16px 42px rgba(0, 0, 0, .28);
+    pointer-events: auto;
+    position: relative;
+    inset: auto;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    box-sizing: border-box;
+    box-shadow: 0 18px 52px rgba(0, 0, 0, .30);
+    order: -1;
   }
 
-  @media (max-width: 700px) {
+  @media (max-width: 1050px) {
+    .developer-side-workspace {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 820px) {
     .developer-side-workspace {
       top: 50px;
+      left: 10px;
       right: 10px;
-      width: calc(100vw - 20px);
+      grid-template-columns: 1fr;
+      gap: 10px;
       max-height: calc(100dvh - 60px);
+      overflow: auto;
+    }
+
+    .developer-vendor-column {
+      max-height: calc(100dvh - 250px);
+      min-height: 220px;
+      overflow: auto;
+    }
+
+    .developer-side-workspace > .access-rules-card {
+      max-height: none;
+      overflow: visible;
     }
   }
 </style>
