@@ -2,6 +2,7 @@
 import MainLayout from '../../layouts/MainLayout.astro';
 import events from '../../data/events.json';
 import '../../styles/global.css';
+import 'leaflet/dist/leaflet.css';
 import '../../styles/events.css';
 
 const formatDate = (value) =>
@@ -304,10 +305,20 @@ const firstEvent = orderedEvents[0];
     carouselIndex = (nextIndex + events.length) % events.length;
     const event = events[carouselIndex];
     const detailUrl = '/events/' + encodeURIComponent(event.slug);
+    const externalUrl = event.registrationUrl || event.sourceUrl || '';
+    const primaryUrl = externalUrl || detailUrl;
+    const externalLabel = event.registrationUrl ? 'Register for event' : 'Open event website';
 
     if (carouselElements.mapLink) {
-      carouselElements.mapLink.href = detailUrl;
-      carouselElements.mapLink.setAttribute('aria-label', 'Open details for ' + event.title);
+      carouselElements.mapLink.href = primaryUrl;
+      carouselElements.mapLink.setAttribute('aria-label', externalUrl ? externalLabel + ': ' + event.title : 'Open details for ' + event.title);
+      if (externalUrl) {
+        carouselElements.mapLink.target = '_blank';
+        carouselElements.mapLink.rel = 'noreferrer';
+      } else {
+        carouselElements.mapLink.removeAttribute('target');
+        carouselElements.mapLink.removeAttribute('rel');
+      }
     }
     if (carouselElements.mapVenue) carouselElements.mapVenue.textContent = event.venue;
     if (carouselElements.category) carouselElements.category.textContent = event.category;
@@ -318,7 +329,17 @@ const firstEvent = orderedEvents[0];
     if (carouselElements.description) carouselElements.description.textContent =
       String(event.description || '').split('Confirm the details')[0].split('Check with the club')[0].split('Verify the venue')[0].split('Follow official campus channels')[0].trim();
     if (carouselElements.venue) carouselElements.venue.textContent = event.venue;
-    if (carouselElements.details) carouselElements.details.href = detailUrl;
+    if (carouselElements.details) {
+      carouselElements.details.href = primaryUrl;
+      carouselElements.details.textContent = externalUrl ? externalLabel : 'View event details';
+      if (externalUrl) {
+        carouselElements.details.target = '_blank';
+        carouselElements.details.rel = 'noreferrer';
+      } else {
+        carouselElements.details.removeAttribute('target');
+        carouselElements.details.removeAttribute('rel');
+      }
+    }
     if (carouselElements.counter) {
       carouselElements.counter.textContent = pad2(carouselIndex + 1) + ' / ' + pad2(events.length);
     }
@@ -372,6 +393,7 @@ const firstEvent = orderedEvents[0];
       if (responses.some((response) => !response.ok)) throw new Error('Campus map data could not be loaded.');
       const [places, paths, gates, perimeter] = await Promise.all(responses.map((response) => response.json()));
 
+      mapElement.replaceChildren();
       previewMap = L.map(mapElement, {
         zoomControl: false,
         attributionControl: false,
@@ -435,7 +457,7 @@ const firstEvent = orderedEvents[0];
         interactive: false
       }).addTo(previewMap);
 
-      const perimeterRing = perimeter?.features?.[0]?.geometry;
+      const perimeterRing = perimeter?.features?.[0];
       if (perimeterRing) L.geoJSON(perimeterRing, {
         style: { color: '#6c8298', weight: 1, opacity: 0.65, dashArray: '4 5', fill: false },
         interactive: false
@@ -711,7 +733,8 @@ const firstEvent = orderedEvents[0];
       return;
     }
 
-    if (editingPlanId) plans = plans.map((existing) => existing.id === editingPlanId ? plan : existing);
+    const wasEditing = Boolean(editingPlanId);
+    if (wasEditing) plans = plans.map((existing) => existing.id === editingPlanId ? plan : existing);
     else plans.push(plan);
 
     const saved = savePlans();
@@ -720,17 +743,21 @@ const firstEvent = orderedEvents[0];
     renderCalendar();
     renderAgenda();
     resetPlanForm();
-    el('planSaveStatus').textContent = saved ? (editingPlanId ? 'Plan updated.' : 'Plan saved to this browser.') : 'Plan updated for this session only.';
+    el('planSaveStatus').textContent = saved ? (wasEditing ? 'Plan updated.' : 'Plan saved to this browser.') : 'Plan updated for this session only.';
   });
 
-  el('calendarPreviousMonth').addEventListener('click', () => {
-    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1, 12);
+  const shiftCalendarMonth = (offset) => {
+    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + offset, 1, 12);
+    if (selectedDate.getFullYear() !== currentMonth.getFullYear() || selectedDate.getMonth() !== currentMonth.getMonth()) {
+      selectedDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1, 12);
+      planDateInput.value = dateKey(selectedDate);
+      renderAgenda();
+    }
     renderCalendar();
-  });
-  el('calendarNextMonth').addEventListener('click', () => {
-    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1, 12);
-    renderCalendar();
-  });
+  };
+
+  el('calendarPreviousMonth').addEventListener('click', () => shiftCalendarMonth(-1));
+  el('calendarNextMonth').addEventListener('click', () => shiftCalendarMonth(1));
   el('calendarToday').addEventListener('click', () => setSelectedDate(today, true));
 
   planDateInput.value = dateKey(selectedDate);
