@@ -1,0 +1,162 @@
+---
+import MainLayout from '../../layouts/MainLayout.astro';
+import events from '../../data/events.json';
+import '../../styles/events.css';
+
+export function getStaticPaths() {
+  return events.map((event) => ({
+    params: { slug: event.slug },
+    props: { event }
+  }));
+}
+
+const { event } = Astro.props;
+const formatDate = (value) =>
+  new Date(`${value}T12:00:00`).toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+
+const formatTime = (value) => {
+  const [hour, minute] = value.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  return date.toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+};
+
+const venueMapUrl = `/user?eventVenue=${encodeURIComponent(event.venueId)}&lat=${event.lat}&lng=${event.lng}&venueName=${encodeURIComponent(event.venue)}`;
+---
+
+<MainLayout title={`${event.title} | CampusMaaS`}>
+  <main class="events-page">
+    <div class="events-shell">
+      <nav class="events-topbar" aria-label="Page navigation">
+        <a class="events-brand" href="/user">CampusMaaS</a>
+        <a class="events-backlink" href="/events">← All campus events</a>
+      </nav>
+
+      <article class="event-detail">
+        <div class="event-card-meta">
+          <span class="event-chip">{event.category}</span>
+          <span class="event-chip event-chip-demo">Demo listing · not verified</span>
+        </div>
+
+        <p class="events-eyebrow" style="margin-top: 18px;">Campus calendar event</p>
+        <h1>{event.title}</h1>
+        <p class="event-detail-description">{event.description}</p>
+
+        <div class="event-detail-facts">
+          <div class="event-detail-fact">
+            <span>Date</span>
+            <strong>{formatDate(event.startDate)}</strong>
+          </div>
+          <div class="event-detail-fact">
+            <span>Time (campus local time)</span>
+            <strong>{formatTime(event.startTime)} – {formatTime(event.endTime)}</strong>
+          </div>
+          <div class="event-detail-fact">
+            <span>Venue</span>
+            <strong>{event.venue}</strong>
+          </div>
+          <div class="event-detail-fact">
+            <span>Department / organizer</span>
+            <strong>{event.department} · {event.organizer}</strong>
+          </div>
+        </div>
+
+        <div class="event-card-actions">
+          <a class="events-button events-button-primary" href={venueMapUrl}>Navigate to venue</a>
+          <button class="events-button" type="button" id="downloadCalendar">Download .ics calendar invite</button>
+          <button class="event-save-button" type="button" id="saveEvent" aria-pressed="false">Save event</button>
+          {event.registrationUrl && <a class="events-button" href={event.registrationUrl} target="_blank" rel="noreferrer">Registration</a>}
+          {event.sourceUrl && <a class="events-button" href={event.sourceUrl} target="_blank" rel="noreferrer">Source announcement</a>}
+        </div>
+      </article>
+
+      <p class="events-notice" style="margin-top: 18px;" role="note">
+        This is a prototype listing stored in local JSON. The venue is used to open the campus map; it does not confirm that this event is actually scheduled.
+      </p>
+    </div>
+  </main>
+</MainLayout>
+
+<script define:vars={{ eventId: event.id, eventTitle: event.title, eventDescription: event.description, eventStartDate: event.startDate, eventStartTime: event.startTime, eventEndDate: event.endDate, eventEndTime: event.endTime, eventVenue: event.venue }}>
+  const SAVED_EVENTS_KEY = 'campusmaas:saved-events:v1';
+  const saveButton = document.getElementById('saveEvent');
+  const calendarButton = document.getElementById('downloadCalendar');
+
+  const readSavedEvents = () => {
+    try {
+      const value = JSON.parse(window.localStorage.getItem(SAVED_EVENTS_KEY) || '[]');
+      return new Set(Array.isArray(value) ? value.filter((id) => typeof id === 'string') : []);
+    } catch {
+      return new Set();
+    }
+  };
+
+  let savedEvents = readSavedEvents();
+  const syncSaveButton = () => {
+    const saved = savedEvents.has(eventId);
+    saveButton?.setAttribute('aria-pressed', String(saved));
+    if (saveButton) saveButton.textContent = saved ? 'Saved ✓' : 'Save event';
+  };
+
+  saveButton?.addEventListener('click', () => {
+    if (savedEvents.has(eventId)) savedEvents.delete(eventId);
+    else savedEvents.add(eventId);
+    try {
+      window.localStorage.setItem(SAVED_EVENTS_KEY, JSON.stringify([...savedEvents]));
+    } catch {
+      // Storage may be unavailable in private browsing.
+    }
+    syncSaveButton();
+  });
+
+  const escapeIcs = (value) =>
+    String(value || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/\r?\n/g, '\\n')
+      .replace(/,/g, '\\,')
+      .replace(/;/g, '\\;');
+
+  const icsTimestamp = (date, time) => {
+    const localCampusDate = new Date(date + 'T' + time + ':00+05:30');
+    return localCampusDate.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  };
+
+  calendarButton?.addEventListener('click', () => {
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//CampusMaaS//Campus Events//EN',
+      'CALSCALE:GREGORIAN',
+      'BEGIN:VEVENT',
+      'UID:' + escapeIcs(eventId) + '@campusmaas.local',
+      'DTSTAMP:' + new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z'),
+      'DTSTART:' + icsTimestamp(eventStartDate, eventStartTime),
+      'DTEND:' + icsTimestamp(eventEndDate, eventEndTime),
+      'SUMMARY:' + escapeIcs(eventTitle),
+      'LOCATION:' + escapeIcs(eventVenue),
+      'DESCRIPTION:' + escapeIcs(eventDescription),
+      'URL:' + escapeIcs(window.location.href),
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ];
+    const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = eventId + '.ics';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  syncSaveButton();
+</script>
