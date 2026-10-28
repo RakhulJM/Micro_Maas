@@ -4,12 +4,8 @@ import events from '../../data/events.json';
 import '../../styles/global.css';
 import '../../styles/events.css';
 
-const categories = [...new Set(events.map((event) => event.category))].sort();
-const departments = [...new Set(events.map((event) => event.department))].sort();
-const dates = [...new Set(events.map((event) => event.startDate))].sort();
-
 const formatDate = (value) =>
-  new Date(`${value}T12:00:00`).toLocaleDateString('en-IN', {
+  new Date(value + 'T12:00:00').toLocaleDateString('en-IN', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -25,197 +21,720 @@ const formatTime = (value) => {
     minute: '2-digit'
   });
 };
+
+const orderedEvents = [...events].sort((a, b) =>
+  (a.startDate + a.startTime).localeCompare(b.startDate + b.startTime)
+);
+const firstEvent = orderedEvents[0];
 ---
 
-<MainLayout title="Campus events | CampusMaaS">
+<MainLayout title="Campus calendar | CampusMaaS">
   <main class="events-page">
-    <div class="events-shell">
+    <div class="events-shell" data-events={JSON.stringify(orderedEvents)}>
       <nav class="events-topbar" aria-label="Page navigation">
-        <a class="events-brand" href="/user">CampusMaaS</a>
+        <a class="events-brand" href="/user">
+          <span class="events-brand-mark" aria-hidden="true">C</span>
+          <span>CampusMaaS</span>
+        </a>
         <a class="events-backlink" href="/user">← Back to campus map</a>
       </nav>
 
       <header class="events-hero">
-        <p class="events-eyebrow">Campus calendar</p>
-        <h1 class="events-title">Find what’s happening on campus.</h1>
-        <p class="events-intro">
-          Browse student activities, workshops, seminars and sports listings.
-          Save events for quick access, then open an event to view venue and calendar details.
-        </p>
+        <div>
+          <p class="events-eyebrow">CAMPUS CALENDAR</p>
+          <h1 class="events-title">Your campus, in the loop.</h1>
+          <p class="events-intro">
+            Discover what’s coming up, see where it happens on the campus map,
+            and keep your own plans together in one calendar.
+          </p>
+        </div>
+        <div class="events-hero-mark" aria-hidden="true">
+          <span>CAL</span>
+          <strong>01</strong>
+          <i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
       </header>
 
       <p class="events-notice" role="note">
-        Demo mode: every listing currently shown is sample data and is not a verified college announcement.
-        Confirm dates, venues and registration details with official campus channels before attending.
+        <span aria-hidden="true">ⓘ</span>
+        Demo mode: listings are sample events, not verified college announcements. Confirm details with official campus channels before attending.
       </p>
 
-      <section aria-label="Filter events">
-        <div class="events-controls">
-          <div class="events-field">
-            <label for="eventCategory">Category</label>
-            <select id="eventCategory">
-              <option value="">All categories</option>
-              {categories.map((category) => <option value={category}>{category}</option>)}
-            </select>
+      <section class="events-section" aria-labelledby="upNextHeading">
+        <div class="events-section-heading">
+          <div>
+            <p class="events-eyebrow">UP NEXT</p>
+            <h2 id="upNextHeading">Happening around campus</h2>
           </div>
-          <div class="events-field">
-            <label for="eventDepartment">Department</label>
-            <select id="eventDepartment">
-              <option value="">All departments</option>
-              {departments.map((department) => <option value={department}>{department}</option>)}
-            </select>
+          <div class="carousel-controls" aria-label="Event carousel controls">
+            <span id="carouselCounter" class="carousel-counter">01 / 04</span>
+            <button type="button" class="icon-button" id="carouselPrevious" aria-label="Previous event">←</button>
+            <button type="button" class="icon-button" id="carouselNext" aria-label="Next event">→</button>
           </div>
-          <div class="events-field">
-            <label for="eventDate">Date</label>
-            <select id="eventDate">
-              <option value="">Any date</option>
-              {dates.map((date) => <option value={date}>{formatDate(date)}</option>)}
-            </select>
-          </div>
+        </div>
+
+        <div class="event-carousel">
+          <a class="event-map-open" id="carouselMapLink" href={"/events/" + firstEvent.slug} aria-label="Open event details">
+            <div id="eventMapPreview" class="event-map-preview" aria-label="Campus map preview">
+              <div class="map-preview-fallback" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span>
+                <b>KEC</b>
+              </div>
+            </div>
+            <div class="event-map-topline">
+              <span class="map-live-dot"></span>
+              CAMPUS MAP PREVIEW
+            </div>
+            <div class="event-map-bottomline">
+              <span class="event-map-pin" aria-hidden="true">⌖</span>
+              <span>
+                <small>VENUE</small>
+                <strong id="carouselVenueMap">{firstEvent.venue}</strong>
+              </span>
+              <span class="map-bottom-arrow" aria-hidden="true">↗</span>
+            </div>
+          </a>
+
+          <article class="event-feature-info" aria-live="polite">
+            <div class="event-card-meta">
+              <span class="event-chip" id="carouselCategory">{firstEvent.category}</span>
+              <span class="event-chip event-chip-demo">Demo listing</span>
+            </div>
+            <p class="event-feature-date" id="carouselDate">{formatDate(firstEvent.startDate)} · {formatTime(firstEvent.startTime)}</p>
+            <h3 id="carouselTitle">{firstEvent.title}</h3>
+            <p class="event-feature-description" id="carouselDescription">{firstEvent.description}</p>
+            <div class="event-feature-venue">
+              <span class="event-feature-venue-icon" aria-hidden="true">⌖</span>
+              <span>
+                <small>MEET HERE</small>
+                <strong id="carouselVenue">{firstEvent.venue}</strong>
+              </span>
+            </div>
+            <div class="event-feature-actions">
+              <a class="events-button events-button-primary" id="carouselDetailsLink" href={"/events/" + firstEvent.slug}>View event details <span aria-hidden="true">→</span></a>
+              <span class="event-feature-hint">Swipe with arrows or let the carousel move</span>
+            </div>
+            <div class="carousel-dots" id="carouselDots" aria-label="Choose an event"></div>
+          </article>
         </div>
       </section>
 
-      <div class="events-tabs" role="group" aria-label="Event view">
-        <button type="button" class="events-tab" data-event-tab="upcoming" aria-pressed="true">Upcoming</button>
-        <button type="button" class="events-tab" data-event-tab="saved" aria-pressed="false">Saved</button>
-      </div>
+      <section class="calendar-section" aria-labelledby="myCalendarHeading">
+        <div class="events-section-heading calendar-main-heading">
+          <div>
+            <p class="events-eyebrow">YOUR MONTH</p>
+            <h2 id="myCalendarHeading">My campus calendar</h2>
+            <p class="section-subtitle">Tap any day to see events and plan your own work around them.</p>
+          </div>
+          <button type="button" class="events-button" id="calendarToday">Today</button>
+        </div>
 
-      <div class="events-results-meta">
-        <span id="eventsResultsCount" aria-live="polite">{events.length} sample events</span>
-        <span>Saved events stay in this browser</span>
-      </div>
+        <div class="calendar-layout">
+          <section class="calendar-panel" aria-label="Monthly calendar">
+            <div class="calendar-toolbar">
+              <div>
+                <span class="calendar-toolbar-kicker">MONTH VIEW</span>
+                <h3 id="calendarMonthLabel">October 2026</h3>
+              </div>
+              <div class="calendar-nav">
+                <button type="button" class="icon-button" id="calendarPreviousMonth" aria-label="Previous month">←</button>
+                <button type="button" class="icon-button" id="calendarNextMonth" aria-label="Next month">→</button>
+              </div>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span>
+            </div>
+            <div class="calendar-days" id="calendarDays" role="grid" aria-label="Calendar days"></div>
+            <div class="calendar-legend">
+              <span><i class="legend-dot legend-event"></i> Campus event</span>
+              <span><i class="legend-dot legend-plan"></i> My plan</span>
+              <span><i class="legend-dot legend-today"></i> Today</span>
+            </div>
+          </section>
 
-      <section id="eventsGrid" class="events-grid" aria-label="Campus events">
-        {events.map((event) => (
-          <article
-            class="event-card"
-            data-event-card
-            data-event-id={event.id}
-            data-category={event.category}
-            data-department={event.department}
-            data-date={event.startDate}
-            data-end-date={event.endDate}
-          >
-            <div class="event-card-meta">
-              <span class="event-chip">{event.category}</span>
-              <span class="event-chip event-chip-demo">Demo listing</span>
+          <aside class="agenda-panel" aria-labelledby="selectedDateTitle">
+            <div class="agenda-panel-header">
+              <div>
+                <span class="calendar-toolbar-kicker">DAY AGENDA</span>
+                <h3 id="selectedDateTitle">Selected day</h3>
+              </div>
+              <span class="agenda-count" id="agendaCount">0 items</span>
             </div>
-            <h2><a href={`/events/${event.slug}`}>{event.title}</a></h2>
-            <p>{event.description}</p>
-            <div class="event-card-facts">
-              <span>▦ {formatDate(event.startDate)} · {formatTime(event.startTime)}</span>
-              <span>⌖ {event.venue}</span>
-              <span>{event.department}</span>
+
+            <div id="dayAgenda" class="day-agenda" aria-live="polite"></div>
+
+            <div class="plan-editor">
+              <div class="plan-editor-heading">
+                <div>
+                  <span class="calendar-toolbar-kicker">PERSONAL PLANNER</span>
+                  <h4 id="planFormHeading">Add a plan</h4>
+                </div>
+                <span class="plan-private-label">Only you</span>
+              </div>
+              <p class="plan-editor-copy">Add a study session, assignment, reminder or anything else you need to keep track of.</p>
+
+              <form id="planForm">
+                <input type="hidden" id="planId" />
+                <label for="planTitle">Plan title</label>
+                <input id="planTitle" name="title" type="text" maxlength="100" placeholder="e.g. Finish project report" required />
+
+                <div class="plan-form-row">
+                  <div>
+                    <label for="planDate">Date</label>
+                    <input id="planDate" name="date" type="date" required />
+                  </div>
+                  <div>
+                    <label for="planStartTime">Start time</label>
+                    <input id="planStartTime" name="startTime" type="time" />
+                  </div>
+                </div>
+
+                <label for="planEndTime">End time <span class="optional-label">optional</span></label>
+                <input id="planEndTime" name="endTime" type="time" />
+
+                <label for="planNotes">Notes <span class="optional-label">optional</span></label>
+                <textarea id="planNotes" name="notes" rows="2" maxlength="600" placeholder="Anything you want to remember…"></textarea>
+
+                <div class="plan-form-actions">
+                  <button type="submit" class="events-button events-button-primary" id="savePlanButton">Save plan</button>
+                  <button type="button" class="events-button" id="cancelEditPlan" hidden>Cancel edit</button>
+                </div>
+                <p class="plan-save-status" id="planSaveStatus" aria-live="polite"></p>
+              </form>
             </div>
-            <div class="event-card-actions">
-              <a class="events-button events-button-primary" href={`/events/${event.slug}`}>View details</a>
-              <button
-                type="button"
-                class="event-save-button"
-                data-save-event={event.id}
-                aria-pressed="false"
-              >Save event</button>
-            </div>
-          </article>
-        ))}
-        <p class="events-empty" id="eventsEmpty" hidden>No events match these filters.</p>
+          </aside>
+        </div>
       </section>
 
       <footer class="events-footer">
-        This feed is a prototype. Listings are local JSON demo records; no live college announcement feed is connected yet.
+        Event listings are demo data. Personal plans are saved only in this browser and are not synced across devices.
       </footer>
     </div>
   </main>
 </MainLayout>
 
 <script>
-  const SAVED_EVENTS_KEY = 'campusmaas:saved-events:v1';
-  const cards = Array.from(document.querySelectorAll('[data-event-card]'));
-  const categoryInput = document.getElementById('eventCategory');
-  const departmentInput = document.getElementById('eventDepartment');
-  const dateInput = document.getElementById('eventDate');
-  const emptyState = document.getElementById('eventsEmpty');
-  const countLabel = document.getElementById('eventsResultsCount');
-  const tabs = Array.from(document.querySelectorAll('[data-event-tab]'));
-  let activeTab = 'upcoming';
+  import L from 'leaflet';
 
-  const readSavedEvents = () => {
+  const shell = document.querySelector('.events-shell');
+  const events = JSON.parse(shell?.dataset.events || '[]').sort((a, b) =>
+    (a.startDate + a.startTime).localeCompare(b.startDate + b.startTime)
+  );
+  const SAVED_PLANS_KEY = 'campusmaas:calendar-plans:v1';
+
+  const el = (id) => document.getElementById(id);
+  const pad2 = (value) => String(value).padStart(2, '0');
+  const dateKey = (date) => date.getFullYear() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate());
+  const parseDate = (value) => new Date(value + 'T12:00:00');
+  const formatLongDate = (value) => parseDate(value).toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+  const formatShortDate = (value) => parseDate(value).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short'
+  });
+  const formatTime = (value) => {
+    if (!value) return '';
+    const parts = value.split(':').map(Number);
+    const date = new Date();
+    date.setHours(parts[0], parts[1], 0, 0);
+    return date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  // --- Event carousel and live preview of the same local campus map data ---
+  let carouselIndex = 0;
+  let carouselTimer = null;
+  let carouselIsPaused = false;
+  let previewMap = null;
+  let previewEventMarker = null;
+  let previewReady = false;
+
+  const carouselElements = {
+    map: el('eventMapPreview'),
+    mapLink: el('carouselMapLink'),
+    mapVenue: el('carouselVenueMap'),
+    category: el('carouselCategory'),
+    date: el('carouselDate'),
+    title: el('carouselTitle'),
+    description: el('carouselDescription'),
+    venue: el('carouselVenue'),
+    details: el('carouselDetailsLink'),
+    counter: el('carouselCounter'),
+    dots: el('carouselDots')
+  };
+
+  const updatePreviewLocation = (event) => {
+    if (!previewMap || !event) return;
+    previewMap.setView([event.lat, event.lng], 18.4, { animate: true, duration: 0.55 });
+    if (previewEventMarker) previewMap.removeLayer(previewEventMarker);
+    previewEventMarker = L.marker([event.lat, event.lng], {
+      interactive: false,
+      keyboard: false,
+      icon: L.divIcon({
+        className: 'event-map-marker-icon',
+        html: '<span class="event-map-marker-pulse"></span><span class="event-map-marker-core"></span>',
+        iconSize: [32, 42],
+        iconAnchor: [16, 37]
+      })
+    }).addTo(previewMap);
+    if (carouselElements.map) {
+      carouselElements.map.setAttribute('aria-label', 'Campus map preview centered on ' + event.venue);
+    }
+  };
+
+  const renderCarouselDots = () => {
+    if (!carouselElements.dots) return;
+    carouselElements.dots.replaceChildren();
+    events.forEach((event, index) => {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'carousel-dot' + (index === carouselIndex ? ' is-active' : '');
+      dot.setAttribute('aria-label', 'Show event ' + (index + 1) + ': ' + event.title);
+      dot.setAttribute('aria-pressed', String(index === carouselIndex));
+      dot.addEventListener('click', () => showCarouselEvent(index, true));
+      carouselElements.dots.append(dot);
+    });
+  };
+
+  const showCarouselEvent = (nextIndex, userInitiated = false) => {
+    if (!events.length) return;
+    carouselIndex = (nextIndex + events.length) % events.length;
+    const event = events[carouselIndex];
+    const detailUrl = '/events/' + encodeURIComponent(event.slug);
+
+    if (carouselElements.mapLink) {
+      carouselElements.mapLink.href = detailUrl;
+      carouselElements.mapLink.setAttribute('aria-label', 'Open details for ' + event.title);
+    }
+    if (carouselElements.mapVenue) carouselElements.mapVenue.textContent = event.venue;
+    if (carouselElements.category) carouselElements.category.textContent = event.category;
+    if (carouselElements.date) {
+      carouselElements.date.textContent = formatLongDate(event.startDate) + ' · ' + formatTime(event.startTime);
+    }
+    if (carouselElements.title) carouselElements.title.textContent = event.title;
+    if (carouselElements.description) carouselElements.description.textContent =
+      String(event.description || '').split('Confirm the details')[0].split('Check with the club')[0].split('Verify the venue')[0].split('Follow official campus channels')[0].trim();
+    if (carouselElements.venue) carouselElements.venue.textContent = event.venue;
+    if (carouselElements.details) carouselElements.details.href = detailUrl;
+    if (carouselElements.counter) {
+      carouselElements.counter.textContent = pad2(carouselIndex + 1) + ' / ' + pad2(events.length);
+    }
+
+    updatePreviewLocation(event);
+    renderCarouselDots();
+    if (userInitiated) restartCarouselTimer();
+  };
+
+  const stopCarouselTimer = () => {
+    if (carouselTimer) window.clearInterval(carouselTimer);
+    carouselTimer = null;
+  };
+
+  const startCarouselTimer = () => {
+    stopCarouselTimer();
+    if (carouselIsPaused || events.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    carouselTimer = window.setInterval(() => showCarouselEvent(carouselIndex + 1), 7000);
+  };
+
+  const restartCarouselTimer = () => {
+    stopCarouselTimer();
+    startCarouselTimer();
+  };
+
+  el('carouselPrevious')?.addEventListener('click', () => showCarouselEvent(carouselIndex - 1, true));
+  el('carouselNext')?.addEventListener('click', () => showCarouselEvent(carouselIndex + 1, true));
+
+  const carouselFrame = document.querySelector('.event-carousel');
+  carouselFrame?.addEventListener('mouseenter', () => { carouselIsPaused = true; stopCarouselTimer(); });
+  carouselFrame?.addEventListener('mouseleave', () => { carouselIsPaused = false; startCarouselTimer(); });
+  carouselFrame?.addEventListener('focusin', () => { carouselIsPaused = true; stopCarouselTimer(); });
+  carouselFrame?.addEventListener('focusout', (event) => {
+    if (!carouselFrame.contains(event.relatedTarget)) {
+      carouselIsPaused = false;
+      startCarouselTimer();
+    }
+  });
+
+  const setupPreviewMap = async () => {
+    const mapElement = carouselElements.map;
+    if (!mapElement || !events.length) return;
+
     try {
-      const value = JSON.parse(window.localStorage.getItem(SAVED_EVENTS_KEY) || '[]');
-      return new Set(Array.isArray(value) ? value.filter((id) => typeof id === 'string') : []);
-    } catch {
-      return new Set();
+      const responses = await Promise.all([
+        fetch('/maps/export_places.geojson', { cache: 'force-cache' }),
+        fetch('/maps/pedestrian_paths_edits.geojson', { cache: 'force-cache' }),
+        fetch('/maps/gates.geojson', { cache: 'force-cache' }),
+        fetch('/maps/perimeter.geojson', { cache: 'force-cache' })
+      ]);
+      if (responses.some((response) => !response.ok)) throw new Error('Campus map data could not be loaded.');
+      const [places, paths, gates, perimeter] = await Promise.all(responses.map((response) => response.json()));
+
+      previewMap = L.map(mapElement, {
+        zoomControl: false,
+        attributionControl: false,
+        dragging: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+        keyboard: false,
+        touchZoom: false,
+        tap: false,
+        minZoom: 17,
+        maxZoom: 24
+      }).setView([events[0].lat, events[0].lng], 18.4);
+
+      const isRoad = (feature) => Boolean(feature?.properties?.highway || feature?.properties?.route);
+      const colors = { building: '#dedbd4', water: '#b9dce7', green: '#d9e6d2', park: '#d3e4cc', land: '#eef0ee' };
+
+      L.geoJSON(places, {
+        filter: (feature) => !isRoad(feature),
+        style: (feature) => {
+          const p = feature?.properties || {};
+          if (p.natural === 'water' || p.waterway) return { color: '#9ac6d3', weight: 1, fillColor: colors.water, fillOpacity: 0.95 };
+          if (p.leisure || p.landuse) return { color: '#b7c7b0', weight: 0.7, fillColor: p.leisure === 'park' ? colors.park : colors.green, fillOpacity: 0.9 };
+          if (p.amenity === 'parking') return { color: '#c4c1bb', weight: 0.7, fillColor: '#dfe0dd', fillOpacity: 0.9 };
+          if (p.building) return { color: '#bdb8af', weight: 0.7, fillColor: colors.building, fillOpacity: 1 };
+          return { color: '#d1cec8', weight: 0.7, fillColor: colors.land, fillOpacity: 0.85 };
+        },
+        interactive: false
+      }).addTo(previewMap);
+
+      const categoryOf = (feature) => {
+        const category = String(feature?.properties?.category || '').trim();
+        if (['Main Road', 'Road', 'Ground', 'Pedestrian Path'].includes(category)) return category;
+        const highway = String(feature?.properties?.highway || '').toLowerCase();
+        if (['motorway', 'trunk', 'primary', 'secondary', 'tertiary'].includes(highway)) return 'Main Road';
+        if (['residential', 'unclassified', 'service', 'living_street', 'road', 'track'].includes(highway)) return 'Road';
+        return 'Pedestrian Path';
+      };
+      const pathColors = { 'Main Road': '#e85d04', 'Road': '#f2b134', 'Ground': '#4f9d69', 'Pedestrian Path': '#2563eb' };
+      const pathWidths = { 'Main Road': 4.2, 'Road': 3.6, 'Ground': 3.7, 'Pedestrian Path': 3.2 };
+
+      L.geoJSON(places, {
+        filter: isRoad,
+        style: (feature) => ({ color: '#ffffff', weight: (pathWidths[categoryOf(feature)] || 3.2) + 2.5, opacity: 0.97, lineCap: 'round', lineJoin: 'round' }),
+        interactive: false
+      }).addTo(previewMap);
+      L.geoJSON(places, {
+        filter: isRoad,
+        style: (feature) => ({ color: pathColors[categoryOf(feature)], weight: pathWidths[categoryOf(feature)] || 3.2, opacity: 1, lineCap: 'round', lineJoin: 'round' }),
+        interactive: false
+      }).addTo(previewMap);
+      L.geoJSON(paths, {
+        style: (feature) => {
+          const category = categoryOf(feature);
+          return { color: pathColors[category], weight: pathWidths[category] || 3.2, opacity: 0.98, lineCap: 'round', lineJoin: 'round' };
+        },
+        interactive: false
+      }).addTo(previewMap);
+      L.geoJSON(gates, {
+        style: { color: '#475569', weight: 1.6, opacity: 0.95, fillColor: '#ffffff', fillOpacity: 0.18 },
+        interactive: false
+      }).addTo(previewMap);
+
+      const perimeterRing = perimeter?.features?.[0]?.geometry;
+      if (perimeterRing) L.geoJSON(perimeterRing, {
+        style: { color: '#6c8298', weight: 1, opacity: 0.65, dashArray: '4 5', fill: false },
+        interactive: false
+      }).addTo(previewMap);
+
+      previewReady = true;
+      showCarouselEvent(carouselIndex);
+      window.requestAnimationFrame(() => previewMap?.invalidateSize());
+    } catch (error) {
+      mapElement.classList.add('event-map-preview-unavailable');
+      mapElement.setAttribute('aria-label', 'Campus map preview unavailable. Event details are still available.');
     }
   };
 
-  let savedEvents = readSavedEvents();
+  showCarouselEvent(0);
+  void setupPreviewMap();
+  startCarouselTimer();
 
-  const syncSaveButtons = () => {
-    document.querySelectorAll('[data-save-event]').forEach((button) => {
-      const saved = savedEvents.has(button.dataset.saveEvent);
-      button.setAttribute('aria-pressed', String(saved));
-      button.textContent = saved ? 'Saved ✓' : 'Save event';
-    });
+  // --- Monthly calendar and private, editable plans stored in this browser ---
+  const today = new Date();
+  let selectedDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12);
+  let currentMonth = new Date(today.getFullYear(), today.getMonth(), 1, 12);
+  let plans = [];
+
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(SAVED_PLANS_KEY) || '[]');
+    plans = Array.isArray(stored) ? stored.filter((item) =>
+      item && typeof item.id === 'string' && typeof item.title === 'string' &&
+      typeof item.date === 'string'
+    ) : [];
+  } catch {
+    plans = [];
+  }
+
+  let editingPlanId = null;
+  const calendarDays = el('calendarDays');
+  const planForm = el('planForm');
+  const planDateInput = el('planDate');
+  const planIdInput = el('planId');
+  const planTitleInput = el('planTitle');
+  const planStartInput = el('planStartTime');
+  const planEndInput = el('planEndTime');
+  const planNotesInput = el('planNotes');
+
+  const eventsForDate = (key) => events
+    .filter((event) => event.startDate === key)
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  const plansForDate = (key) => plans
+    .filter((plan) => plan.date === key)
+    .sort((a, b) => String(a.startTime || '99:99').localeCompare(String(b.startTime || '99:99')));
+
+  const setSelectedDate = (date, changeMonth = true) => {
+    selectedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12);
+    if (changeMonth) currentMonth = new Date(date.getFullYear(), date.getMonth(), 1, 12);
+    renderCalendar();
+    renderAgenda();
   };
 
-  const renderEvents = () => {
-    const category = categoryInput?.value || '';
-    const department = departmentInput?.value || '';
-    const date = dateInput?.value || '';
-    const today = new Date();
-    const todayString = [
-      today.getFullYear(),
-      String(today.getMonth() + 1).padStart(2, '0'),
-      String(today.getDate()).padStart(2, '0')
-    ].join('-');
-    let visibleCount = 0;
+  const renderCalendar = () => {
+    if (!calendarDays) return;
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    el('calendarMonthLabel').textContent = currentMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    calendarDays.replaceChildren();
 
-    cards.forEach((card) => {
-      const matchesFilters =
-        (!category || card.dataset.category === category) &&
-        (!department || card.dataset.department === department) &&
-        (!date || card.dataset.date === date);
-      const isUpcoming = card.dataset.endDate >= todayString;
-      const isSaved = savedEvents.has(card.dataset.eventId);
-      const matchesTab = activeTab === 'saved' ? isSaved : isUpcoming;
-      const visible = matchesFilters && matchesTab;
-      card.hidden = !visible;
-      if (visible) visibleCount += 1;
-    });
+    const firstDayOffset = (new Date(year, month, 1).getDay() + 6) % 7;
+    for (let index = 0; index < 42; index += 1) {
+      const date = new Date(year, month, 1 - firstDayOffset + index, 12);
+      const key = dateKey(date);
+      const dayEvents = eventsForDate(key);
+      const dayPlans = plansForDate(key);
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'calendar-day';
+      if (date.getMonth() !== month) cell.classList.add('is-outside-month');
+      if (key === dateKey(today)) cell.classList.add('is-today');
+      if (key === dateKey(selectedDate)) cell.classList.add('is-selected');
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute('aria-pressed', String(key === dateKey(selectedDate)));
+      let label = formatLongDate(key);
+      if (dayEvents.length) label += ', ' + dayEvents.length + ' campus event' + (dayEvents.length === 1 ? '' : 's');
+      if (dayPlans.length) label += ', ' + dayPlans.length + ' personal plan' + (dayPlans.length === 1 ? '' : 's');
+      cell.setAttribute('aria-label', label);
 
-    if (emptyState) emptyState.hidden = visibleCount !== 0;
-    if (countLabel) {
-      countLabel.textContent = visibleCount + (visibleCount === 1 ? ' event' : ' events');
-    }
-    syncSaveButtons();
-  };
+      const dayNumber = document.createElement('span');
+      dayNumber.className = 'calendar-day-number';
+      dayNumber.textContent = String(date.getDate());
+      cell.append(dayNumber);
 
-  [categoryInput, departmentInput, dateInput].forEach((input) => {
-    input?.addEventListener('change', renderEvents);
-  });
-
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      activeTab = tab.dataset.eventTab === 'saved' ? 'saved' : 'upcoming';
-      tabs.forEach((item) => item.setAttribute('aria-pressed', String(item === tab)));
-      renderEvents();
-    });
-  });
-
-  document.querySelectorAll('[data-save-event]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const id = button.dataset.saveEvent;
-      if (!id) return;
-      if (savedEvents.has(id)) savedEvents.delete(id);
-      else savedEvents.add(id);
-      try {
-        window.localStorage.setItem(SAVED_EVENTS_KEY, JSON.stringify([...savedEvents]));
-      } catch {
-        // Saving remains session-local when browser storage is unavailable.
+      const indicators = document.createElement('span');
+      indicators.className = 'calendar-day-indicators';
+      if (dayEvents.length) {
+        const eventDot = document.createElement('i');
+        eventDot.className = 'calendar-indicator calendar-indicator-event';
+        eventDot.setAttribute('aria-label', 'Campus event');
+        indicators.append(eventDot);
       }
-      renderEvents();
-    });
+      if (dayPlans.length) {
+        const planDot = document.createElement('i');
+        planDot.className = 'calendar-indicator calendar-indicator-plan';
+        planDot.setAttribute('aria-label', 'Personal plan');
+        indicators.append(planDot);
+      }
+      if (dayEvents.length || dayPlans.length) {
+        const count = document.createElement('span');
+        count.className = 'calendar-day-count';
+        count.textContent = String(dayEvents.length + dayPlans.length);
+        indicators.append(count);
+      }
+      cell.append(indicators);
+      cell.addEventListener('click', () => setSelectedDate(date, true));
+      calendarDays.append(cell);
+    }
+  };
+
+  const makeAgendaHeading = (text) => {
+    const heading = document.createElement('h4');
+    heading.className = 'agenda-list-heading';
+    heading.textContent = text;
+    return heading;
+  };
+
+  const makeEmptyMessage = (text) => {
+    const node = document.createElement('p');
+    node.className = 'agenda-empty';
+    node.textContent = text;
+    return node;
+  };
+
+  const renderAgenda = () => {
+    const key = dateKey(selectedDate);
+    el('selectedDateTitle').textContent = parseDate(key).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const dayEvents = eventsForDate(key);
+    const dayPlans = plansForDate(key);
+    const agenda = el('dayAgenda');
+    agenda.replaceChildren();
+    el('agendaCount').textContent = (dayEvents.length + dayPlans.length) + ((dayEvents.length + dayPlans.length) === 1 ? ' item' : ' items');
+
+    if (!dayEvents.length && !dayPlans.length) {
+      agenda.append(makeEmptyMessage('Nothing scheduled for this day yet.'));
+    }
+
+    if (dayEvents.length) {
+      agenda.append(makeAgendaHeading('Campus events'));
+      dayEvents.forEach((event) => {
+        const item = document.createElement('a');
+        item.className = 'agenda-item agenda-event-item';
+        item.href = '/events/' + encodeURIComponent(event.slug);
+
+        const time = document.createElement('span');
+        time.className = 'agenda-item-time';
+        time.textContent = formatTime(event.startTime);
+        const content = document.createElement('span');
+        content.className = 'agenda-item-content';
+        const title = document.createElement('strong');
+        title.textContent = event.title;
+        const meta = document.createElement('small');
+        meta.textContent = event.venue + ' · ' + event.category;
+        content.append(title, meta);
+        item.append(time, content);
+        agenda.append(item);
+      });
+    }
+
+    if (dayPlans.length) {
+      agenda.append(makeAgendaHeading('My plans'));
+      dayPlans.forEach((plan) => {
+        const item = document.createElement('article');
+        item.className = 'agenda-item agenda-plan-item';
+        const time = document.createElement('span');
+        time.className = 'agenda-item-time';
+        time.textContent = formatTime(plan.startTime) || 'Plan';
+        const content = document.createElement('span');
+        content.className = 'agenda-item-content';
+        const title = document.createElement('strong');
+        title.textContent = plan.title;
+        const meta = document.createElement('small');
+        meta.textContent = (plan.endTime ? (formatTime(plan.startTime) || 'Any time') + ' – ' + formatTime(plan.endTime) : (formatTime(plan.startTime) || 'Personal plan')) + (plan.notes ? ' · ' + plan.notes : '');
+        content.append(title, meta);
+        const actions = document.createElement('span');
+        actions.className = 'agenda-item-actions';
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'agenda-mini-button';
+        edit.textContent = 'Edit';
+        edit.addEventListener('click', (clickEvent) => {
+          clickEvent.preventDefault();
+          clickEvent.stopPropagation();
+          beginEditPlan(plan);
+        });
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'agenda-mini-button agenda-delete-button';
+        remove.textContent = 'Delete';
+        remove.addEventListener('click', () => {
+          plans = plans.filter((candidate) => candidate.id !== plan.id);
+          savePlans();
+          renderCalendar();
+          renderAgenda();
+          el('planSaveStatus').textContent = 'Plan deleted.';
+        });
+        actions.append(edit, remove);
+        item.append(time, content, actions);
+        agenda.append(item);
+      });
+    }
+  };
+
+  const savePlans = () => {
+    try {
+      window.localStorage.setItem(SAVED_PLANS_KEY, JSON.stringify(plans));
+      return true;
+    } catch {
+      el('planSaveStatus').textContent = 'Browser storage is unavailable. Your changes may not persist after leaving this page.';
+      return false;
+    }
+  };
+
+  const resetPlanForm = () => {
+    editingPlanId = null;
+    planIdInput.value = '';
+    planForm.reset();
+    planDateInput.value = dateKey(selectedDate);
+    el('planFormHeading').textContent = 'Add a plan';
+    el('savePlanButton').textContent = 'Save plan';
+    el('cancelEditPlan').hidden = true;
+  };
+
+  const beginEditPlan = (plan) => {
+    editingPlanId = plan.id;
+    planIdInput.value = plan.id;
+    planTitleInput.value = plan.title;
+    planDateInput.value = plan.date;
+    planStartInput.value = plan.startTime || '';
+    planEndInput.value = plan.endTime || '';
+    planNotesInput.value = plan.notes || '';
+    el('planFormHeading').textContent = 'Edit your plan';
+    el('savePlanButton').textContent = 'Update plan';
+    el('cancelEditPlan').hidden = false;
+    setSelectedDate(parseDate(plan.date), true);
+    planTitleInput.focus({ preventScroll: true });
+  };
+
+  planDateInput.addEventListener('change', () => {
+    if (!planDateInput.value) return;
+    setSelectedDate(parseDate(planDateInput.value), true);
   });
 
-  renderEvents();
+  el('cancelEditPlan').addEventListener('click', () => {
+    resetPlanForm();
+    el('planSaveStatus').textContent = '';
+    renderAgenda();
+  });
+
+  planForm.addEventListener('submit', (submitEvent) => {
+    submitEvent.preventDefault();
+    const title = planTitleInput.value.trim();
+    const date = planDateInput.value;
+    if (!title || !date) return;
+
+    const plan = {
+      id: editingPlanId || (window.crypto?.randomUUID ? window.crypto.randomUUID() : 'plan-' + Date.now()),
+      title,
+      date,
+      startTime: planStartInput.value,
+      endTime: planEndInput.value,
+      notes: planNotesInput.value.trim(),
+      updatedAt: new Date().toISOString()
+    };
+    if (plan.endTime && plan.startTime && plan.endTime < plan.startTime) {
+      el('planSaveStatus').textContent = 'End time should be after the start time.';
+      return;
+    }
+
+    if (editingPlanId) plans = plans.map((existing) => existing.id === editingPlanId ? plan : existing);
+    else plans.push(plan);
+
+    const saved = savePlans();
+    selectedDate = parseDate(date);
+    currentMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
+    renderCalendar();
+    renderAgenda();
+    resetPlanForm();
+    el('planSaveStatus').textContent = saved ? (editingPlanId ? 'Plan updated.' : 'Plan saved to this browser.') : 'Plan updated for this session only.';
+  });
+
+  el('calendarPreviousMonth').addEventListener('click', () => {
+    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1, 12);
+    renderCalendar();
+  });
+  el('calendarNextMonth').addEventListener('click', () => {
+    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1, 12);
+    renderCalendar();
+  });
+  el('calendarToday').addEventListener('click', () => setSelectedDate(today, true));
+
+  planDateInput.value = dateKey(selectedDate);
+  showCarouselEvent(0);
+  renderCalendar();
+  renderAgenda();
 </script>
