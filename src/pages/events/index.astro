@@ -326,8 +326,7 @@ const firstEvent = orderedEvents[0];
       carouselElements.date.textContent = formatLongDate(event.startDate) + ' · ' + formatTime(event.startTime);
     }
     if (carouselElements.title) carouselElements.title.textContent = event.title;
-    if (carouselElements.description) carouselElements.description.textContent =
-      String(event.description || '').split('Confirm the details')[0].split('Check with the club')[0].split('Verify the venue')[0].split('Follow official campus channels')[0].trim();
+    if (carouselElements.description) carouselElements.description.textContent = String(event.description || '');
     if (carouselElements.venue) carouselElements.venue.textContent = event.venue;
     if (carouselElements.details) {
       carouselElements.details.href = primaryUrl;
@@ -490,6 +489,25 @@ const firstEvent = orderedEvents[0];
     ) : [];
   } catch {
     plans = [];
+  }
+
+  const todayKey = dateKey(today);
+  const thisMonthKey = todayKey.slice(0, 7);
+  const hasUpcomingEventThisMonth = events.some((event) =>
+    event.startDate.slice(0, 7) === thisMonthKey && event.endDate >= todayKey
+  );
+  const hasPersonalPlanThisMonth = plans.some((plan) =>
+    plan.date.slice(0, 7) === thisMonthKey
+  );
+
+  // If there is nothing scheduled for the current month, open on the next event month.
+  // The Today button always returns to the current date.
+  if (!hasUpcomingEventThisMonth && !hasPersonalPlanThisMonth) {
+    const nextEvent = events.find((event) => event.endDate >= todayKey);
+    if (nextEvent) {
+      selectedDate = parseDate(nextEvent.startDate);
+      currentMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1, 12);
+    }
   }
 
   let editingPlanId = null;
