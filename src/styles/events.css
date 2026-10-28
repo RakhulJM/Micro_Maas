@@ -341,6 +341,20 @@
   background: #19b779;
   box-shadow: 0 0 0 3px rgba(25, 183, 121, .13);
 }
+.event-map-attribution {
+  position: absolute;
+  z-index: 500;
+  bottom: 88px;
+  left: 14px;
+  padding: 5px 7px;
+  border: 1px solid rgba(20, 39, 62, .08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .88);
+  color: #536477;
+  font-size: 7px;
+  pointer-events: none;
+}
+
 .event-map-bottomline {
   right: 14px;
   bottom: 14px;
