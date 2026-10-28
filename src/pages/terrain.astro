@@ -70,6 +70,27 @@ import 'leaflet/dist/leaflet.css';
         const radius = Number(perimeterFeature.properties.radius_m);
         const perimeterZoom = 18;
         const maxZoom = 23;
+        const mapViewStorageKey = 'campusmaas:map-view:v1';
+
+        const readSavedMapView = () => {
+          try {
+            const saved = JSON.parse(window.sessionStorage.getItem(mapViewStorageKey) || 'null');
+            const lat = Number(saved?.lat);
+            const lng = Number(saved?.lng);
+            const zoom = Number(saved?.zoom);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(zoom)) return null;
+            const savedCenter = L.latLng(lat, lng);
+            if (center.distanceTo(savedCenter) > radius + 1) return null;
+            return {
+              center: savedCenter,
+              zoom: Math.max(1, Math.min(maxZoom, zoom))
+            };
+          } catch {
+            return null;
+          }
+        };
+
+        const savedMapView = readSavedMapView();
 
         const latRadius = radius / 111320;
         const lonRadius =
@@ -80,6 +101,8 @@ import 'leaflet/dist/leaflet.css';
           [center.lat + latRadius, center.lng + lonRadius]
         );
 
+        const initialCenter = savedMapView?.center || center;
+        const initialZoom = savedMapView ? savedMapView.zoom : perimeterZoom;
         const map = L.map('terrainMap', {
           zoomControl: false,
           minZoom: 1,
@@ -88,7 +111,7 @@ import 'leaflet/dist/leaflet.css';
           maxBounds: circleBounds,
           maxBoundsViscosity: 1,
           preferCanvas: true
-        }).setView(center, perimeterZoom);
+        }).setView(initialCenter, initialZoom);
 
         // geotiff.js exposes fromArrayBuffer as a named export.
         const geotiff = await import(
@@ -482,6 +505,25 @@ import 'leaflet/dist/leaflet.css';
             clampToPerimeter();
           }
         });
+
+        const persistMapView = () => {
+          try {
+            const viewCenter = map.getCenter();
+            if (center.distanceTo(viewCenter) > radius + 1) return;
+            window.sessionStorage.setItem(mapViewStorageKey, JSON.stringify({
+              lat: viewCenter.lat,
+              lng: viewCenter.lng,
+              zoom: map.getZoom()
+            }));
+          } catch {
+            // Mode switching still works with the default view if storage is unavailable.
+          }
+        };
+
+        map.on('moveend', persistMapView);
+        map.on('zoomend', persistMapView);
+        document.querySelector('.map-switch')?.addEventListener('click', persistMapView);
+        persistMapView();
 
         const mapElement = map.getContainer();
 
