@@ -55,6 +55,14 @@ import PrintOrderPopup from '../../components/campusmaas/PrintOrderPopup.astro';
         <strong>Place an order</strong>
       </div>
 
+      <a class="user-events-link" href="/events">
+        <span>
+          <small>CAMPUS CALENDAR</small>
+          <strong>Discover campus events</strong>
+        </span>
+        <span class="user-events-arrow" aria-hidden="true">→</span>
+      </a>
+
       <div id="userVendorList" class="user-vendor-list">
         <div class="user-services-empty">Loading services…</div>
       </div>
@@ -1572,8 +1580,25 @@ const start = async () => {
   const userGenderFemale = document.getElementById('userGenderFemale');
   let selectedUserGroup = 'boys';
 
+  const eventRouteParams = new URLSearchParams(window.location.search);
+  const requestedEventVenue = eventRouteParams.get('eventVenue') || '';
+  const requestedEventVenueName = eventRouteParams.get('venueName') || 'Event venue';
+  const requestedEventLat = Number(eventRouteParams.get('lat'));
+  const requestedEventLng = Number(eventRouteParams.get('lng'));
+  const requestedEventPoint =
+    requestedEventVenue &&
+    Number.isFinite(requestedEventLat) &&
+    Number.isFinite(requestedEventLng)
+      ? L.latLng(requestedEventLat, requestedEventLng)
+      : null;
+  const hasRequestedEventDestination = Boolean(
+    requestedEventPoint && circleBounds.contains(requestedEventPoint)
+  );
+
+  let eventDestinationPreset = hasRequestedEventDestination;
+  let eventDestinationName = hasRequestedEventDestination ? requestedEventVenueName : '';
   let pointA = null;
-  let pointB = null;
+  let pointB = hasRequestedEventDestination ? requestedEventPoint : null;
   let pointAMarker = null;
   let pointBMarker = null;
   let routeCasing = null;
@@ -2855,7 +2880,11 @@ const start = async () => {
 
     if (!summary) {
       if (userTripFrom) userTripFrom.textContent = 'Point A selected';
-      if (userTripTo) userTripTo.textContent = 'Point B unreachable';
+      if (userTripTo) {
+        userTripTo.textContent = eventDestinationName && pointB
+          ? eventDestinationName + ' unreachable'
+          : 'Point B unreachable';
+      }
       if (userTripTime) userTripTime.textContent = 'No route';
       if (userTripDistance) userTripDistance.textContent = '—';
       return;
@@ -2887,7 +2916,11 @@ const start = async () => {
     );
 
     if (userTripFrom) userTripFrom.textContent = 'Point A selected';
-    if (userTripTo) userTripTo.textContent = 'Point B selected';
+    if (userTripTo) {
+      userTripTo.textContent = eventDestinationName && pointB
+        ? eventDestinationName
+        : 'Point B selected';
+    }
     if (userTripTime) userTripTime.textContent = minutes + ' min';
     if (userTripDistance) userTripDistance.textContent = formatDistance(summary.distance);
   };
@@ -3078,10 +3111,29 @@ const start = async () => {
 
   const handleUserMapClick = (event) => {
     const clicked = event.latlng;
-    const direction = (!pointA || pointB) ? 'in' : 'out';
+    const isSelectingEventOrigin = Boolean(eventDestinationPreset && pointB && !pointA);
+    const direction = isSelectingEventOrigin
+      ? 'out'
+      : ((!pointA || pointB) ? 'in' : 'out');
     const gateCheck = validateUserGateClick(clicked, direction);
 
     if (!gateCheck.allowed) return;
+
+    if (isSelectingEventOrigin) {
+      clearRouteRendering();
+      pointA = clicked;
+      const gateName = gateCheck.nearest?.gate?.properties?.name;
+      if (userTripFrom) {
+        userTripFrom.textContent = gateName
+          ? gateName + ' selected'
+          : 'Point A selected';
+      }
+      if (userTripTo) userTripTo.textContent = eventDestinationName || 'Event venue';
+      eventDestinationPreset = false;
+      renderEndpointMarkers();
+      renderUserRoute();
+      return;
+    }
 
     /*
      * User endpoints are the exact coordinates of the click.
@@ -3091,6 +3143,8 @@ const start = async () => {
       clearRouteRendering();
       pointA = clicked;
       pointB = null;
+      eventDestinationName = '';
+      eventDestinationPreset = false;
       resetTripSummary();
 
       const gateName = gateCheck.nearest?.gate?.properties?.name;
@@ -3105,6 +3159,8 @@ const start = async () => {
     }
 
     pointB = clicked;
+    eventDestinationName = '';
+    eventDestinationPreset = false;
     if (userTripTo) {
       const gateName = gateCheck.nearest?.gate?.properties?.name;
       userTripTo.textContent = gateName
@@ -3115,7 +3171,14 @@ const start = async () => {
     renderUserRoute();
   };
 
-    resetTripSummary();
+  resetTripSummary();
+  if (eventDestinationPreset && pointB) {
+    if (userTripFrom) userTripFrom.textContent = 'Choose Point A on map';
+    if (userTripTo) userTripTo.textContent = eventDestinationName;
+    if (userTripTime) userTripTime.textContent = 'Select Point A';
+    if (userTripDistance) userTripDistance.textContent = 'Event venue';
+    renderEndpointMarkers();
+  }
   map.on('click', handleUserMapClick);
 
   const colors = {
@@ -3697,5 +3760,47 @@ void start().catch((error) => {
       font-size: 15px;
     }
 
+  }
+
+  .user-events-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 14px;
+    padding: 13px 14px;
+    border: 1px solid rgba(83, 168, 255, .22);
+    border-radius: 13px;
+    background: rgba(36, 89, 211, .11);
+    color: #eaf5ff;
+    text-decoration: none;
+    transition: background .18s ease, border-color .18s ease;
+  }
+
+  .user-events-link:hover {
+    border-color: rgba(83, 168, 255, .5);
+    background: rgba(36, 89, 211, .2);
+  }
+
+  .user-events-link small {
+    display: block;
+    margin-bottom: 4px;
+    color: #8ebdff;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .1em;
+  }
+
+  .user-events-link strong {
+    display: block;
+    color: #f1f7ff;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .user-events-arrow {
+    color: #8ebdff;
+    font-size: 22px;
+    line-height: 1;
   }
 </style>
