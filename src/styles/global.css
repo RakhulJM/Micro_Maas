@@ -1411,7 +1411,6 @@ body {
 .brand,
 .ghost-btn,
 .profile,
-.map-switch,
 .map-controls button,
 .path-toggle,
 .route-toggle,
@@ -1431,7 +1430,6 @@ body {
 
 .brand:hover,
 .ghost-btn:hover,
-.map-switch:hover,
 .map-controls button:hover,
 .path-toggle:hover,
 .route-toggle:hover,
@@ -1453,7 +1451,6 @@ body {
 
 .ghost-btn,
 .profile,
-.map-switch,
 .map-controls button,
 .path-toggle,
 .route-toggle,
