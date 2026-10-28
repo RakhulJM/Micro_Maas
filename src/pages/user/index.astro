@@ -4,11 +4,57 @@ import '../../styles/global.css';
 import 'leaflet/dist/leaflet.css';
 import FoodOrderPopup from '../../components/campusmaas/FoodOrderPopup.astro';
 import PrintOrderPopup from '../../components/campusmaas/PrintOrderPopup.astro';
+import events from '../../data/events.json';
+
+const campusEvents = [...events].sort((a, b) =>
+  (a.startDate + a.startTime).localeCompare(b.startDate + b.startTime)
+);
 ---
 
 <MainLayout title="CampusMaaS">
   <main class="user-map-page">
     <div id="map" class="map map-local" aria-label="CampusMaaS campus map"></div>
+
+    <section
+      class="user-event-discovery"
+      id="userEventDiscovery"
+      data-events={JSON.stringify(campusEvents)}
+      aria-label="Campus event discovery"
+    >
+      <div class="user-event-discovery-heading">
+        <span class="user-services-kicker">EVENT DISCOVERY</span>
+        <span class="user-event-discovery-count" id="userEventCounter">01 / 04</span>
+      </div>
+      <div class="user-event-discovery-body">
+        <a class="user-event-poster-link" id="userEventPosterLink" href={"/events/" + campusEvents[0].slug} aria-label="Open event details">
+          <img
+            class="user-event-poster"
+            id="userEventPoster"
+            src={campusEvents[0].poster}
+            alt={campusEvents[0].title + " poster"}
+            width="120"
+            height="160"
+            loading="eager"
+            decoding="async"
+          />
+          <span class="user-event-poster-badge">DEMO</span>
+        </a>
+        <div class="user-event-discovery-copy" aria-live="polite">
+          <span class="user-event-discovery-category" id="userEventCategory">{campusEvents[0].category}</span>
+          <a class="user-event-discovery-title" id="userEventTitle" href={"/events/" + campusEvents[0].slug}>{campusEvents[0].title}</a>
+          <span class="user-event-discovery-date" id="userEventDate">{new Date(campusEvents[0].startDate + "T12:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })} · {campusEvents[0].startTime}</span>
+          <span class="user-event-discovery-venue" id="userEventVenue">{campusEvents[0].venue}</span>
+          <div class="user-event-discovery-actions">
+            <a class="user-event-discovery-cta" id="userEventOpen" href={"/events/" + campusEvents[0].slug}>View event <span aria-hidden="true">↗</span></a>
+            <div class="user-event-discovery-controls" aria-label="Event carousel controls">
+              <button type="button" id="userEventPrevious" aria-label="Previous event">‹</button>
+              <button type="button" id="userEventNext" aria-label="Next event">›</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="user-event-discovery-progress" id="userEventProgress" aria-label="Choose event"></div>
+    </section>
 
     <section class="user-trip-card" aria-label="Campus trip">
       <div class="user-trip-field">
