@@ -36,11 +36,14 @@ The `/user` page is the end-user campus map. It provides:
 - Male/Female selection for gender-specific access rules
 - No developer or map-editing controls
 
-## Campus events
+## Campus calendar
 
-- `/events` lists upcoming campus activities and supports filtering by category, department, and date.
-- Event listings can be saved in the current browser using local storage.
-- `/events/:slug` provides event details, a downloadable `.ics` calendar invite, and a link to navigate to the venue on the campus map.
+- `/events` opens with a moving event carousel and a map preview drawn from the same local campus GeoJSON used by CampusMaaS.
+- The month grid highlights campus events and personal plans; selecting a day opens its agenda.
+- Students can create, edit, and delete personal plans. Plans are stored in the current browser with local storage and do not sync across devices.
+- If the current month has no upcoming events or plans, the calendar opens on the next month containing an event. The **Today** button returns to the current date.
+- `/events/:slug` provides event details, a downloadable `.ics` calendar invite, optional registration/source links, and a link to navigate to the venue on the campus map.
+- When an event has a registration or source URL, the carousel links directly to it. Otherwise, it opens the event details page.
 - Event venue navigation preselects the destination; the user selects Point A on the map to calculate a route.
 
 ### Demo-data limitation
