@@ -33,10 +33,12 @@ The `/user` page is the end-user campus map. It provides:
 - Point A and Point B selection
 - Walking route calculation on the active pedestrian network
 - Campus gate access-rule checking
-- Male/Female selection for gender-specific access rules
+- Male/Female selection for independently configured gender-specific access rules
 - Compact bottom-left event poster carousel with automatic rotation and manual controls
 - Event poster links use registration/source URLs when supplied, otherwise they open event details
 - No developer or map-editing controls
+
+Access policies have separate `boys` and `girls` entries. The current entries intentionally mirror each other: Gate 06 is preferred and Gate 09 is available only during 07:00–08:45, 12:25–13:25, and 16:15–18:00 every day. No different male/female restrictions were supplied, so the rules remain behaviorally equal while being independently configurable. Only change either group’s restrictions when confirmed by official campus policy.
 
 The event poster assets are stored in `public/event-posters/` and referenced by `src/data/events.json`. Current posters are prototype artwork for clearly labelled demo events.
 
