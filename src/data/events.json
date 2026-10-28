@@ -18,7 +18,8 @@
     "registrationUrl": "",
     "sourceUrl": "",
     "isDemo": true,
-    "dataSource": "demo"
+    "dataSource": "demo",
+    "poster": "/event-posters/student-innovation.svg"
   },
   {
     "id": "event-cultural-meet",
@@ -39,7 +40,8 @@
     "registrationUrl": "",
     "sourceUrl": "",
     "isDemo": true,
-    "dataSource": "demo"
+    "dataSource": "demo",
+    "poster": "/event-posters/cultural-club.svg"
   },
   {
     "id": "event-sports-orientation",
@@ -60,7 +62,8 @@
     "registrationUrl": "",
     "sourceUrl": "",
     "isDemo": true,
-    "dataSource": "demo"
+    "dataSource": "demo",
+    "poster": "/event-posters/sports-fitness.svg"
   },
   {
     "id": "event-green-campus",
@@ -81,6 +84,7 @@
     "registrationUrl": "",
     "sourceUrl": "",
     "isDemo": true,
-    "dataSource": "demo"
+    "dataSource": "demo",
+    "poster": "/event-posters/green-campus.svg"
   }
 ]
