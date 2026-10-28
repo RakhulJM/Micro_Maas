@@ -21,15 +21,15 @@ const readJson = (relativePath) => {
 
 const uniqueIds = (items, label, getId = (item) => item?.id) => {
   const seen = new Set();
-  for (const item of items) {
-    const id = String(getId(item) ?? '').trim();
+  items.forEach((item, index) => {
+    const id = String(getId(item, index) ?? '').trim();
     if (!id) {
       errors.push(`${label}: item has no ID.`);
     } else if (seen.has(id)) {
       errors.push(`${label}: duplicate ID "${id}".`);
     }
     seen.add(id);
-  }
+  });
   return seen;
 };
 
@@ -146,7 +146,7 @@ if (vendorsData) {
           errors.push(`Food menu for "${optionId}" has an invalid schema or mismatched IDs.`);
         }
         if (menu?.menu) {
-          uniqueIds(menu.menu, `Food menu "${optionId}"');
+          uniqueIds(menu.menu, `Food menu "${optionId}"`);
           for (const item of menu.menu) {
             if (!String(item?.name ?? '').trim()) errors.push(`Food menu "${optionId}" contains an unnamed item.`);
             if (!Number.isFinite(Number(item?.price)) || Number(item.price) < 0) errors.push(`Food item "${item?.id ?? '(missing ID)'}" has an invalid price.`);
