@@ -1770,6 +1770,49 @@
         updateBuildingLabels();
       });
 
+      // Carry the current view between the standard map and terrain view.
+      // The saved center is only restored when it remains inside the campus radius.
+      const mapViewStorageKey = 'campusmaas:map-view:v1';
+      const readSavedMapView = () => {
+        try {
+          const saved = JSON.parse(window.sessionStorage.getItem(mapViewStorageKey) || 'null');
+          const lat = Number(saved?.lat);
+          const lng = Number(saved?.lng);
+          const zoom = Number(saved?.zoom);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(zoom)) return null;
+          const savedCenter = L.latLng(lat, lng);
+          if (center.distanceTo(savedCenter) > radius + 1) return null;
+          return {
+            center: savedCenter,
+            zoom: Math.max(perimeterZoom, Math.min(maxZoom, zoom))
+          };
+        } catch {
+          return null;
+        }
+      };
+
+      const persistMapView = () => {
+        try {
+          const viewCenter = map.getCenter();
+          window.sessionStorage.setItem(mapViewStorageKey, JSON.stringify({
+            lat: viewCenter.lat,
+            lng: viewCenter.lng,
+            zoom: map.getZoom()
+          }));
+        } catch {
+          // The switch still works with the default view when storage is unavailable.
+        }
+      };
+
+      const savedMapView = readSavedMapView();
+      if (savedMapView) {
+        map.setView(savedMapView.center, savedMapView.zoom, { animate: false });
+      }
+      map.on('moveend', persistMapView);
+      map.on('zoomend', persistMapView);
+      document.querySelector('.map-switch')?.addEventListener('click', persistMapView);
+      persistMapView();
+
       setTimeout(() => {
         map.invalidateSize();
         updateBuildingLabels();
