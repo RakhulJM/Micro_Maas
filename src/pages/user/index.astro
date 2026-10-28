@@ -4006,4 +4006,292 @@ void start().catch((error) => {
     font-size: 22px;
     line-height: 1;
   }
+
+  .user-event-discovery {
+    position: absolute;
+    z-index: 1200;
+    left: clamp(12px, 1.8vw, 22px);
+    bottom: clamp(16px, 2.2vw, 26px);
+    width: min(348px, calc(100vw - 86px));
+    padding: 11px 12px 9px;
+    border: 1px solid rgba(83, 168, 255, .22);
+    border-radius: 15px;
+    background: linear-gradient(145deg, rgba(7, 22, 38, .97), rgba(6, 18, 31, .96));
+    color: #edf6ff;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, .32);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .user-event-discovery[hidden] {
+    display: none !important;
+  }
+
+  .user-event-discovery-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 9px;
+  }
+
+  .user-event-discovery-count {
+    color: #6d89a4;
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .user-event-discovery-body {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    align-items: stretch;
+    gap: 11px;
+  }
+
+  .user-event-poster-link {
+    position: relative;
+    display: block;
+    width: 84px;
+    height: 112px;
+    overflow: hidden;
+    border: 1px solid rgba(103, 198, 255, .18);
+    border-radius: 8px;
+    background: #102944;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, .22);
+  }
+
+  .user-event-poster {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    transition: transform .25s ease, opacity .18s ease;
+  }
+
+  .user-event-poster-link:hover .user-event-poster {
+    transform: scale(1.035);
+  }
+
+  .user-event-poster-badge {
+    position: absolute;
+    left: 5px;
+    bottom: 5px;
+    padding: 3px 5px;
+    border: 1px solid rgba(242, 177, 52, .3);
+    border-radius: 4px;
+    background: rgba(7, 22, 38, .88);
+    color: #e2c27b;
+    font-size: 6px;
+    font-weight: 900;
+    letter-spacing: .12em;
+  }
+
+  .user-event-discovery-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    padding: 1px 0 0;
+  }
+
+  .user-event-discovery-category {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    margin-bottom: 5px;
+    color: #67c6ff;
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: .13em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .user-event-discovery-title {
+    display: -webkit-box;
+    max-width: 100%;
+    overflow: hidden;
+    color: #f1f7ff;
+    font: 600 13px/1.25 'Space Grotesk', sans-serif;
+    letter-spacing: -.015em;
+    text-decoration: none;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .user-event-discovery-title:hover {
+    color: #8fd5ff;
+  }
+
+  .user-event-discovery-date {
+    display: block;
+    margin-top: 6px;
+    color: #8db2d1;
+    font-size: 8px;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .user-event-discovery-venue {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    margin-top: 4px;
+    color: #7891aa;
+    font-size: 8px;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .user-event-discovery-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    margin-top: auto;
+    padding-top: 8px;
+  }
+
+  .user-event-discovery-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid rgba(22, 135, 255, .72);
+    border-radius: 7px;
+    background: #1687ff;
+    color: #fff;
+    font-size: 8px;
+    font-weight: 800;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(22, 135, 255, .14);
+  }
+
+  .user-event-discovery-cta:hover {
+    background: #287fe0;
+  }
+
+  .user-event-discovery-controls {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+
+  .user-event-discovery-controls button {
+    display: grid;
+    place-items: center;
+    width: 25px;
+    height: 25px;
+    padding: 0;
+    border: 1px solid rgba(83, 168, 255, .18);
+    border-radius: 7px;
+    background: rgba(13, 39, 66, .8);
+    color: #bddfff;
+    cursor: pointer;
+    font-size: 17px;
+    line-height: 1;
+    transition: border-color .16s ease, background .16s ease;
+  }
+
+  .user-event-discovery-controls button:hover {
+    border-color: rgba(103, 198, 255, .48);
+    background: #12304c;
+  }
+
+  .user-event-discovery-progress {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding-top: 9px;
+    margin-top: 9px;
+    border-top: 1px solid rgba(117, 162, 206, .11);
+  }
+
+  .user-event-progress-dot {
+    width: 5px;
+    height: 5px;
+    padding: 0;
+    border: 0;
+    border-radius: 99px;
+    background: #3d5369;
+    cursor: pointer;
+    transition: width .18s ease, background .18s ease;
+  }
+
+  .user-event-progress-dot.is-active {
+    width: 18px;
+    background: #1687ff;
+  }
+
+  @media (max-width: 560px) {
+    .user-event-discovery {
+      left: 10px;
+      bottom: 12px;
+      width: min(328px, calc(100vw - 70px));
+      padding: 9px 9px 7px;
+      border-radius: 12px;
+    }
+
+    .user-event-discovery-heading {
+      margin-bottom: 7px;
+    }
+
+    .user-event-discovery-body {
+      grid-template-columns: 70px minmax(0, 1fr);
+      gap: 8px;
+    }
+
+    .user-event-poster-link {
+      width: 70px;
+      height: 96px;
+      border-radius: 7px;
+    }
+
+    .user-event-discovery-title {
+      font-size: 11px;
+    }
+
+    .user-event-discovery-date,
+    .user-event-discovery-venue {
+      font-size: 7px;
+    }
+
+    .user-event-discovery-actions {
+      padding-top: 6px;
+      gap: 5px;
+    }
+
+    .user-event-discovery-cta {
+      padding: 6px 7px;
+      font-size: 7px;
+    }
+
+    .user-event-discovery-controls button {
+      width: 22px;
+      height: 23px;
+    }
+
+    .user-event-discovery-progress {
+      padding-top: 7px;
+      margin-top: 7px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .user-event-poster,
+    .user-event-progress-dot,
+    .user-event-discovery-controls button {
+      transition: none;
+    }
+  }
+
 </style>
