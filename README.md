@@ -34,7 +34,11 @@ The `/user` page is the end-user campus map. It provides:
 - Walking route calculation on the active pedestrian network
 - Campus gate access-rule checking
 - Male/Female selection for gender-specific access rules
+- Compact bottom-left event poster carousel with automatic rotation and manual controls
+- Event poster links use registration/source URLs when supplied, otherwise they open event details
 - No developer or map-editing controls
+
+The event poster assets are stored in `public/event-posters/` and referenced by `src/data/events.json`. Current posters are prototype artwork for clearly labelled demo events.
 
 ## Campus calendar
 
