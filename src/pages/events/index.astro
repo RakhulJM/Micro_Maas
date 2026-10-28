@@ -1,0 +1,220 @@
+---
+import MainLayout from '../../layouts/MainLayout.astro';
+import events from '../../data/events.json';
+import '../../styles/events.css';
+
+const categories = [...new Set(events.map((event) => event.category))].sort();
+const departments = [...new Set(events.map((event) => event.department))].sort();
+const dates = [...new Set(events.map((event) => event.startDate))].sort();
+
+const formatDate = (value) =>
+  new Date(`${value}T12:00:00`).toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+
+const formatTime = (value) => {
+  const [hour, minute] = value.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  return date.toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+};
+---
+
+<MainLayout title="Campus events | CampusMaaS">
+  <main class="events-page">
+    <div class="events-shell">
+      <nav class="events-topbar" aria-label="Page navigation">
+        <a class="events-brand" href="/user">CampusMaaS</a>
+        <a class="events-backlink" href="/user">← Back to campus map</a>
+      </nav>
+
+      <header class="events-hero">
+        <p class="events-eyebrow">Campus calendar</p>
+        <h1 class="events-title">Find what’s happening on campus.</h1>
+        <p class="events-intro">
+          Browse student activities, workshops, seminars and sports listings.
+          Save events for quick access, then open an event to view venue and calendar details.
+        </p>
+      </header>
+
+      <p class="events-notice" role="note">
+        Demo mode: every listing currently shown is sample data and is not a verified college announcement.
+        Confirm dates, venues and registration details with official campus channels before attending.
+      </p>
+
+      <section aria-label="Filter events">
+        <div class="events-controls">
+          <div class="events-field">
+            <label for="eventCategory">Category</label>
+            <select id="eventCategory">
+              <option value="">All categories</option>
+              {categories.map((category) => <option value={category}>{category}</option>)}
+            </select>
+          </div>
+          <div class="events-field">
+            <label for="eventDepartment">Department</label>
+            <select id="eventDepartment">
+              <option value="">All departments</option>
+              {departments.map((department) => <option value={department}>{department}</option>)}
+            </select>
+          </div>
+          <div class="events-field">
+            <label for="eventDate">Date</label>
+            <select id="eventDate">
+              <option value="">Any date</option>
+              {dates.map((date) => <option value={date}>{formatDate(date)}</option>)}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <div class="events-tabs" role="group" aria-label="Event view">
+        <button type="button" class="events-tab" data-event-tab="upcoming" aria-pressed="true">Upcoming</button>
+        <button type="button" class="events-tab" data-event-tab="saved" aria-pressed="false">Saved</button>
+      </div>
+
+      <div class="events-results-meta">
+        <span id="eventsResultsCount" aria-live="polite">{events.length} sample events</span>
+        <span>Saved events stay in this browser</span>
+      </div>
+
+      <section id="eventsGrid" class="events-grid" aria-label="Campus events">
+        {events.map((event) => (
+          <article
+            class="event-card"
+            data-event-card
+            data-event-id={event.id}
+            data-category={event.category}
+            data-department={event.department}
+            data-date={event.startDate}
+            data-end-date={event.endDate}
+          >
+            <div class="event-card-meta">
+              <span class="event-chip">{event.category}</span>
+              <span class="event-chip event-chip-demo">Demo listing</span>
+            </div>
+            <h2><a href={`/events/${event.slug}`}>{event.title}</a></h2>
+            <p>{event.description}</p>
+            <div class="event-card-facts">
+              <span>▦ {formatDate(event.startDate)} · {formatTime(event.startTime)}</span>
+              <span>⌖ {event.venue}</span>
+              <span>{event.department}</span>
+            </div>
+            <div class="event-card-actions">
+              <a class="events-button events-button-primary" href={`/events/${event.slug}`}>View details</a>
+              <button
+                type="button"
+                class="event-save-button"
+                data-save-event={event.id}
+                aria-pressed="false"
+              >Save event</button>
+            </div>
+          </article>
+        ))}
+        <p class="events-empty" id="eventsEmpty" hidden>No events match these filters.</p>
+      </section>
+
+      <footer class="events-footer">
+        This feed is a prototype. Listings are local JSON demo records; no live college announcement feed is connected yet.
+      </footer>
+    </div>
+  </main>
+</MainLayout>
+
+<script>
+  const SAVED_EVENTS_KEY = 'campusmaas:saved-events:v1';
+  const cards = Array.from(document.querySelectorAll('[data-event-card]'));
+  const categoryInput = document.getElementById('eventCategory');
+  const departmentInput = document.getElementById('eventDepartment');
+  const dateInput = document.getElementById('eventDate');
+  const emptyState = document.getElementById('eventsEmpty');
+  const countLabel = document.getElementById('eventsResultsCount');
+  const tabs = Array.from(document.querySelectorAll('[data-event-tab]'));
+  let activeTab = 'upcoming';
+
+  const readSavedEvents = () => {
+    try {
+      const value = JSON.parse(window.localStorage.getItem(SAVED_EVENTS_KEY) || '[]');
+      return new Set(Array.isArray(value) ? value.filter((id) => typeof id === 'string') : []);
+    } catch {
+      return new Set();
+    }
+  };
+
+  let savedEvents = readSavedEvents();
+
+  const syncSaveButtons = () => {
+    document.querySelectorAll('[data-save-event]').forEach((button) => {
+      const saved = savedEvents.has(button.dataset.saveEvent);
+      button.setAttribute('aria-pressed', String(saved));
+      button.textContent = saved ? 'Saved ✓' : 'Save event';
+    });
+  };
+
+  const renderEvents = () => {
+    const category = categoryInput?.value || '';
+    const department = departmentInput?.value || '';
+    const date = dateInput?.value || '';
+    const today = new Date();
+    const todayString = [
+      today.getFullYear(),
+      String(today.getMonth() + 1).padStart(2, '0'),
+      String(today.getDate()).padStart(2, '0')
+    ].join('-');
+    let visibleCount = 0;
+
+    cards.forEach((card) => {
+      const matchesFilters =
+        (!category || card.dataset.category === category) &&
+        (!department || card.dataset.department === department) &&
+        (!date || card.dataset.date === date);
+      const isUpcoming = card.dataset.endDate >= todayString;
+      const isSaved = savedEvents.has(card.dataset.eventId);
+      const matchesTab = activeTab === 'saved' ? isSaved : isUpcoming;
+      const visible = matchesFilters && matchesTab;
+      card.hidden = !visible;
+      if (visible) visibleCount += 1;
+    });
+
+    if (emptyState) emptyState.hidden = visibleCount !== 0;
+    if (countLabel) {
+      countLabel.textContent = visibleCount + (visibleCount === 1 ? ' event' : ' events');
+    }
+    syncSaveButtons();
+  };
+
+  [categoryInput, departmentInput, dateInput].forEach((input) => {
+    input?.addEventListener('change', renderEvents);
+  });
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      activeTab = tab.dataset.eventTab === 'saved' ? 'saved' : 'upcoming';
+      tabs.forEach((item) => item.setAttribute('aria-pressed', String(item === tab)));
+      renderEvents();
+    });
+  });
+
+  document.querySelectorAll('[data-save-event]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const id = button.dataset.saveEvent;
+      if (!id) return;
+      if (savedEvents.has(id)) savedEvents.delete(id);
+      else savedEvents.add(id);
+      try {
+        window.localStorage.setItem(SAVED_EVENTS_KEY, JSON.stringify([...savedEvents]));
+      } catch {
+        // Saving remains session-local when browser storage is unavailable.
+      }
+      renderEvents();
+    });
+  });
+
+  renderEvents();
+</script>
