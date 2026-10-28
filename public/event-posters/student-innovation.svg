@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 600" role="img" aria-labelledby="title desc">
+<title id="title">Student Innovation Showcase</title><desc id="desc">A navy and electric blue event poster with abstract circuit lines and glowing geometric shapes.</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#06101d"/><stop offset="1" stop-color="#103a69"/></linearGradient>
+  <linearGradient id="orb" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#67c6ff"/><stop offset="1" stop-color="#1687ff"/></linearGradient>
+  <pattern id="grid" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#67c6ff" stroke-opacity=".12"/></pattern>
+</defs>
+<rect width="480" height="600" fill="url(#bg)"/><rect width="480" height="600" fill="url(#grid)"/>
+<g fill="none" stroke="#67c6ff" stroke-opacity=".6" stroke-width="2">
+<path d="M-10 120H100V170H170V125H240"/><path d="M490 200H390V250H320V210H280"/><path d="M30 370H110V330H180"/><path d="M480 430H390V390H330"/>
+<circle cx="100" cy="120" r="6" fill="#67c6ff"/><circle cx="390" cy="200" r="6" fill="#67c6ff"/><circle cx="110" cy="370" r="6" fill="#67c6ff"/>
+</g>
+<circle cx="350" cy="128" r="76" fill="url(#orb)" opacity=".9"/><circle cx="350" cy="128" r="52" fill="#06101d"/><path d="M322 127l20 20 40-45" fill="none" stroke="#67c6ff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M265 185l80 38-38 72-80-38z" fill="#1687ff" fill-opacity=".25" stroke="#67c6ff" stroke-width="2"/>
+<path d="M300 204l22 10-11 20-22-10z" fill="#67c6ff"/>
+<text x="34" y="48" font-family="Arial,sans-serif" font-size="14" font-weight="700" letter-spacing="4" fill="#67c6ff">CAMPUSMAAS  /  EVENTS</text>
+<text x="34" y="300" font-family="Arial,sans-serif" font-size="19" font-weight="700" letter-spacing="5" fill="#a9ddff">STUDENT</text>
+<text x="30" y="356" font-family="Arial,sans-serif" font-size="47" font-weight="900" letter-spacing="-2" fill="#ffffff">INNOVATION</text>
+<text x="32" y="407" font-family="Arial,sans-serif" font-size="47" font-weight="900" letter-spacing="-2" fill="#ffffff">SHOWCASE</text>
+<path d="M34 434H446" stroke="#67c6ff" stroke-opacity=".55" stroke-width="2"/>
+<text x="34" y="468" font-family="Arial,sans-serif" font-size="15" font-weight="700" letter-spacing="2" fill="#67c6ff">IDEAS INTO IMPACT</text>
+<text x="34" y="530" font-family="Arial,sans-serif" font-size="14" fill="#bfd8ef">ENGINEERING  ·  PROJECTS  ·  PROTOTYPES</text>
+<text x="34" y="566" font-family="Arial,sans-serif" font-size="11" letter-spacing="2" fill="#7399bd">DEMO POSTER — DETAILS UNVERIFIED</text>
+</svg>
