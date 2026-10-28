@@ -152,6 +152,11 @@
   gap: 14px;
 }
 
+.event-card[hidden],
+.events-empty[hidden] {
+  display: none !important;
+}
+
 .event-card {
   display: flex;
   flex-direction: column;
