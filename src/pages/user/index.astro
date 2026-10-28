@@ -135,6 +135,163 @@ const campusEvents = [...events].sort((a, b) =>
     <script>
       import L from 'leaflet';
 
+const setupUserEventDiscovery = () => {
+  const root = document.getElementById('userEventDiscovery');
+  if (!root) return;
+
+  let events = [];
+  try {
+    const parsed = JSON.parse(root.dataset.events || '[]');
+    events = Array.isArray(parsed) ? parsed.filter((event) =>
+      event && event.title && event.slug && event.poster
+    ) : [];
+  } catch {
+    events = [];
+  }
+
+  if (!events.length) {
+    root.hidden = true;
+    return;
+  }
+
+  const poster = document.getElementById('userEventPoster');
+  const posterLink = document.getElementById('userEventPosterLink');
+  const title = document.getElementById('userEventTitle');
+  const category = document.getElementById('userEventCategory');
+  const date = document.getElementById('userEventDate');
+  const venue = document.getElementById('userEventVenue');
+  const openLink = document.getElementById('userEventOpen');
+  const counter = document.getElementById('userEventCounter');
+  const progress = document.getElementById('userEventProgress');
+  const previousButton = document.getElementById('userEventPrevious');
+  const nextButton = document.getElementById('userEventNext');
+
+  let activeIndex = 0;
+  let timer = null;
+  let paused = false;
+
+  const formatEventDate = (event) => {
+    const day = new Date(event.startDate + 'T12:00:00').toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short'
+    });
+    const time = String(event.startTime || '').split(':');
+    let timeLabel = '';
+    if (time.length === 2) {
+      const timeDate = new Date();
+      timeDate.setHours(Number(time[0]), Number(time[1]), 0, 0);
+      timeLabel = timeDate.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+    }
+    return day + (timeLabel ? ' · ' + timeLabel : '');
+  };
+
+  const getPrimaryUrl = (event) =>
+    event.registrationUrl || event.sourceUrl || ('/events/' + encodeURIComponent(event.slug));
+
+  const setLinkDestination = (link, event, preferredUrl = '') => {
+    if (!link) return;
+    const destination = preferredUrl || getPrimaryUrl(event);
+    link.href = destination;
+    if (/^https?:\/\//i.test(destination)) {
+      link.target = '_blank';
+      link.rel = 'noreferrer noopener';
+    } else {
+      link.removeAttribute('target');
+      link.removeAttribute('rel');
+    }
+  };
+
+  const renderProgress = () => {
+    if (!progress) return;
+    progress.replaceChildren();
+    events.forEach((event, index) => {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'user-event-progress-dot' + (index === activeIndex ? ' is-active' : '');
+      dot.setAttribute('aria-label', 'Show event ' + (index + 1) + ': ' + event.title);
+      dot.setAttribute('aria-pressed', String(index === activeIndex));
+      dot.addEventListener('click', () => showEvent(index, true));
+      progress.append(dot);
+    });
+  };
+
+  const showEvent = (nextIndex, restart = false) => {
+    if (!events.length) return;
+    activeIndex = (nextIndex + events.length) % events.length;
+    const event = events[activeIndex];
+    const detailsUrl = '/events/' + encodeURIComponent(event.slug);
+    const primaryUrl = getPrimaryUrl(event);
+
+    if (poster) {
+      poster.src = event.poster;
+      poster.alt = event.title + ' poster';
+    }
+    setLinkDestination(posterLink, event);
+    if (posterLink) posterLink.setAttribute('aria-label', 'Open ' + event.title);
+    if (category) category.textContent = event.category || 'Campus event';
+    if (title) title.textContent = event.title;
+    setLinkDestination(title, event, detailsUrl);
+    if (date) date.textContent = formatEventDate(event);
+    if (venue) venue.textContent = event.venue || 'Campus venue';
+    setLinkDestination(openLink, event);
+    if (openLink) {
+      openLink.innerHTML = '';
+      openLink.append(document.createTextNode(event.registrationUrl ? 'Register' : event.sourceUrl ? 'Event website' : 'View event'));
+      const arrow = document.createElement('span');
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = '↗';
+      openLink.append(arrow);
+    }
+    if (counter) counter.textContent = String(activeIndex + 1).padStart(2, '0') + ' / ' + String(events.length).padStart(2, '0');
+    renderProgress();
+    if (restart) restartTimer();
+  };
+
+  const stopTimer = () => {
+    if (timer) window.clearInterval(timer);
+    timer = null;
+  };
+  const startTimer = () => {
+    stopTimer();
+    if (
+      paused ||
+      events.length < 2 ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) return;
+    timer = window.setInterval(() => showEvent(activeIndex + 1), 7000);
+  };
+  const restartTimer = () => {
+    stopTimer();
+    startTimer();
+  };
+
+  previousButton?.addEventListener('click', () => showEvent(activeIndex - 1, true));
+  nextButton?.addEventListener('click', () => showEvent(activeIndex + 1, true));
+  root.addEventListener('mouseenter', () => {
+    paused = true;
+    stopTimer();
+  });
+  root.addEventListener('mouseleave', () => {
+    paused = false;
+    startTimer();
+  });
+  root.addEventListener('focusin', () => {
+    paused = true;
+    stopTimer();
+  });
+  root.addEventListener('focusout', (event) => {
+    if (!root.contains(event.relatedTarget)) {
+      paused = false;
+      startTimer();
+    }
+  });
+  window.addEventListener('pagehide', stopTimer, { once: true });
+
+  showEvent(0);
+  startTimer();
+};
+
+setupUserEventDiscovery();
 
 const PATH_COLORS = Object.freeze({
   'Main Road': '#e85d04',
