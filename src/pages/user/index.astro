@@ -9,6 +9,18 @@ import PrintOrderPopup from '../../components/campusmaas/PrintOrderPopup.astro';
 <MainLayout title="CampusMaaS">
   <main class="user-map-page">
     <div id="map" class="map map-local" aria-label="CampusMaaS campus map"></div>
+    <div class="user-location-controls">
+      <button type="button" id="userLocateButton" class="user-locate-button" aria-pressed="false" aria-describedby="userLocationStatus">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="7"></circle>
+          <circle cx="12" cy="12" r="2"></circle>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path>
+        </svg>
+        <span>My location</span>
+      </button>
+      <button type="button" id="userUseLocationAsStart" class="user-locate-button user-location-start-button" disabled>Use my location as start</button>
+      <p id="userLocationStatus" class="user-location-status" role="status" aria-live="polite" hidden></p>
+    </div>
 
     <section class="user-trip-card" aria-label="Campus trip">
       <div class="user-trip-field">
@@ -1549,14 +1561,183 @@ const start = async () => {
   const map = L.map(mapElement, {
     zoomControl: false,
     attributionControl: false,
-    minZoom: 18,
+    minZoom: 15,
     maxZoom: 25,
-    scrollWheelZoom: true,
-    maxBounds: circleBounds,
-    maxBoundsViscosity: 1
+    scrollWheelZoom: true
   }).setView(center, 18);
 
   mapElement.setAttribute('aria-label', 'CampusMaaS campus map');
+  // User location is opt-in. The browser controls permission and accuracy.
+  const locateButton = document.getElementById('userLocateButton');
+  const locationStatus = document.getElementById('userLocationStatus');
+  const useLocationAsStartButton = document.getElementById('userUseLocationAsStart');
+  let lastKnownUserLatLng = null;
+  let locationWatchId = null;
+  let hasCenteredOnUserLocation = false;
+  let userLocationMarker = null;
+  let userLocationAccuracy = null;
+  let hasAutoSetLocationAsStart = false;
+
+  // Keep the live location above the campus perimeter mask and all map layers.
+  if (!map.getPane('userLocationPane')) {
+    map.createPane('userLocationPane');
+    map.getPane('userLocationPane').style.zIndex = '700';
+    map.getPane('userLocationPane').style.pointerEvents = 'none';
+  }
+
+  const setLocationStatus = (message, visible = true) => {
+    if (!locationStatus) return;
+    locationStatus.textContent = message;
+    locationStatus.hidden = !visible;
+  };
+
+  const stopLocationTracking = () => {
+    if (locationWatchId !== null && 'geolocation' in navigator) {
+      navigator.geolocation.clearWatch(locationWatchId);
+    }
+    locationWatchId = null;
+    locateButton?.setAttribute('aria-pressed', 'false');
+    locateButton?.classList.remove('is-locating');
+    const label = locateButton?.querySelector('span');
+    if (label) label.textContent = 'My location';
+  };
+
+  const renderCurrentLocation = (position) => {
+    const latlng = L.latLng(position.coords.latitude, position.coords.longitude);
+    const accuracy = Math.max(5, Number(position.coords.accuracy) || 25);
+    lastKnownUserLatLng = latlng;
+    if (useLocationAsStartButton) useLocationAsStartButton.disabled = false;
+
+    // On the first successful fix, automatically use the user's real position
+    // as Point A. Subsequent GPS updates move Point A only while it still
+    // represents the live location, rather than overwriting a manually chosen start.
+    if (!hasAutoSetLocationAsStart) {
+      clearRouteRendering();
+      pointA = latlng;
+      pointB = null;
+      resetTripSummary();
+      if (userTripFrom) userTripFrom.textContent = 'Your current location';
+      if (userTripTo) userTripTo.textContent = 'Select Point B';
+      renderEndpointMarkers();
+      hasAutoSetLocationAsStart = true;
+    } else if (userTripFrom?.textContent === 'Your current location' && pointA) {
+      pointA = latlng;
+      renderEndpointMarkers();
+    }
+
+    if (!userLocationAccuracy) {
+      userLocationAccuracy = L.circle(latlng, {
+        radius: accuracy,
+        color: '#075de8',
+        weight: 2,
+        opacity: 0.9,
+        fillColor: '#1687ff',
+        fillOpacity: 0.16,
+        interactive: false,
+        bubblingMouseEvents: false,
+        pane: 'userLocationPane'
+      }).addTo(map);
+    } else {
+      userLocationAccuracy.setLatLng(latlng);
+      userLocationAccuracy.setRadius(accuracy);
+    }
+
+    // Use a Leaflet circle marker rather than a CSS-dependent icon so the dot
+    // remains visible even if page styles or marker pane styles change.
+    if (!userLocationMarker) {
+      userLocationMarker = L.circleMarker(latlng, {
+        radius: 9,
+        color: '#ffffff',
+        weight: 4,
+        fillColor: '#075de8',
+        fillOpacity: 1,
+        opacity: 1,
+        interactive: true,
+        bubblingMouseEvents: false,
+        pane: 'userLocationPane'
+      }).addTo(map);
+      userLocationMarker.bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
+    } else {
+      userLocationMarker.setLatLng(latlng);
+      userLocationMarker.setStyle({ radius: 9, color: '#ffffff', weight: 4, fillColor: '#075de8', fillOpacity: 1, opacity: 1 });
+      userLocationMarker.bringToFront();
+    }
+
+    // Center on the first fix only; later GPS updates move the dot without
+    // repeatedly pulling the map away from a user's manual exploration.
+    if (!hasCenteredOnUserLocation) {
+      map.setView(latlng, Math.max(map.getZoom(), 19), { animate: true });
+      hasCenteredOnUserLocation = true;
+    }
+    setLocationStatus('Location updated · reported accuracy about ' + Math.round(accuracy) + ' m');
+  };
+
+  useLocationAsStartButton?.addEventListener('click', () => {
+    if (!lastKnownUserLatLng) {
+      setLocationStatus('Get your location first, then set it as your starting point.');
+      return;
+    }
+
+    clearRouteRendering();
+    pointA = L.latLng(lastKnownUserLatLng.lat, lastKnownUserLatLng.lng);
+    pointB = null;
+    resetTripSummary();
+    if (userTripFrom) userTripFrom.textContent = 'Your current location';
+    if (userTripTo) userTripTo.textContent = 'Select Point B';
+    renderEndpointMarkers();
+    setLocationStatus('Your current location is set as Point A. Select a destination on the map.');
+  });
+
+  const locationErrorMessage = (error) => {
+    if (error?.code === 1) {
+      return 'Location permission was denied. Allow location access in your browser settings and try again.';
+    }
+    if (error?.code === 2) {
+      return 'Your location is unavailable. Check device location services and try again.';
+    }
+    if (error?.code === 3) {
+      return 'Location request timed out. Try again in a place with a clearer GPS signal.';
+    }
+    return 'Could not get your location. Please try again.';
+  };
+
+  locateButton?.addEventListener('click', () => {
+    if (locationWatchId !== null) {
+      stopLocationTracking();
+      setLocationStatus('Live location tracking stopped. Your last location remains the starting point.');
+      return;
+    }
+
+    if (!('geolocation' in navigator)) {
+      setLocationStatus('This browser does not support location services.');
+      return;
+    }
+
+    if (!window.isSecureContext) {
+      setLocationStatus('Location access requires HTTPS or localhost. Open CampusMaaS through a secure URL and try again.');
+      return;
+    }
+
+    setLocationStatus('Requesting location permission…');
+    locateButton.setAttribute('aria-pressed', 'true');
+    locateButton.classList.add('is-locating');
+    const label = locateButton.querySelector('span');
+    if (label) label.textContent = 'Stop tracking';
+
+    locationWatchId = navigator.geolocation.watchPosition(
+      renderCurrentLocation,
+      (error) => {
+        stopLocationTracking();
+        setLocationStatus(locationErrorMessage(error));
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 15000
+      }
+    );
+  });
+
 
   /*
    * Initial user trip: the logical campus entry point is Gate - 09,
@@ -3528,6 +3709,87 @@ void start().catch((error) => {
   .user-services-stack{top:10px;right:10px;width:calc(100vw - 20px);max-height:54vh}
 }
 </style><style>
+  .user-location-controls {
+    position: absolute;
+    z-index: 1200;
+    right: clamp(14px, 2vw, 24px);
+    bottom: clamp(18px, 3vh, 30px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    max-width: min(340px, calc(100vw - 28px));
+    pointer-events: none;
+  }
+
+  .user-locate-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    min-height: 46px;
+    padding: 0 16px;
+    border: 1px solid rgba(22, 119, 255, .24);
+    border-radius: 13px;
+    background: #ffffff;
+    color: #155fc0;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .2);
+    font: 700 13px/1 system-ui, sans-serif;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background .15s ease, transform .15s ease;
+  }
+
+  .user-locate-button:hover {
+    background: #f1f7ff;
+  }
+
+  .user-locate-button:focus-visible {
+    outline: 3px solid #1687ff;
+    outline-offset: 3px;
+  }
+
+  .user-locate-button.is-locating {
+    background: #eaf3ff;
+    color: #0b55b5;
+  }
+
+  .user-location-status {
+    max-width: 100%;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(148, 163, 184, .25);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .96);
+    color: #26384b;
+    box-shadow: 0 5px 18px rgba(15, 23, 42, .12);
+    font-size: 12px;
+    line-height: 1.4;
+    pointer-events: none;
+  }
+
+  .user-location-status[hidden] {
+    display: none;
+  }
+
+  .user-location-start-button {
+    justify-content: center;
+    background: #155fc0;
+    color: #ffffff;
+  }
+
+  .user-location-start-button:hover {
+    background: #0d4fa6;
+  }
+
+  .user-location-start-button:disabled {
+    cursor: not-allowed;
+    opacity: .62;
+    background: #e2e8f0;
+    color: #475569;
+    box-shadow: none;
+  }
+
   .user-map-page {
     position: relative;
     width: 100%;
