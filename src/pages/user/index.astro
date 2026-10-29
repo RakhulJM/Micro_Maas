@@ -5014,3 +5014,308 @@ void start().catch((error) => {
   .user-services-stack { width: min(270px, calc(100vw - 20px)) !important; }
 }
 </style>
+
+
+<style is:global>
+/* CampusMaaS HUD redesign — unified visual system and responsive layout */
+.user-map-page {
+  --hud-ink: #eaf5ff;
+  --hud-muted: #8ca6c0;
+  --hud-line: rgba(88, 185, 255, .28);
+  --hud-cyan: #55d8ff;
+  --hud-blue: #218bff;
+  background: #081321 !important;
+  color: var(--hud-ink);
+  font-family: Inter, "Segoe UI", sans-serif;
+}
+.user-map-page :global(.leaflet-tile-pane) {
+  filter: saturate(.76) contrast(1.04) brightness(.91);
+}
+.user-map-page :global(.leaflet-control-zoom),
+.user-map-page :global(.leaflet-control-attribution) {
+  border: 1px solid rgba(91, 182, 255, .22) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,.2) !important;
+}
+.user-map-page :global(.leaflet-control-zoom a) {
+  background: rgba(5, 20, 36, .94) !important;
+  color: #dff5ff !important;
+  border-color: rgba(91, 182, 255, .18) !important;
+}
+.user-map-page :global(.leaflet-control-attribution) {
+  background: rgba(5, 20, 36, .78) !important;
+  color: #9ab4cc !important;
+}
+.user-map-page :global(.leaflet-control-attribution a) { color: #68cfff !important; }
+.user-trip-card,
+.user-event-discovery,
+.user-services-label,
+.user-vendor-card,
+.user-orders-card,
+.user-order-composer,
+.user-location-status {
+  border: 1px solid var(--hud-line) !important;
+  background: linear-gradient(155deg, rgba(6, 23, 41, .97), rgba(5, 15, 29, .94)) !important;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, .32), inset 0 1px 0 rgba(215, 242, 255, .055) !important;
+  backdrop-filter: blur(20px) saturate(125%);
+  -webkit-backdrop-filter: blur(20px) saturate(125%);
+}
+.user-trip-card {
+  width: min(350px, calc(100vw - 36px)) !important;
+  padding: 17px !important;
+  border-radius: 19px !important;
+}
+.user-trip-card::before,
+.user-services-label::before {
+  content: "";
+  display: block;
+  width: 34px;
+  height: 3px;
+  flex: 0 0 3px;
+  margin-bottom: 10px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--hud-cyan), rgba(85,216,255,0));
+}
+.user-trip-field span,
+.user-trip-summary span,
+.user-trip-profile > span {
+  color: var(--hud-muted) !important;
+  font-size: 9px !important;
+  letter-spacing: .13em !important;
+}
+.user-trip-field strong {
+  color: #f1f8ff !important;
+  font-size: 14px !important;
+  line-height: 1.35;
+}
+.user-trip-divider { background: rgba(126, 184, 226, .17) !important; }
+.user-trip-summary { gap: 9px !important; }
+.user-trip-summary > div {
+  padding: 12px !important;
+  border: 1px solid rgba(89, 174, 238, .2) !important;
+  border-radius: 13px !important;
+  background: linear-gradient(145deg, rgba(35, 83, 122, .25), rgba(14, 37, 60, .25)) !important;
+}
+.user-trip-summary strong { font-size: 17px !important; }
+.user-gender-toggle { gap: 6px; }
+.user-gender-button {
+  min-height: 34px;
+  border-radius: 10px !important;
+  border-color: rgba(91, 182, 255, .2) !important;
+  background: rgba(10, 32, 53, .8) !important;
+  color: #a9c0d7 !important;
+}
+.user-gender-button.is-active {
+  border-color: rgba(65, 193, 255, .65) !important;
+  background: rgba(16, 116, 190, .25) !important;
+  color: #dff7ff !important;
+  box-shadow: inset 0 0 0 1px rgba(65,193,255,.08);
+}
+.user-services-stack { gap: 9px !important; }
+.user-services-label {
+  min-height: 70px;
+  padding: 13px 15px !important;
+  border-radius: 17px !important;
+}
+.user-services-label::before { margin-bottom: 0; }
+.user-services-label-copy { flex: 1; }
+.user-services-kicker {
+  color: var(--hud-cyan) !important;
+  font-size: 9px !important;
+  letter-spacing: .16em !important;
+}
+.user-services-label strong { color: #f2f8ff; font-size: 15px !important; }
+.user-services-toggle-icon {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 11px !important;
+  background: rgba(25, 115, 174, .13);
+  color: var(--hud-cyan) !important;
+}
+.user-services-content { gap: 9px !important; }
+.user-events-link {
+  min-height: 68px;
+  padding: 13px 14px !important;
+  border: 1px solid rgba(87, 179, 246, .22) !important;
+  border-radius: 15px !important;
+  background: linear-gradient(120deg, rgba(20, 67, 105, .78), rgba(8, 30, 51, .9)) !important;
+  color: #e9f6ff !important;
+}
+.user-events-link small { color: #75bdf4 !important; font-size: 9px !important; letter-spacing: .12em; }
+.user-events-link strong { display: block; margin-top: 5px; color: #f0f8ff; font-size: 13px !important; }
+.user-events-arrow { color: var(--hud-cyan) !important; font-size: 22px !important; }
+.user-vendor-card,
+.user-orders-card { border-radius: 16px !important; padding: 13px !important; }
+.user-vendor-title { padding-bottom: 11px !important; }
+.user-vendor-index { width: 32px !important; height: 32px !important; border-radius: 10px !important; font-size: 10px !important; }
+.user-vendor-title>div:last-child>span { font-size: 8px !important; letter-spacing: .13em !important; }
+.user-vendor-title strong { font-size: 13px !important; }
+.user-vendor-options { gap: 8px !important; }
+.user-service-option {
+  min-height: 48px;
+  padding: 10px 11px !important;
+  border-color: rgba(90, 177, 237, .16) !important;
+  border-radius: 12px !important;
+  background: rgba(220, 241, 255, .045) !important;
+}
+.user-service-option:hover { border-color: rgba(85,216,255,.5) !important; background: rgba(26, 117, 179, .16) !important; }
+.user-service-main strong { font-size: 11px !important; }
+.user-service-main small { font-size: 9px !important; }
+.user-vendor-status { font-size: 8px !important; }
+.user-service-option .user-service-tail>b { width: 26px !important; height: 26px !important; border-radius: 9px !important; }
+.user-orders-head { padding-bottom: 11px !important; }
+.user-orders-head strong { font-size: 13px !important; }
+.user-orders-head>span { font-size: 9px !important; }
+.user-order-item { padding: 11px !important; border-radius: 11px !important; }
+.user-order-item strong { font-size: 9px !important; }
+.user-order-item span { font-size: 10px !important; }
+.user-order-item>b { font-size: 12px !important; }
+.user-event-discovery {
+  width: min(350px, calc(100vw - 40px)) !important;
+  padding: 13px !important;
+  border-radius: 18px !important;
+}
+.user-event-discovery-heading { margin-bottom: 10px; }
+.user-event-discovery-count { color: var(--hud-muted) !important; font-size: 9px !important; letter-spacing: .12em; }
+.user-event-poster-link { border-radius: 11px !important; overflow: hidden; }
+.user-event-poster { border-radius: 11px !important; }
+.user-event-discovery-category { color: var(--hud-cyan) !important; font-size: 9px !important; letter-spacing: .13em; }
+.user-event-discovery-title { color: #f1f8ff !important; font-size: 14px !important; line-height: 1.3; }
+.user-event-discovery-date { color: #b5cbe0 !important; font-size: 10px !important; }
+.user-event-discovery-venue { color: #849fb8 !important; font-size: 9px !important; }
+.user-event-discovery-cta {
+  min-height: 36px;
+  padding: 9px 12px !important;
+  border-radius: 10px !important;
+  background: linear-gradient(110deg, #087eea, #16b8e9) !important;
+  color: white !important;
+  font-size: 10px !important;
+}
+.user-event-discovery-controls button {
+  width: 34px !important;
+  height: 34px !important;
+  border: 1px solid rgba(91, 182, 255, .26) !important;
+  border-radius: 10px !important;
+  background: rgba(10, 36, 59, .9) !important;
+  color: #dff6ff !important;
+}
+.user-event-discovery-progress { margin-top: 10px !important; }
+.user-location-controls { gap: 8px !important; }
+.user-locate-button {
+  min-height: 44px;
+  padding: 0 15px !important;
+  border: 1px solid rgba(86, 191, 255, .34) !important;
+  border-radius: 13px !important;
+  background: rgba(5, 22, 39, .96) !important;
+  color: #e3f7ff !important;
+  font-weight: 650 !important;
+}
+.user-location-start-button {
+  border-color: rgba(50, 180, 255, .45) !important;
+  background: linear-gradient(115deg, #087eea, #12b7e8) !important;
+  color: white !important;
+}
+.user-location-start-button:disabled {
+  background: rgba(13, 31, 49, .95) !important;
+  color: #7f9ab3 !important;
+}
+.user-map-page button:focus-visible,
+.user-map-page a:focus-visible {
+  outline: 2px solid var(--hud-cyan) !important;
+  outline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .user-map-page { min-height: 100dvh; }
+  .user-trip-card {
+    top: 12px !important;
+    left: 12px !important;
+    width: min(340px, calc(100vw - 24px)) !important;
+    padding: 13px !important;
+    border-radius: 17px !important;
+    max-height: 44dvh;
+    overflow: auto;
+  }
+  .user-trip-card::before { margin-bottom: 7px; }
+  .user-trip-divider { margin: 8px 0 !important; }
+  .user-trip-summary { margin-top: 9px !important; }
+  .user-trip-summary > div { padding: 9px 10px !important; }
+  .user-trip-summary strong { font-size: 15px !important; }
+  .user-trip-profile { margin-top: 9px !important; padding-top: 9px !important; }
+  .user-services-stack {
+    top: auto !important;
+    right: 12px !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    left: auto !important;
+    width: min(270px, calc(100vw - 24px)) !important;
+    max-height: 46dvh !important;
+    overflow: visible !important;
+    z-index: 1400 !important;
+  }
+  .user-services-label { min-height: 62px; padding: 10px 12px !important; }
+  .user-services-label::before { content: none !important; }
+  .user-services-label strong { font-size: 14px !important; }
+  .user-services-content {
+    max-height: calc(46dvh - 70px);
+    overflow: auto;
+    padding: 8px;
+    border: 1px solid var(--hud-line);
+    border-radius: 16px;
+    background: rgba(4, 17, 31, .97);
+    box-shadow: 0 18px 45px rgba(0,0,0,.42);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  .user-services-stack.is-collapsed .user-services-content { display: none !important; }
+  .user-location-controls {
+    right: 12px !important;
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px)) !important;
+    max-width: min(220px, calc(100vw - 24px)) !important;
+  }
+  .user-locate-button { min-height: 42px; padding: 0 12px !important; font-size: 12px !important; }
+  .user-event-discovery {
+    left: 12px !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    width: min(300px, calc(100vw - 320px)) !important;
+    min-width: 0 !important;
+    padding: 10px !important;
+  }
+  .user-event-discovery-title { font-size: 12px !important; }
+}
+@media (max-width: 560px) {
+  .user-trip-card {
+    width: min(320px, calc(100vw - 24px)) !important;
+    max-height: 40dvh;
+  }
+  .user-trip-field strong { font-size: 12px !important; }
+  .user-trip-summary strong { font-size: 14px !important; }
+  .user-trip-profile > span { padding-top: 7px; }
+  .user-services-stack { width: min(260px, calc(100vw - 24px)) !important; }
+  .user-event-discovery { width: min(250px, calc(100vw - 300px)) !important; }
+  .user-event-discovery-body { gap: 10px !important; }
+  .user-event-poster { width: 64px !important; height: 88px !important; object-fit: cover; }
+  .user-event-discovery-actions { gap: 6px !important; }
+  .user-event-discovery-cta { padding: 8px 9px !important; }
+}
+@media (max-width: 430px) {
+  .user-trip-card { width: calc(100vw - 24px) !important; }
+  .user-trip-profile { align-items: center !important; }
+  .user-services-stack { width: min(245px, calc(100vw - 24px)) !important; }
+  .user-location-controls { bottom: calc(86px + env(safe-area-inset-bottom, 0px)) !important; }
+  .user-event-discovery { display: none !important; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .user-trip-card, .user-event-discovery, .user-services-stack, .user-location-controls {
+    animation: hud-panel-enter .28s ease-out both;
+  }
+  @keyframes hud-panel-enter {
+    from { opacity: .7; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .user-trip-card, .user-event-discovery, .user-services-stack, .user-location-controls {
+    animation: none !important;
+  }
+}
+</style>
