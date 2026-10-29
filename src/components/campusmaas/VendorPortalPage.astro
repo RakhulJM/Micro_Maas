@@ -1709,3 +1709,106 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       .vendor-order-item-cancel:disabled,.vendor-print-file-cancel:disabled{opacity:.55;cursor:default}
       .vendor-print-file-card{position:relative}
 </style>
+
+
+<style is="global">
+/* Vendor pages share the same quiet institutional design language */
+.vendor-portal {
+  --vendor-ink: #172b3a;
+  --vendor-muted: #617585;
+  --vendor-navy: #102f4b;
+  --vendor-green: #176b4d;
+  --vendor-green-soft: #e8f2eb;
+  --vendor-border: #dbe3df;
+  font-family: "DM Sans", "Segoe UI", Arial, sans-serif !important;
+  color: var(--vendor-ink) !important;
+  background: #f3f6f4 !important;
+}
+.vendor-portal .vendor-portal-glow { opacity: .12 !important; filter: saturate(.35) !important; }
+.vendor-portal .vendor-portal-header,
+.vendor-portal .vendor-dashboard-overview,
+.vendor-portal .vendor-dashboard-orders,
+.vendor-portal .vendor-history-card,
+.vendor-portal .vendor-large-card,
+.vendor-portal .vendor-service-card,
+.vendor-portal .vendor-order-card,
+.vendor-portal .vendor-food-order-card,
+.vendor-portal .vendor-empty-card,
+.vendor-portal .vendor-loading-card {
+  border: 1px solid var(--vendor-border) !important;
+  border-radius: 13px !important;
+  background: #fff !important;
+  color: var(--vendor-ink) !important;
+  box-shadow: 0 4px 16px rgba(18,42,34,.05) !important;
+}
+.vendor-portal .vendor-header-status,
+.vendor-portal .vendor-brand-kicker,
+.vendor-portal .vendor-hero-kicker,
+.vendor-portal .vendor-print-queue-kicker {
+  color: var(--vendor-green) !important;
+  letter-spacing: .08em !important;
+}
+.vendor-portal .vendor-brand,
+.vendor-portal .vendor-back { color: var(--vendor-ink) !important; }
+.vendor-portal .vendor-brand-mark {
+  background: var(--vendor-navy) !important; color: #fff !important; box-shadow: none !important;
+}
+.vendor-portal .vendor-hero { padding-top: 24px !important; padding-bottom: 18px !important; }
+.vendor-portal .vendor-hero h1,
+.vendor-portal .vendor-dashboard-title,
+.vendor-portal .vendor-section-heading,
+.vendor-portal .vendor-large-title,
+.vendor-portal .vendor-service-card h2 {
+  color: var(--vendor-ink) !important; font-family: "DM Sans", "Segoe UI", Arial, sans-serif !important;
+  letter-spacing: -.025em !important; font-weight: 750 !important;
+}
+.vendor-portal .vendor-dashboard-title,
+.vendor-portal .vendor-section-heading { font-size: 18px !important; }
+.vendor-portal .vendor-large-title { font-size: 22px !important; }
+.vendor-portal .vendor-large-card,
+.vendor-portal .vendor-service-card { padding: 20px !important; }
+.vendor-portal .vendor-large-icon,
+.vendor-portal .vendor-service-icon,
+.vendor-portal .vendor-card-number,
+.vendor-portal .vendor-service-number {
+  background: var(--vendor-green-soft) !important; color: var(--vendor-green) !important; box-shadow: none !important;
+}
+.vendor-portal .vendor-large-footer,
+.vendor-portal .vendor-service-footer { border-top-color: var(--vendor-border) !important; }
+.vendor-portal .vendor-service-info,
+.vendor-portal .vendor-order-meta,
+.vendor-portal .vendor-order-service,
+.vendor-portal .vendor-history-row,
+.vendor-portal .vendor-food-order-empty { color: var(--vendor-muted) !important; }
+.vendor-portal .vendor-order-card,
+.vendor-portal .vendor-history-row,
+.vendor-portal .vendor-food-order-item {
+  border-color: var(--vendor-border) !important; background: #fff !important;
+}
+.vendor-portal .vendor-status-chip { border-radius: 6px !important; font-size: 11px !important; font-weight: 700 !important; }
+.vendor-portal .vendor-order-action,
+.vendor-portal .vendor-order-cancel,
+.vendor-portal .vendor-print-order-cancel,
+.vendor-portal .vendor-order-item-cancel,
+.vendor-portal .vendor-print-file-cancel {
+  min-height: 34px !important; padding: 7px 11px !important; border-radius: 7px !important;
+  font-size: 12px !important; font-weight: 650 !important;
+}
+.vendor-portal .vendor-order-action {
+  border: 1px solid var(--vendor-navy) !important; background: var(--vendor-navy) !important; color: #fff !important;
+}
+.vendor-portal button:focus-visible,
+.vendor-portal a:focus-visible,
+.vendor-portal input:focus-visible,
+.vendor-portal select:focus-visible {
+  outline: 3px solid rgba(23,107,77,.4) !important; outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .vendor-portal .vendor-hero { padding-top: 18px !important; padding-bottom: 14px !important; }
+  .vendor-portal .vendor-large-card,
+  .vendor-portal .vendor-service-card { min-height: 0 !important; padding: 15px !important; }
+  .vendor-portal .vendor-large-title { font-size: 19px !important; }
+  .vendor-portal .vendor-dashboard-title,
+  .vendor-portal .vendor-section-heading { font-size: 16px !important; }
+}
+</style>
