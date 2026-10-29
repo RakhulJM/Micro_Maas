@@ -30,14 +30,14 @@ const formatTime = (value) => {
   });
 };
 
-// Venue routing uses CampusMaaS GeoJSON and the existing campus pedestrian router.
+// Venue routing uses KEC Campus GeoJSON and the existing campus pedestrian router.
 ---
 
-<MainLayout title={`${event.title} | CampusMaaS`}>
+<MainLayout title={`${event.title} | KEC Campus`}>
   <main class="events-page">
     <div class="events-shell">
       <nav class="events-topbar" aria-label="Page navigation">
-        <a class="events-brand" href="/user">CampusMaaS</a>
+        <a class="events-brand" href="/user">KEC Campus</a>
         <div class="events-topbar-actions">
           <a class="events-backlink" href="https://kongu.ac.in/events" target="_blank" rel="noreferrer">Browse KEC events ↗</a>
           <a class="events-backlink" href="/events">← All campus events</a>
@@ -220,7 +220,7 @@ const formatTime = (value) => {
     const lines = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//CampusMaaS//Campus Events//EN',
+      'PRODID:-//KEC Campus//Campus Events//EN',
       'CALSCALE:GREGORIAN',
       'BEGIN:VEVENT',
       'UID:' + escapeIcs(eventId) + '@campusmaas.local',
