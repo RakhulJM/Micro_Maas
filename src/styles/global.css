@@ -1751,3 +1751,27 @@ button, input, select, textarea { font: inherit; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+
+/* Global readability scale: keep interface text comfortable on laptop screens. */
+html { font-size: 16px; }
+body { font-size: 16px; }
+body :is(p, li, label, input, select, textarea, button, a, td, th, summary, figcaption) {
+  font-size: max(14px, 1em) !important;
+  line-height: 1.5;
+}
+body :is(h1, h2, h3, h4, h5, h6) {
+  line-height: 1.25;
+}
+body :is(small, .muted, .helper-text, .card-description, .card-meta, .description, .subtitle) {
+  font-size: max(13px, 1em) !important;
+  line-height: 1.5;
+}
+body :is(strong, b) { font-size: max(15px, 1em); }
+@media (max-width: 640px) {
+  body { font-size: 15px; }
+  body :is(p, li, label, input, select, textarea, button, a, td, th, summary, figcaption) {
+    font-size: max(14px, 1em) !important;
+  }
+}
+
