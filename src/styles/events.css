@@ -1470,3 +1470,167 @@
   border-color: #009EDB;
   box-shadow: 0 0 0 3px rgba(0, 158, 219, .14);
 }
+
+
+/* KEC palette refinement: stronger green, visible glass surfaces, and readable form controls. */
+.events-page {
+  --kec-blue: #009EDB;
+  --kec-green: #91C04A;
+  --kec-navy: #182A46;
+  --kec-white: #F3F7FA;
+  --kec-glass: rgba(255, 255, 255, .78);
+  --kec-glass-strong: rgba(255, 255, 255, .9);
+  background:
+    radial-gradient(ellipse at 8% 0%, rgba(0, 158, 219, .13), transparent 34rem),
+    radial-gradient(ellipse at 92% 38%, rgba(145, 192, 74, .15), transparent 30rem),
+    var(--kec-white) !important;
+  color: var(--kec-navy);
+}
+.events-page .events-hero,
+.events-page .event-carousel,
+.events-page .calendar-panel,
+.events-page .agenda-panel,
+.events-page .event-detail,
+.events-page .event-detail-fact {
+  background: var(--kec-glass) !important;
+  border-color: rgba(24, 42, 70, .12) !important;
+  box-shadow: 0 12px 34px rgba(24, 42, 70, .08), inset 0 1px 0 rgba(255,255,255,.9) !important;
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+}
+.events-page .events-hero {
+  background: linear-gradient(120deg, rgba(255,255,255,.91), rgba(229,245,252,.74)) !important;
+}
+.events-page .plan-editor {
+  background: linear-gradient(135deg, rgba(145,192,74,.16), rgba(255,255,255,.84) 58%, rgba(0,158,219,.08)) !important;
+  border-top-color: rgba(145,192,74,.48) !important;
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+}
+.events-page .agenda-panel-header,
+.events-page .calendar-toolbar,
+.events-page .calendar-legend {
+  border-color: rgba(24,42,70,.11) !important;
+}
+.events-page .calendar-toolbar-kicker,
+.events-page .agenda-list-heading,
+.events-page .plan-editor-heading h4,
+.events-page .plan-private-label,
+.events-page .calendar-legend .legend-plan + *,
+.events-page .calendar-day-count {
+  color: var(--kec-green) !important;
+}
+.events-page .plan-private-label {
+  background: var(--kec-green) !important;
+  border-color: var(--kec-green) !important;
+  color: var(--kec-navy) !important;
+  font-weight: 800;
+}
+.events-page .calendar-indicator-plan,
+.events-page .legend-plan,
+.events-page .map-live-dot {
+  background: var(--kec-green) !important;
+}
+.events-page .calendar-day.is-selected {
+  background: linear-gradient(135deg, rgba(0,158,219,.15), rgba(145,192,74,.19)) !important;
+  border-color: var(--kec-blue) !important;
+  box-shadow: inset 0 0 0 1px rgba(0,158,219,.12), 0 4px 12px rgba(0,158,219,.08);
+}
+.events-page .calendar-day:hover,
+.events-page .agenda-event-item:hover {
+  background: rgba(145,192,74,.12) !important;
+  border-color: rgba(145,192,74,.65) !important;
+}
+.events-page .calendar-day,
+.events-page .agenda-item {
+  background: rgba(243,247,250,.74) !important;
+  border-color: rgba(24,42,70,.11) !important;
+}
+.events-page .calendar-day.is-outside-month {
+  background: rgba(229,245,252,.42) !important;
+  color: #7D8DA1 !important;
+}
+.events-page .events-notice,
+.events-page .event-chip-demo {
+  background: rgba(145,192,74,.19) !important;
+  border-color: rgba(145,192,74,.72) !important;
+  color: #304C16 !important;
+}
+.events-page .events-notice > span,
+.events-page .event-chip-demo {
+  color: #3F651A !important;
+}
+.events-page .event-chip-demo {
+  font-weight: 800;
+}
+.events-page .events-eyebrow,
+.events-page .event-feature-venue small,
+.events-page .event-detail-fact span {
+  color: var(--kec-blue) !important;
+}
+.events-page .events-brand-mark,
+.events-page .events-button-primary,
+.events-page .event-save-button.is-saved,
+.events-page .map-preview-fallback b,
+.events-page .event-map-marker-core {
+  background: var(--kec-blue) !important;
+  border-color: var(--kec-blue) !important;
+  color: #fff !important;
+}
+.events-page .events-button-primary:hover {
+  background: #0088BD !important;
+}
+.events-page #planForm label {
+  color: var(--kec-navy) !important;
+}
+.events-page #planForm input,
+.events-page #planForm textarea,
+.events-page #planForm select {
+  background: rgba(255,255,255,.88) !important;
+  color: var(--kec-navy) !important;
+  border-color: rgba(24,42,70,.18) !important;
+  box-shadow: inset 0 1px 2px rgba(24,42,70,.025);
+}
+.events-page #planForm input::placeholder,
+.events-page #planForm textarea::placeholder {
+  color: #718198 !important;
+  opacity: 1;
+}
+.events-page #planForm input:focus,
+.events-page #planForm textarea:focus,
+.events-page #planForm select:focus {
+  border-color: var(--kec-green) !important;
+  box-shadow: 0 0 0 3px rgba(145,192,74,.24) !important;
+}
+.events-page .agenda-item-time,
+.events-page .plan-save-status {
+  color: #4F761F !important;
+}
+.events-page .events-backlink,
+.events-page .icon-button,
+.events-page .events-button,
+.events-page .event-save-button,
+.events-page .agenda-mini-button {
+  background: rgba(255,255,255,.82) !important;
+  color: var(--kec-navy) !important;
+  border-color: rgba(24,42,70,.16) !important;
+  backdrop-filter: blur(10px);
+}
+.events-page .events-backlink:hover,
+.events-page .icon-button:hover,
+.events-page .events-button:hover,
+.events-page .event-save-button:hover,
+.events-page .agenda-mini-button:hover {
+  background: rgba(145,192,74,.2) !important;
+  border-color: var(--kec-green) !important;
+}
+.events-page .events-button-primary,
+.events-page .events-button-primary:hover {
+  color: #fff !important;
+}
+.events-page .event-map-bottomline {
+  background: rgba(24,42,70,.9) !important;
+  border-color: rgba(0,158,219,.4) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
