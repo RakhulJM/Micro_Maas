@@ -1207,3 +1207,25 @@
   .events-page .event-card:hover,
   .events-page .event-feature:hover { transform: none; }
 }
+
+
+/* Larger type throughout the calendar, agenda, forms and event cards. */
+.events-page { font-size: 16px !important; }
+.events-page :is(.calendar-month-label, .selected-date-title, .agenda-item-content strong, .event-card-title, .event-feature-info h3, .event-detail-fact strong) {
+  font-size: max(17px, 1em) !important;
+  line-height: 1.4 !important;
+}
+.events-page :is(.agenda-item-time, .agenda-item-content small, .agenda-list-heading, .agenda-count, .calendar-day-count, .plan-private-label, .optional-label, .plan-save-status) {
+  font-size: max(13px, 1em) !important;
+  line-height: 1.5 !important;
+}
+.events-page :is(.calendar-day-number, .calendar-weekdays span) { font-size: 14px !important; }
+.events-page :is(.events-button, .event-save-button, .agenda-mini-button, .calendar-day, .calendar-nav-button) {
+  font-size: max(14px, 1em) !important;
+}
+.events-page #planForm :is(label, input, textarea, select) { font-size: 15px !important; }
+.events-page .plan-editor-copy,
+.events-page .event-detail-description,
+.events-page .event-feature-description,
+.events-page .agenda-empty { font-size: 15px !important; line-height: 1.65 !important; }
+
