@@ -18,6 +18,7 @@ import PrintOrderPopup from '../../components/campusmaas/PrintOrderPopup.astro';
         </svg>
         <span>My location</span>
       </button>
+      <button type="button" id="userUseLocationAsStart" class="user-locate-button user-location-start-button" hidden>Use my location as start</button>
       <p id="userLocationStatus" class="user-location-status" role="status" aria-live="polite" hidden></p>
     </div>
 
@@ -1569,7 +1570,10 @@ const start = async () => {
   // User location is opt-in. The browser controls permission and accuracy.
   const locateButton = document.getElementById('userLocateButton');
   const locationStatus = document.getElementById('userLocationStatus');
+  const useLocationAsStartButton = document.getElementById('userUseLocationAsStart');
+  let lastKnownUserLatLng = null;
   let locationWatchId = null;
+  let hasCenteredOnUserLocation = false;
   let userLocationMarker = null;
   let userLocationAccuracy = null;
 
@@ -1593,42 +1597,70 @@ const start = async () => {
   const renderCurrentLocation = (position) => {
     const latlng = L.latLng(position.coords.latitude, position.coords.longitude);
     const accuracy = Math.max(5, Number(position.coords.accuracy) || 25);
+    lastKnownUserLatLng = latlng;
+    if (useLocationAsStartButton) useLocationAsStartButton.hidden = false;
 
     if (!userLocationAccuracy) {
       userLocationAccuracy = L.circle(latlng, {
         radius: accuracy,
-        color: '#1677ff',
-        weight: 1,
-        opacity: 0.65,
+        color: '#075de8',
+        weight: 2,
+        opacity: 0.9,
         fillColor: '#1687ff',
-        fillOpacity: 0.12,
-        interactive: false
+        fillOpacity: 0.16,
+        interactive: false,
+        bubblingMouseEvents: false
       }).addTo(map);
     } else {
       userLocationAccuracy.setLatLng(latlng);
       userLocationAccuracy.setRadius(accuracy);
     }
 
+    // Use a Leaflet circle marker rather than a CSS-dependent icon so the dot
+    // remains visible even if page styles or marker pane styles change.
     if (!userLocationMarker) {
-      userLocationMarker = L.marker(latlng, {
-        title: 'Your current location',
-        keyboard: true,
-        icon: L.divIcon({
-          className: 'user-current-location-icon',
-          html: '<span class="user-current-location-dot"></span>',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
-        }),
-        zIndexOffset: 1000
+      userLocationMarker = L.circleMarker(latlng, {
+        radius: 9,
+        color: '#ffffff',
+        weight: 4,
+        fillColor: '#075de8',
+        fillOpacity: 1,
+        opacity: 1,
+        interactive: true,
+        bubblingMouseEvents: false,
+        pane: 'markerPane'
       }).addTo(map);
-      userLocationMarker.bindTooltip('You are here', { direction: 'top', offset: [0, -10] });
+      userLocationMarker.bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
     } else {
       userLocationMarker.setLatLng(latlng);
+      userLocationMarker.setStyle({ radius: 9, color: '#ffffff', weight: 4, fillColor: '#075de8', fillOpacity: 1, opacity: 1 });
+      userLocationMarker.bringToFront();
     }
 
-    map.setView(latlng, Math.max(map.getZoom(), 19), { animate: true });
-    setLocationStatus('Location updated · accuracy about ' + Math.round(accuracy) + ' m');
+    // Center on the first fix only; later GPS updates move the dot without
+    // repeatedly pulling the map away from a user's manual exploration.
+    if (!hasCenteredOnUserLocation) {
+      map.setView(latlng, Math.max(map.getZoom(), 19), { animate: true });
+      hasCenteredOnUserLocation = true;
+    }
+    setLocationStatus('Location updated · reported accuracy about ' + Math.round(accuracy) + ' m');
   };
+
+  useLocationAsStartButton?.addEventListener('click', () => {
+    if (!lastKnownUserLatLng) {
+      setLocationStatus('Get your location first, then set it as your starting point.');
+      return;
+    }
+
+    clearRouteRendering();
+    pointA = L.latLng(lastKnownUserLatLng.lat, lastKnownUserLatLng.lng);
+    pointB = null;
+    resetTripSummary();
+    if (userTripFrom) userTripFrom.textContent = 'Your current location';
+    if (userTripTo) userTripTo.textContent = 'Select Point B';
+    renderEndpointMarkers();
+    setLocationStatus('Your current location is set as Point A. Select a destination on the map.');
+  });
 
   const locationErrorMessage = (error) => {
     if (error?.code === 1) {
@@ -3709,22 +3741,18 @@ void start().catch((error) => {
     display: none;
   }
 
-  .user-current-location-icon {
-    display: flex;
-    align-items: center;
+  .user-location-start-button {
     justify-content: center;
-    border: 0;
-    background: transparent;
+    background: #155fc0;
+    color: #ffffff;
   }
 
-  .user-current-location-dot {
-    display: block;
-    width: 16px;
-    height: 16px;
-    border: 3px solid #ffffff;
-    border-radius: 50%;
-    background: #1677ff;
-    box-shadow: 0 0 0 2px #1677ff, 0 2px 8px rgba(0, 0, 0, .35);
+  .user-location-start-button:hover {
+    background: #0d4fa6;
+  }
+
+  .user-location-start-button[hidden] {
+    display: none;
   }
 
   .user-map-page {
