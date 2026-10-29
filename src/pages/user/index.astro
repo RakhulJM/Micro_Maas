@@ -4745,3 +4745,153 @@ void start().catch((error) => {
 
   }
 </style>
+
+
+<style is:global>
+/* MaaS HUD visual pass — presentation only; preserve existing map and feature logic. */
+.user-map-page {
+  background: #06111f;
+  color: #eef6ff;
+  isolation: isolate;
+}
+.user-map-page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 400;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(3,12,24,.42), transparent 20%, transparent 72%, rgba(3,12,24,.24));
+}
+.user-trip-card,
+.user-services-label,
+.user-vendor-card,
+.user-orders-card,
+.user-event-discovery {
+  border-color: rgba(56, 174, 255, .38) !important;
+  background: linear-gradient(145deg, rgba(4, 22, 40, .94), rgba(5, 15, 29, .88)) !important;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(164, 220, 255, .07) !important;
+  backdrop-filter: blur(18px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(130%) !important;
+}
+.user-trip-card {
+  border-radius: 18px;
+  padding: 16px;
+}
+.user-trip-card::before,
+.user-services-label::before {
+  content: "";
+  display: block;
+  width: 30px;
+  height: 2px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #26c6ff, rgba(38,198,255,0));
+}
+.user-trip-field strong { letter-spacing: -.015em; }
+.user-trip-summary > div {
+  border-color: rgba(70, 169, 242, .2);
+  background: rgba(20, 65, 100, .24);
+}
+.user-locate-button {
+  border: 1px solid rgba(57, 183, 255, .4);
+  border-radius: 12px;
+  background: rgba(5, 24, 43, .94);
+  color: #cceeff;
+  box-shadow: 0 10px 30px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.05);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.user-locate-button:hover,
+.user-locate-button.is-locating {
+  background: rgba(11, 53, 83, .96);
+  color: #fff;
+}
+.user-location-start-button {
+  background: linear-gradient(120deg, #087eea, #21b8ef);
+  color: white;
+}
+.user-location-start-button:disabled {
+  background: rgba(20, 39, 58, .95);
+  color: #7894aa;
+}
+.user-location-status {
+  border-color: rgba(56, 174, 255, .28);
+  background: rgba(4, 19, 34, .96);
+  color: #dceeff;
+  backdrop-filter: blur(16px);
+}
+.user-events-link {
+  border-color: rgba(56, 174, 255, .26);
+  background: rgba(10, 66, 105, .28);
+}
+.user-event-discovery { border-radius: 16px; }
+.user-event-discovery-cta {
+  background: linear-gradient(110deg, #087eea, #21b8ef);
+  border-color: rgba(93, 207, 255, .5);
+}
+.user-vendor-card, .user-orders-card { border-radius: 16px; }
+.user-services-stack {
+  scrollbar-color: rgba(61, 161, 220, .42) transparent;
+}
+.user-map-page button,
+.user-map-page a {
+  -webkit-tap-highlight-color: transparent;
+}
+.user-map-page button:focus-visible,
+.user-map-page a:focus-visible {
+  outline: 2px solid #4bd2ff;
+  outline-offset: 3px;
+}
+@media (max-width: 560px) {
+  .user-trip-card {
+    top: 10px;
+    left: 10px;
+    width: calc(100vw - 20px);
+    padding: 12px;
+    border-radius: 15px;
+  }
+  .user-trip-card::before { margin-bottom: 7px; }
+  .user-trip-divider { margin: 8px 0; }
+  .user-trip-summary { margin-top: 8px; }
+  .user-trip-summary > div { padding: 8px 9px; }
+  .user-trip-profile { margin-top: 8px; padding-top: 8px; }
+  .user-services-stack {
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    width: min(300px, calc(100vw - 20px));
+    max-height: 34dvh;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .user-services-label { padding: 9px 11px; border-radius: 12px; }
+  .user-services-label::before { margin-bottom: 6px; }
+  .user-vendor-card, .user-orders-card { padding: 10px; }
+  .user-location-controls {
+    right: 10px;
+    bottom: calc(36dvh + 16px + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100vw - 20px);
+    gap: 6px;
+  }
+  .user-locate-button { min-height: 42px; padding: 0 12px; font-size: 12px; }
+  .user-location-status { font-size: 11px; }
+  .user-event-discovery {
+    left: 10px;
+    bottom: 10px;
+    width: min(250px, calc(100vw - 330px));
+    min-width: 0;
+    padding: 8px;
+  }
+}
+@media (max-width: 390px) {
+  .user-event-discovery { display: none; }
+  .user-services-stack { width: min(290px, calc(100vw - 20px)); }
+  .user-location-controls { bottom: calc(36dvh + 12px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .user-map-page *, .user-map-page *::before, .user-map-page *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+</style>
