@@ -1,11 +1,6 @@
 ---
 const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = Astro.props;
-const defaultInitialData = {
-  catalogue: { version: 1, vendors: [] },
-  orders: { version: 1, orders: [] },
-  pageCards: { version: 1, root: {}, categories: {} }
-};
-const serializedInitialData = encodeURIComponent(JSON.stringify(initialData ?? defaultInitialData));
+const serializedInitialData = encodeURIComponent(JSON.stringify(initialData || {}));
 ---
 
 <main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId} data-initial-data={serializedInitialData}>
