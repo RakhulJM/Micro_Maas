@@ -49,7 +49,7 @@ const campusEvents = [...events].sort((a, b) =>
             loading="eager"
             decoding="async"
           />
-          <span class="user-event-poster-badge">DEMO</span>
+          
         </a>
         <div class="user-event-discovery-copy" aria-live="polite">
           <span class="user-event-discovery-category" id="userEventCategory">{campusEvents[0].category}</span>
@@ -5880,6 +5880,54 @@ void start().catch((error) => {
 @media (max-width: 430px) {
   .user-map-page .user-event-discovery { max-height: 32dvh; }
   .user-map-page .user-event-discovery-body { gap: 9px !important; }
+}
+
+
+/* Compact the map HUD cards and remove unnecessary poster overlays. */
+.user-map-page .user-trip-card {
+  width: min(400px, calc(100vw - 28px)) !important;
+  padding: 16px !important;
+  border-radius: 16px !important;
+}
+.user-map-page .user-trip-field span,
+.user-map-page .user-trip-summary span {
+  font-size: 10px !important;
+}
+.user-map-page .user-trip-field strong {
+  font-size: 15px !important;
+}
+.user-map-page .user-trip-summary > div {
+  padding: 10px 11px !important;
+}
+.user-map-page .user-trip-summary strong {
+  font-size: 18px !important;
+}
+.user-map-page .user-event-discovery {
+  width: min(460px, calc(100vw - 86px)) !important;
+  padding: 10px 11px 8px !important;
+}
+.user-map-page .user-event-discovery-body {
+  grid-template-columns: 76px minmax(0, 1fr) !important;
+  gap: 10px !important;
+}
+.user-map-page .user-event-poster-link {
+  width: 76px !important;
+  height: 102px !important;
+}
+.user-map-page .user-event-discovery-title {
+  font-size: 12px !important;
+}
+.user-map-page .user-event-poster-badge {
+  display: none !important;
+}
+@media (max-width: 760px) {
+  .user-map-page .user-trip-card {
+    width: min(340px, calc(100vw - 20px)) !important;
+    padding: 12px !important;
+  }
+  .user-map-page .user-event-discovery {
+    width: min(420px, calc(100vw - 60px)) !important;
+  }
 }
 
 </style>
