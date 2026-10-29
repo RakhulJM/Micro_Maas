@@ -1094,3 +1094,57 @@
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Readability pass for the calendar and event detail pages. */
+.events-page { font-size: 16px !important; line-height: 1.6 !important; }
+.events-page p,
+.events-page li,
+.events-page label,
+.events-page input,
+.events-page select,
+.events-page textarea,
+.events-page button,
+.events-page a,
+.events-page time,
+.events-page .event-card-meta,
+.events-page .event-feature-description,
+.events-page .event-detail-description,
+.events-page .events-intro,
+.events-page .events-notice,
+.events-page .event-detail-fact strong,
+.events-page .agenda-item-content,
+.events-page .plan-editor-copy { font-size: 15px !important; line-height: 1.6 !important; }
+.events-page .events-title,
+.events-page .event-detail h1 { font-size: clamp(30px, 4vw, 44px) !important; line-height: 1.12 !important; }
+.events-page .events-section-heading h2 { font-size: 25px !important; line-height: 1.25 !important; }
+.events-page .event-feature-info h3 { font-size: clamp(23px, 2.5vw, 32px) !important; line-height: 1.2 !important; }
+.events-page .calendar-day-number { font-size: 14px !important; }
+.events-page .calendar-weekdays span,
+.events-page .calendar-legend,
+.events-page .agenda-item-content small,
+.events-page .agenda-empty,
+.events-page .event-detail-fact span,
+.events-page .plan-private-label,
+.events-page .plan-save-status,
+.events-page .events-footer { font-size: 13px !important; line-height: 1.5 !important; }
+.events-page .events-button,
+.events-page .event-save-button,
+.events-page .agenda-mini-button { min-height: 42px !important; padding: 9px 13px !important; font-size: 14px !important; }
+.events-page input,
+.events-page select,
+.events-page textarea { min-height: 46px !important; padding: 10px 12px !important; font-size: 15px !important; }
+.events-page .calendar-day { min-height: 62px; }
+.events-page .event-poster,
+.events-page .event-feature-poster,
+.events-page .event-card-poster { object-fit: cover; object-position: center; }
+@media (max-width: 640px) {
+  .events-page .events-title { font-size: 30px !important; }
+  .events-page .events-intro,
+  .events-page .events-notice { font-size: 14px !important; }
+  .events-page .events-section-heading h2 { font-size: 22px !important; }
+  .events-page .calendar-day { min-height: 54px !important; }
+  .events-page .calendar-weekdays span { font-size: 12px !important; }
+  .events-page .calendar-day-number { font-size: 13px !important; }
+  .events-page .event-detail-facts { grid-template-columns: minmax(0, 1fr); }
+}
