@@ -1755,3 +1755,27 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
 }
 
 </style>
+
+
+/* Comfortable reading sizes across vendor, food and printing pages. */
+.vendor-portal { font-size: 16px !important; }
+.vendor-portal :is(p, li, label, input, select, textarea, button, a) {
+  font-size: max(14px, 1em) !important;
+  line-height: 1.5;
+}
+.vendor-portal :is(.vendor-large-title, .vendor-service-title, .vendor-card-title, .vendor-section-title, .vendor-order-card strong, .vendor-print-file-main strong) {
+  font-size: max(17px, 1em) !important;
+  line-height: 1.35 !important;
+}
+.vendor-portal :is(small, .vendor-brand-kicker, .vendor-print-file-settings span, .vendor-print-queue-footer > span, .vendor-header-status-message) {
+  font-size: max(13px, 1em) !important;
+  line-height: 1.45 !important;
+}
+.vendor-portal :is(.vendor-order-action, .vendor-print-queue-button, .vendor-print-queue-all, .vendor-print-order-all, .vendor-print-group-all, .vendor-print-file-button) {
+  font-size: 14px !important;
+}
+@media (max-width: 560px) {
+  .vendor-portal { font-size: 15px !important; }
+  .vendor-portal :is(p, li, label, input, select, textarea, button, a) { font-size: max(14px, 1em) !important; }
+}
+
