@@ -4023,6 +4023,61 @@ void start().catch((error) => {
 @media(max-width:560px){
   .user-services-stack{top:10px;right:10px;width:calc(100vw - 20px);max-height:54vh}
 }
+
+/* Fixed poster sizing: keep the image in its own grid column and prevent overlap. */
+.user-map-page .user-event-discovery-body {
+  display: grid !important;
+  grid-template-columns: 112px minmax(0, 1fr) !important;
+  align-items: start !important;
+  gap: 12px !important;
+  min-width: 0 !important;
+}
+.user-map-page .user-event-poster-link {
+  display: block !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  width: 112px !important;
+  min-width: 112px !important;
+  max-width: 112px !important;
+  height: 128px !important;
+  min-height: 128px !important;
+  max-height: 128px !important;
+  aspect-ratio: auto !important;
+  overflow: hidden !important;
+  align-self: start !important;
+}
+.user-map-page .user-event-poster {
+  display: block !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  aspect-ratio: auto !important;
+  object-fit: contain !important;
+  object-position: center !important;
+}
+.user-map-page .user-event-discovery-copy {
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+}
+@media (max-width: 760px) {
+  .user-map-page .user-event-discovery-body {
+    grid-template-columns: 88px minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+  .user-map-page .user-event-poster-link {
+    width: 88px !important;
+    min-width: 88px !important;
+    max-width: 88px !important;
+    height: 112px !important;
+    min-height: 112px !important;
+    max-height: 112px !important;
+  }
+}
+
 </style><style>
   .user-map-page {
     position: relative;
