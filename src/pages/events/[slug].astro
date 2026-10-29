@@ -30,7 +30,10 @@ const formatTime = (value) => {
   });
 };
 
-const venueMapUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.venue + ', Kongu Engineering College, Perundurai, Tamil Nadu')}`;
+// Leave origin unset so Google Maps can use the user's current location as Point A.
+// The event's named building/department is Point B; Maps resolves it and displays directions.
+const venueDestination = `${event.venue}, Kongu Engineering College, Perundurai, Tamil Nadu, India`;
+const venueMapUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(venueDestination)}`;
 ---
 
 <MainLayout title={`${event.title} | CampusMaaS`}>
