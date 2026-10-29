@@ -137,7 +137,9 @@ const formatTime = (value) => {
       });
 
       const aliases = [
+        { when: /admin block|\\bab-cc4\\b|\\bcc4\\b/i, name: 'Admin Block' },
         { when: /\\bece\\b|electronics and communication engineering/i, name: 'ECE block' },
+        { when: /\\beee\\b|electrical and electronics engineering/i, name: 'EEE block' },
         { when: /automobile engineering/i, name: 'Mechanical and Mechatronics block' }
       ];
       const alias = aliases.find((entry) => entry.when.test(eventVenue));
