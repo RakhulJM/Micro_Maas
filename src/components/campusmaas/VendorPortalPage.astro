@@ -1708,4 +1708,50 @@ const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = 
       .vendor-order-item-cancel,.vendor-print-file-cancel{border:1px solid rgba(195,62,73,.18);background:#fff7f7;color:#c33e49;border-radius:6px;padding:5px 8px;font-size:9px;font-weight:800;cursor:pointer}
       .vendor-order-item-cancel:disabled,.vendor-print-file-cancel:disabled{opacity:.55;cursor:default}
       .vendor-print-file-card{position:relative}
+
+/* Product polish: vendor dashboard and service portals. */
+.vendor-portal {
+  --vendor-focus: #176b4d;
+  --vendor-control-radius: 11px;
+  --vendor-card-radius: 18px;
+  color-scheme: light;
+  isolation: isolate;
+}
+.vendor-portal :where(button, input, select, textarea) { font: inherit; }
+.vendor-portal :where(button, a, input, select, textarea, [role="button"]):focus-visible {
+  outline: 3px solid rgba(23, 107, 77, .45);
+  outline-offset: 3px;
+}
+.vendor-portal :where(input, select, textarea) {
+  min-height: 44px;
+  border-radius: var(--vendor-control-radius);
+}
+.vendor-portal :where(button, .vendor-order-action, .vendor-service-card) { cursor: pointer; }
+.vendor-portal :where(.vendor-order-card, .vendor-service-card, .vendor-history-row, .vendor-loading-card) {
+  border-radius: var(--vendor-card-radius);
+}
+.vendor-portal :where(.vendor-order-card, .vendor-service-card) {
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+.vendor-portal :where(.vendor-order-card, .vendor-service-card):hover {
+  border-color: rgba(23, 107, 77, .28);
+  box-shadow: 0 12px 28px rgba(20, 48, 36, .08);
+}
+.vendor-portal :where(.vendor-header-status-choice, .vendor-order-cancel, .vendor-print-order-cancel, .vendor-order-item-cancel, .vendor-print-file-cancel) {
+  min-height: 38px;
+  border-radius: 9px;
+}
+.vendor-portal .vendor-header-actions { flex-wrap: wrap; }
+.vendor-portal .vendor-order-item-info { overflow-wrap: anywhere; }
+.vendor-portal :where(img, svg) { max-width: 100%; }
+@media (max-width: 680px) {
+  .vendor-portal { font-size: 15px; }
+  .vendor-portal :where(button, input, select, textarea) { min-height: 44px; }
+  .vendor-portal .vendor-header-actions { gap: 8px; }
+  .vendor-portal .vendor-order-card { gap: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vendor-portal :where(*) { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
 </style>
