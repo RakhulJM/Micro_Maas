@@ -1576,6 +1576,7 @@ const start = async () => {
   let hasCenteredOnUserLocation = false;
   let userLocationMarker = null;
   let userLocationAccuracy = null;
+  let hasAutoSetLocationAsStart = false;
 
   // Keep the live location above the campus perimeter mask and all map layers.
   if (!map.getPane('userLocationPane')) {
@@ -1606,6 +1607,23 @@ const start = async () => {
     const accuracy = Math.max(5, Number(position.coords.accuracy) || 25);
     lastKnownUserLatLng = latlng;
     if (useLocationAsStartButton) useLocationAsStartButton.disabled = false;
+
+    // On the first successful fix, automatically use the user's real position
+    // as Point A. Subsequent GPS updates move Point A only while it still
+    // represents the live location, rather than overwriting a manually chosen start.
+    if (!hasAutoSetLocationAsStart) {
+      clearRouteRendering();
+      pointA = latlng;
+      pointB = null;
+      resetTripSummary();
+      if (userTripFrom) userTripFrom.textContent = 'Your current location';
+      if (userTripTo) userTripTo.textContent = 'Select Point B';
+      renderEndpointMarkers();
+      hasAutoSetLocationAsStart = true;
+    } else if (userTripFrom?.textContent === 'Your current location' && pointA) {
+      pointA = latlng;
+      renderEndpointMarkers();
+    }
 
     if (!userLocationAccuracy) {
       userLocationAccuracy = L.circle(latlng, {
@@ -1686,7 +1704,7 @@ const start = async () => {
   locateButton?.addEventListener('click', () => {
     if (locationWatchId !== null) {
       stopLocationTracking();
-      setLocationStatus('Live location tracking stopped.');
+      setLocationStatus('Live location tracking stopped. Your last location remains the starting point.');
       return;
     }
 
