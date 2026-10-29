@@ -945,7 +945,7 @@
   text-align: center;
 }
 
-/* Event details reuse the same CampusMaaS dark glass visual language. */
+/* Event details reuse the same KEC Campus dark glass visual language. */
 .event-detail {
   padding: clamp(20px, 4vw, 36px);
   border: 1px solid var(--events-line);
