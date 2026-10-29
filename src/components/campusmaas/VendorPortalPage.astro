@@ -5,7 +5,7 @@ const defaultInitialData = {
   orders: { version: 1, orders: [] },
   pageCards: { version: 1, root: {}, categories: {} }
 };
-const serializedInitialData = JSON.stringify(initialData ?? defaultInitialData);
+const serializedInitialData = encodeURIComponent(JSON.stringify(initialData ?? defaultInitialData));
 ---
 
 <main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId} data-initial-data={serializedInitialData}>
@@ -186,7 +186,7 @@ const serializedInitialData = JSON.stringify(initialData ?? defaultInitialData);
 
       try {
         const embedded = JSON.parse(
-          document.querySelector('.vendor-portal')?.dataset.initialData || '{}'
+          decodeURIComponent(document.querySelector('.vendor-portal')?.dataset.initialData || '%7B%7D')
         );
         catalogue = embedded?.catalogue;
         orders = embedded?.orders || orders;
