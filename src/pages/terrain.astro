@@ -4,12 +4,12 @@ import '../styles/global.css';
 import 'leaflet/dist/leaflet.css';
 ---
 
-<MainLayout title="CampusMaaS · Terrain">
+<MainLayout title="KEC Campus · Terrain">
   <main class="map-screen">
     <header class="floating-header">
-      <a class="brand" href="/" aria-label="CampusMaaS home">
+      <a class="brand" href="/" aria-label="KEC Campus home">
         <span class="brand-mark">M</span>
-        <strong>CampusMaaS</strong>
+        <strong>KEC Campus</strong>
       </a>
 
       <div class="top-actions">
@@ -528,7 +528,7 @@ import 'leaflet/dist/leaflet.css';
         note?.setAttribute('data-ready', 'true');
         setTimeout(() => map.invalidateSize(), 100);
       } catch (error) {
-        console.error('CampusMaaS terrain error:', error);
+        console.error('KEC Campus terrain error:', error);
 
         if (note) {
           const message =
