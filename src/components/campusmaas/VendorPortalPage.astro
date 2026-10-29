@@ -18,7 +18,7 @@ const serializedInitialData = JSON.stringify(initialData || fallbackData);
       <a class="vendor-back" id="vendorBack" href="/vendor" aria-label="Back to vendors">←</a>
       <div class="vendor-brand-mark">M</div>
       <div>
-        <span class="vendor-brand-kicker">CAMPUSMAAS</span>
+        <span class="vendor-brand-kicker">KEC CAMPUS</span>
         <strong id="portalHeaderTitle">Vendors</strong>
       </div>
     </div>
@@ -225,7 +225,7 @@ const serializedInitialData = JSON.stringify(initialData || fallbackData);
       const payload = await response.json();
 
       if (!validCatalogue(payload?.catalogue)) {
-        throw new Error('Invalid CampusMaaS vendor data.');
+        throw new Error('Invalid KEC Campus vendor data.');
       }
 
       catalogue = payload.catalogue;
@@ -1275,7 +1275,7 @@ const serializedInitialData = JSON.stringify(initialData || fallbackData);
         startLiveSync();
       } catch {
         title.textContent = 'Vendor portal unavailable';
-        subtitle.textContent = 'Check the CampusMaaS vendor data.';
+        subtitle.textContent = 'Check the KEC Campus vendor data.';
         content.className = 'vendor-content-grid';
         content.innerHTML = '';
         content.appendChild(create('div', 'vendor-empty-card', 'Vendor data could not be loaded.'));
