@@ -5319,3 +5319,180 @@ void start().catch((error) => {
   }
 }
 </style>
+
+
+<style is:global>
+/* KEC-inspired typography, palette, and sizing refinement */
+.user-map-page {
+  --kec-navy: #071b2b;
+  --kec-panel: #0b2234;
+  --kec-panel-raised: #102b40;
+  --kec-blue: #1f76c2;
+  --kec-green: #6fba83;
+  --kec-gold: #d9b66f;
+  --kec-white: #f5f8fb;
+  --kec-muted: #a7b9c8;
+  --hud-ink: var(--kec-white);
+  --hud-muted: var(--kec-muted);
+  --hud-line: rgba(145, 181, 207, .22);
+  --hud-cyan: #80cda0;
+  --hud-blue: var(--kec-blue);
+  color: var(--kec-white) !important;
+  font-family: "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-size: 14px;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.user-map-page * { box-sizing: border-box; }
+.user-map-page .user-services-kicker,
+.user-map-page .user-trip-field > span,
+.user-map-page .user-trip-summary > div > span,
+.user-map-page .user-trip-profile > span,
+.user-map-page .user-event-discovery-count {
+  font-family: "Inter", "Segoe UI", sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: .105em !important;
+  text-transform: uppercase;
+}
+.user-map-page .user-services-kicker { color: var(--kec-green) !important; }
+.user-map-page .user-trip-field strong,
+.user-map-page .user-services-label strong,
+.user-map-page .user-vendor-title strong,
+.user-map-page .user-orders-head strong,
+.user-map-page .user-event-discovery-title {
+  font-family: "Inter", "Segoe UI", sans-serif !important;
+  font-weight: 650 !important;
+  letter-spacing: -.025em !important;
+  color: #f6f9fc !important;
+}
+.user-map-page .user-trip-card,
+.user-map-page .user-event-discovery,
+.user-map-page .user-services-label,
+.user-map-page .user-vendor-card,
+.user-map-page .user-orders-card,
+.user-map-page .user-order-composer,
+.user-map-page .user-location-status {
+  border-color: rgba(133, 176, 203, .25) !important;
+  background: linear-gradient(150deg, rgba(8, 29, 46, .97), rgba(7, 23, 37, .96)) !important;
+  box-shadow: 0 16px 38px rgba(1, 12, 22, .34), inset 0 1px 0 rgba(240, 248, 255, .055) !important;
+}
+.user-map-page .user-trip-card { padding: 19px !important; border-radius: 18px !important; }
+.user-map-page .user-trip-card::before,
+.user-map-page .user-services-label::before {
+  background: linear-gradient(90deg, var(--kec-green), rgba(111, 186, 131, .12)) !important;
+  height: 3px !important;
+  width: 32px !important;
+}
+.user-map-page .user-trip-field strong { font-size: 14px !important; line-height: 1.45 !important; }
+.user-map-page .user-trip-summary > div {
+  border-color: rgba(143, 181, 207, .17) !important;
+  background: rgba(224, 239, 249, .055) !important;
+}
+.user-map-page .user-trip-summary strong { font-size: 17px !important; font-weight: 700 !important; }
+.user-map-page .user-trip-divider { background: rgba(159, 188, 209, .16) !important; }
+.user-map-page .user-gender-button {
+  border-color: rgba(141, 177, 201, .2) !important;
+  background: rgba(235, 244, 250, .045) !important;
+  color: #c1d0dc !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+.user-map-page .user-gender-button.is-active {
+  border-color: rgba(111, 186, 131, .65) !important;
+  background: rgba(62, 127, 81, .23) !important;
+  color: #e8f8ed !important;
+}
+.user-map-page .user-services-label {
+  min-height: 66px !important;
+  padding: 13px 15px !important;
+  border-radius: 16px !important;
+}
+.user-map-page .user-services-toggle-icon {
+  border-color: rgba(111, 186, 131, .32) !important;
+  background: rgba(72, 139, 91, .12) !important;
+  color: #9cdbac !important;
+}
+.user-map-page .user-events-link {
+  border-color: rgba(111, 186, 131, .24) !important;
+  background: linear-gradient(120deg, rgba(27, 68, 53, .55), rgba(10, 34, 47, .94)) !important;
+}
+.user-map-page .user-events-link small { color: #9ac8a5 !important; font-size: 9px !important; }
+.user-map-page .user-events-arrow { color: var(--kec-green) !important; }
+.user-map-page .user-vendor-card,
+.user-map-page .user-orders-card { padding: 14px !important; border-radius: 15px !important; }
+.user-map-page .user-vendor-index {
+  border-color: rgba(111, 186, 131, .3) !important;
+  background: rgba(65, 129, 82, .13) !important;
+  color: #a7dfb3 !important;
+}
+.user-map-page .user-service-option {
+  border-color: rgba(141, 177, 201, .16) !important;
+  background: rgba(228, 240, 248, .045) !important;
+  border-radius: 11px !important;
+}
+.user-map-page .user-service-option:hover {
+  border-color: rgba(111, 186, 131, .42) !important;
+  background: rgba(73, 133, 88, .13) !important;
+}
+.user-map-page .user-vendor-status { color: #8fd5a0 !important; }
+.user-map-page .user-service-option .user-service-tail>b {
+  background: rgba(31, 118, 194, .18) !important;
+  color: #b8dcf7 !important;
+}
+.user-map-page .user-order-item {
+  border-color: rgba(141, 177, 201, .17) !important;
+  background: rgba(226, 240, 248, .045) !important;
+}
+.user-map-page .user-order-item strong { color: #c6d8e6 !important; }
+.user-map-page .user-order-item>b { color: #f2f7fb !important; font-weight: 700 !important; }
+.user-map-page .user-event-discovery { padding: 15px !important; border-radius: 17px !important; }
+.user-map-page .user-event-discovery-category { color: #9cdbac !important; font-weight: 700 !important; }
+.user-map-page .user-event-discovery-title { font-size: 14px !important; line-height: 1.4 !important; }
+.user-map-page .user-event-discovery-date { color: #c0d0dc !important; }
+.user-map-page .user-event-discovery-venue { color: #92a8b9 !important; }
+.user-map-page .user-event-discovery-cta {
+  border: 1px solid rgba(255,255,255,.1) !important;
+  background: linear-gradient(115deg, #236da8, #1f8b73) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+.user-map-page .user-event-discovery-controls button {
+  border-color: rgba(141, 177, 201, .23) !important;
+  background: rgba(226, 240, 248, .055) !important;
+  color: #e4edf4 !important;
+}
+.user-map-page .user-locate-button {
+  border-color: rgba(111, 186, 131, .34) !important;
+  background: rgba(8, 29, 46, .97) !important;
+  color: #e8f6ec !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+}
+.user-map-page .user-location-start-button {
+  border-color: rgba(111, 186, 131, .4) !important;
+  background: linear-gradient(115deg, #287a50, #236da8) !important;
+  color: #fff !important;
+}
+.user-map-page .user-location-start-button:disabled {
+  border-color: rgba(141, 177, 201, .16) !important;
+  background: rgba(14, 34, 49, .96) !important;
+  color: #8298aa !important;
+}
+.user-map-page button:focus-visible,
+.user-map-page a:focus-visible {
+  outline-color: #a9dcb4 !important;
+}
+@media (max-width: 760px) {
+  .user-map-page { font-size: 13px; }
+  .user-map-page .user-trip-card { padding: 13px !important; }
+  .user-map-page .user-trip-field strong { font-size: 13px !important; }
+  .user-map-page .user-trip-summary > div { padding: 10px !important; }
+  .user-map-page .user-services-label { min-height: 58px !important; padding: 10px 12px !important; }
+  .user-map-page .user-vendor-card,
+  .user-map-page .user-orders-card { padding: 11px !important; }
+  .user-map-page .user-event-discovery { padding: 11px !important; }
+  .user-map-page .user-locate-button { min-height: 44px !important; }
+}
+</style>
