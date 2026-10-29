@@ -18,7 +18,7 @@ import PrintOrderPopup from '../../components/campusmaas/PrintOrderPopup.astro';
         </svg>
         <span>My location</span>
       </button>
-      <button type="button" id="userUseLocationAsStart" class="user-locate-button user-location-start-button" hidden>Use my location as start</button>
+      <button type="button" id="userUseLocationAsStart" class="user-locate-button user-location-start-button" disabled>Use my location as start</button>
       <p id="userLocationStatus" class="user-location-status" role="status" aria-live="polite" hidden></p>
     </div>
 
@@ -1577,6 +1577,13 @@ const start = async () => {
   let userLocationMarker = null;
   let userLocationAccuracy = null;
 
+  // Keep the live location above the campus perimeter mask and all map layers.
+  if (!map.getPane('userLocationPane')) {
+    map.createPane('userLocationPane');
+    map.getPane('userLocationPane').style.zIndex = '700';
+    map.getPane('userLocationPane').style.pointerEvents = 'none';
+  }
+
   const setLocationStatus = (message, visible = true) => {
     if (!locationStatus) return;
     locationStatus.textContent = message;
@@ -1598,7 +1605,7 @@ const start = async () => {
     const latlng = L.latLng(position.coords.latitude, position.coords.longitude);
     const accuracy = Math.max(5, Number(position.coords.accuracy) || 25);
     lastKnownUserLatLng = latlng;
-    if (useLocationAsStartButton) useLocationAsStartButton.hidden = false;
+    if (useLocationAsStartButton) useLocationAsStartButton.disabled = false;
 
     if (!userLocationAccuracy) {
       userLocationAccuracy = L.circle(latlng, {
@@ -1609,7 +1616,8 @@ const start = async () => {
         fillColor: '#1687ff',
         fillOpacity: 0.16,
         interactive: false,
-        bubblingMouseEvents: false
+        bubblingMouseEvents: false,
+        pane: 'userLocationPane'
       }).addTo(map);
     } else {
       userLocationAccuracy.setLatLng(latlng);
@@ -1628,7 +1636,7 @@ const start = async () => {
         opacity: 1,
         interactive: true,
         bubblingMouseEvents: false,
-        pane: 'markerPane'
+        pane: 'userLocationPane'
       }).addTo(map);
       userLocationMarker.bindTooltip('You are here', { direction: 'top', offset: [0, -8] });
     } else {
@@ -1684,6 +1692,11 @@ const start = async () => {
 
     if (!('geolocation' in navigator)) {
       setLocationStatus('This browser does not support location services.');
+      return;
+    }
+
+    if (!window.isSecureContext) {
+      setLocationStatus('Location access requires HTTPS or localhost. Open CampusMaaS through a secure URL and try again.');
       return;
     }
 
@@ -3751,8 +3764,12 @@ void start().catch((error) => {
     background: #0d4fa6;
   }
 
-  .user-location-start-button[hidden] {
-    display: none;
+  .user-location-start-button:disabled {
+    cursor: not-allowed;
+    opacity: .62;
+    background: #e2e8f0;
+    color: #475569;
+    box-shadow: none;
   }
 
   .user-map-page {
