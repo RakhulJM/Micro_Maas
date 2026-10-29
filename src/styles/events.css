@@ -1763,3 +1763,13 @@
     font-size: 11px;
   }
 }
+
+/* Event detail contrast fix: ensure fact values remain readable on light cards. */
+.events-page .event-detail-fact strong {
+  color: #182A46 !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #182A46 !important;
+}
+.events-page .event-detail-fact span {
+  color: #007FAF !important;
+}
