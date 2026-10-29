@@ -1316,3 +1316,157 @@
 .events-page .events-notice > span {
   color: var(--events-gold);
 }
+
+
+/* KEC brand palette experiment — colours only; keep the current calendar layout. */
+.events-page {
+  --events-bg: #F3F7FA;
+  --events-panel: #FFFFFF;
+  --events-panel-raised: #FFFFFF;
+  --events-ink: #182A46;
+  --events-muted: #52657B;
+  --events-line: #D5E2EB;
+  --events-blue: #009EDB;
+  --events-cyan: #009EDB;
+  --events-gold: #91C04A;
+  background: #F3F7FA !important;
+  color: #182A46;
+}
+.events-page .events-brand,
+.events-page .events-title,
+.events-page .events-section-heading h2,
+.events-page .event-feature-info h3,
+.events-page .event-detail h1,
+.events-page .calendar-toolbar h3,
+.events-page .agenda-panel-header h3,
+.events-page .plan-editor-heading h4,
+.events-page .event-feature-venue strong,
+.events-page .agenda-item-content strong {
+  color: #182A46;
+}
+.events-page .events-intro,
+.events-page .section-subtitle,
+.events-page .event-feature-description,
+.events-page .event-detail-description,
+.events-page .plan-editor-copy,
+.events-page .agenda-empty,
+.events-page .events-footer {
+  color: #52657B;
+}
+.events-page .events-hero,
+.events-page .event-carousel,
+.events-page .calendar-panel,
+.events-page .agenda-panel,
+.events-page .event-detail,
+.events-page .event-detail-fact {
+  background: #FFFFFF;
+  border-color: #D5E2EB;
+  box-shadow: 0 4px 14px rgba(24, 42, 70, .06);
+}
+.events-page .events-hero-mark,
+.events-page .event-feature-venue-icon,
+.events-page .event-chip,
+.events-page .agenda-count,
+.events-page .plan-private-label {
+  background: #E5F5FC;
+  border-color: #B9E4F4;
+  color: #182A46;
+}
+.events-page .events-brand-mark,
+.events-page .events-button-primary,
+.events-page .event-save-button.is-saved,
+.events-page .map-preview-fallback b,
+.events-page .event-map-marker-core {
+  background: #009EDB;
+  border-color: #009EDB;
+  color: #FFFFFF;
+}
+.events-page .events-eyebrow,
+.events-page .calendar-toolbar-kicker,
+.events-page .event-map-bottomline small,
+.events-page .event-feature-venue small,
+.events-page .agenda-item-time,
+.events-page .event-detail-fact span,
+.events-page .event-detail-description a {
+  color: #009EDB;
+}
+.events-page .events-backlink,
+.events-page .icon-button,
+.events-page .events-button,
+.events-page .event-save-button,
+.events-page .agenda-mini-button {
+  background: #FFFFFF;
+  border-color: #D5E2EB;
+  color: #182A46;
+}
+.events-page .events-backlink:hover,
+.events-page .icon-button:hover,
+.events-page .events-button:hover,
+.events-page .event-save-button:hover,
+.events-page .agenda-mini-button:hover {
+  background: #E5F5FC;
+  border-color: #009EDB;
+  color: #182A46;
+}
+.events-page .calendar-day,
+.events-page .agenda-item,
+.events-page .event-detail-fact,
+.events-page #planForm input,
+.events-page #planForm textarea,
+.events-page #planForm select {
+  background: #F3F7FA;
+  border-color: #D5E2EB;
+  color: #182A46;
+}
+.events-page .calendar-day.is-outside-month { color: #9AA9B8; }
+.events-page .calendar-day.is-selected {
+  background: #E5F5FC;
+  border-color: #009EDB;
+  color: #182A46;
+}
+.events-page .calendar-day.is-today .calendar-day-number,
+.events-page .legend-today {
+  border-color: #009EDB;
+  color: #182A46;
+}
+.events-page .calendar-indicator-event,
+.events-page .legend-event,
+.events-page .carousel-dot.is-active {
+  background: #009EDB;
+}
+.events-page .calendar-indicator-plan,
+.events-page .legend-plan,
+.events-page .map-live-dot {
+  background: #91C04A;
+}
+.events-page .plan-private-label,
+.events-page .plan-save-status {
+  background-color: #EDF5E2;
+  border-color: #D4E6B8;
+  color: #3F6120;
+}
+.events-page .events-notice,
+.events-page .event-chip-demo {
+  background: #EDF5E2;
+  border-color: #D4E6B8;
+  color: #3F6120;
+}
+.events-page .events-notice > span,
+.events-page .event-chip-demo { color: #527A2A; }
+.events-page .event-map-bottomline {
+  background: #182A46;
+  border-color: #182A46;
+  color: #F3F7FA;
+}
+.events-page .event-map-bottomline strong { color: #F3F7FA; }
+.events-page .event-map-topline,
+.events-page .event-map-attribution {
+  background: rgba(255, 255, 255, .95);
+  color: #182A46;
+}
+.events-page #planForm input:focus,
+.events-page #planForm textarea:focus,
+.events-page #planForm select:focus {
+  border-color: #009EDB;
+  box-shadow: 0 0 0 3px rgba(0, 158, 219, .14);
+}
