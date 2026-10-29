@@ -37,7 +37,10 @@ const firstEvent = orderedEvents[0];
           <span class="events-brand-mark" aria-hidden="true">C</span>
           <span>CampusMaaS</span>
         </a>
-        <a class="events-backlink" href="/user">← Back to campus map</a>
+        <div class="events-topbar-actions">
+          <a class="events-backlink" href="https://kongu.ac.in/events" target="_blank" rel="noreferrer">Browse KEC events ↗</a>
+          <a class="events-backlink" href="/user">← Back to campus map</a>
+        </div>
       </nav>
 
       <header class="events-hero">
@@ -55,11 +58,6 @@ const firstEvent = orderedEvents[0];
           <i></i><i></i><i></i><i></i><i></i><i></i>
         </div>
       </header>
-
-      <p class="events-notice" role="note">
-        <span aria-hidden="true">ⓘ</span>
-        Demo mode: listings are sample events, not verified college announcements. Confirm details with official campus channels before attending.
-      </p>
 
       <section class="events-section" aria-labelledby="upNextHeading">
         <div class="events-section-heading">
@@ -100,7 +98,7 @@ const firstEvent = orderedEvents[0];
           <article class="event-feature-info" aria-live="polite">
             <div class="event-card-meta">
               <span class="event-chip" id="carouselCategory">{firstEvent.category}</span>
-              <span class="event-chip event-chip-demo">Demo listing</span>
+              <span class="event-chip event-chip-published">KEC event</span>
             </div>
             <p class="event-feature-date" id="carouselDate">{formatDate(firstEvent.startDate)} · {formatTime(firstEvent.startTime)}</p>
             <h3 id="carouselTitle">{firstEvent.title}</h3>
@@ -209,7 +207,7 @@ const firstEvent = orderedEvents[0];
       </section>
 
       <footer class="events-footer">
-        Event listings are demo data. Personal plans are saved only in this browser and are not synced across devices.
+        Browse published KEC event listings, open event details, and navigate to the listed venue. Personal plans are saved in this browser.
       </footer>
     </div>
   </main>
@@ -306,20 +304,13 @@ const firstEvent = orderedEvents[0];
     carouselIndex = (nextIndex + events.length) % events.length;
     const event = events[carouselIndex];
     const detailUrl = '/events/' + encodeURIComponent(event.slug);
-    const externalUrl = event.registrationUrl || event.sourceUrl || '';
-    const primaryUrl = externalUrl || detailUrl;
-    const externalLabel = event.registrationUrl ? 'Register for event' : 'Open event website';
+    const primaryUrl = detailUrl;
 
     if (carouselElements.mapLink) {
       carouselElements.mapLink.href = primaryUrl;
-      carouselElements.mapLink.setAttribute('aria-label', externalUrl ? externalLabel + ': ' + event.title : 'Open details for ' + event.title);
-      if (externalUrl) {
-        carouselElements.mapLink.target = '_blank';
-        carouselElements.mapLink.rel = 'noreferrer';
-      } else {
-        carouselElements.mapLink.removeAttribute('target');
-        carouselElements.mapLink.removeAttribute('rel');
-      }
+      carouselElements.mapLink.setAttribute('aria-label', 'Open details for ' + event.title);
+      carouselElements.mapLink.removeAttribute('target');
+      carouselElements.mapLink.removeAttribute('rel');
     }
     if (carouselElements.mapVenue) carouselElements.mapVenue.textContent = event.venue;
     if (carouselElements.category) carouselElements.category.textContent = event.category;
@@ -330,15 +321,10 @@ const firstEvent = orderedEvents[0];
     if (carouselElements.description) carouselElements.description.textContent = String(event.description || '');
     if (carouselElements.venue) carouselElements.venue.textContent = event.venue;
     if (carouselElements.details) {
-      carouselElements.details.href = primaryUrl;
-      carouselElements.details.textContent = externalUrl ? externalLabel : 'View event details';
-      if (externalUrl) {
-        carouselElements.details.target = '_blank';
-        carouselElements.details.rel = 'noreferrer';
-      } else {
-        carouselElements.details.removeAttribute('target');
-        carouselElements.details.removeAttribute('rel');
-      }
+      carouselElements.details.href = detailUrl;
+      carouselElements.details.textContent = 'View event details';
+      carouselElements.details.removeAttribute('target');
+      carouselElements.details.removeAttribute('rel');
     }
     if (carouselElements.counter) {
       carouselElements.counter.textContent = pad2(carouselIndex + 1) + ' / ' + pad2(events.length);
