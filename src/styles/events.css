@@ -1148,3 +1148,62 @@
   .events-page .calendar-day-number { font-size: 13px !important; }
   .events-page .event-detail-facts { grid-template-columns: minmax(0, 1fr); }
 }
+
+
+/* Product polish: calendar, event cards and agenda controls. */
+.events-page {
+  --events-radius: 18px;
+  --events-card-shadow: 0 16px 42px rgba(0, 0, 0, .18);
+  scrollbar-gutter: stable;
+}
+.events-page .events-shell { width: min(1180px, 100%); margin-inline: auto; }
+.events-page .events-topbar {
+  position: sticky; top: 0; z-index: 30;
+  padding: 10px 0; backdrop-filter: blur(16px);
+}
+.events-page .events-brand,
+.events-page .events-backlink { min-height: 42px; }
+.events-page .events-hero,
+.events-page .calendar-panel,
+.events-page .agenda-panel,
+.events-page .event-detail {
+  border-radius: var(--events-radius);
+  box-shadow: var(--events-card-shadow);
+}
+.events-page .event-feature,
+.events-page .event-card,
+.events-page .event-detail-fact {
+  overflow: hidden;
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.events-page .event-card:hover,
+.events-page .event-feature:hover {
+  transform: translateY(-2px);
+}
+.events-page :where(button, .events-button, .event-save-button, .agenda-mini-button) {
+  border-radius: 10px;
+  cursor: pointer;
+}
+.events-page :where(input, select, textarea) {
+  border-radius: 10px;
+}
+.events-page .event-map-preview,
+.events-page .event-map-open {
+  overflow: hidden;
+  border-radius: 14px;
+}
+.events-page img { max-width: 100%; }
+.events-page .event-detail-description { max-width: 72ch; }
+.events-page .calendar-day:focus-visible,
+.events-page .event-card:focus-within { outline: 3px solid #67c6ff; outline-offset: 3px; }
+@media (max-width: 640px) {
+  .events-page .events-topbar { position: relative; }
+  .events-page .events-hero { gap: 16px; }
+  .events-page .calendar-panel,
+  .events-page .agenda-panel { border-radius: 14px; }
+  .events-page .plan-form-row { grid-template-columns: minmax(0, 1fr); }
+}
+@media (hover: none) {
+  .events-page .event-card:hover,
+  .events-page .event-feature:hover { transform: none; }
+}
