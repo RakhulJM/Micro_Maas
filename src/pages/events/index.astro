@@ -29,13 +29,13 @@ const orderedEvents = [...events].sort((a, b) =>
 const firstEvent = orderedEvents[0];
 ---
 
-<MainLayout title="Campus calendar | CampusMaaS">
+<MainLayout title="Campus calendar | KEC Campus">
   <main class="events-page">
     <div class="events-shell" data-events={JSON.stringify(orderedEvents)}>
       <nav class="events-topbar" aria-label="Page navigation">
         <a class="events-brand" href="/user">
           <span class="events-brand-mark" aria-hidden="true">C</span>
-          <span>CampusMaaS</span>
+          <span>KEC Campus</span>
         </a>
         <div class="events-topbar-actions">
           <a class="events-backlink" href="https://kongu.ac.in/events" target="_blank" rel="noreferrer">Browse KEC events ↗</a>
