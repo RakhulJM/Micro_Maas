@@ -1904,3 +1904,24 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+
+/* Project-wide readable typography and consistent controls */
+:root {
+  --maas-body-size: 16px;
+  --maas-label-size: 13px;
+}
+html { font-size: 16px; text-rendering: optimizeLegibility; }
+body {
+  font-family: "DM Sans", "Segoe UI", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  color: #172b3a;
+}
+:where(p, li, label, input, select, textarea, button, a) {
+  font-size: max(14px, 1em);
+  line-height: 1.5;
+}
+:where(input, select, textarea) { min-height: 44px; padding-inline: 12px; }
+:where(button) { min-height: 42px; padding-inline: 12px; font-weight: 650; }
+:where(small, .text-small, .muted) { font-size: 12px; }
