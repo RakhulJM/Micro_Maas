@@ -1405,7 +1405,7 @@ const routeSummary = (
     return null;
   }
 
-  const startCandidates = candidateAnchors(startPoint, 'in');
+  const startCandidates = candidateAnchors(startPoint, 'in', destinationConnectRadius);
   const endCandidates = candidateAnchors(endPoint, 'out', destinationConnectRadius);
 
   if (!startCandidates.length || !endCandidates.length) {
