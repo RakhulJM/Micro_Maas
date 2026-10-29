@@ -1925,3 +1925,27 @@ body {
 :where(input, select, textarea) { min-height: 44px; padding-inline: 12px; }
 :where(button) { min-height: 42px; padding-inline: 12px; font-weight: 650; }
 :where(small, .text-small, .muted) { font-size: 12px; }
+
+
+/* Global readable type scale across every route */
+html { font-size: 18px !important; }
+body { font-size: 18px !important; line-height: 1.6 !important; }
+body p, body li, body label, body input, body select, body textarea, body button, body a, body td, body th { font-size: max(16px, 1em) !important; line-height: 1.55 !important; }
+body small, body .text-small, body .muted, body .helper-text, body .form-hint { font-size: 14px !important; line-height: 1.5 !important; }
+body h6 { font-size: 16px !important; line-height: 1.35 !important; }
+body h5 { font-size: 18px !important; line-height: 1.35 !important; }
+body h4 { font-size: 21px !important; line-height: 1.3 !important; }
+body h3 { font-size: 24px !important; line-height: 1.3 !important; }
+body h2 { font-size: 28px !important; line-height: 1.25 !important; }
+body h1 { font-size: clamp(30px, 3vw, 40px) !important; line-height: 1.15 !important; }
+body input, body select, body textarea { min-height: 48px !important; padding: 11px 14px !important; }
+@media (max-width: 600px) {
+  html, body { font-size: 16px !important; }
+  body p, body li, body label, body input, body select, body textarea, body button, body a, body td, body th { font-size: max(15px, 1em) !important; }
+  body h6 { font-size: 15px !important; }
+  body h5 { font-size: 17px !important; }
+  body h4 { font-size: 19px !important; }
+  body h3 { font-size: 22px !important; }
+  body h2 { font-size: 25px !important; }
+  body h1 { font-size: clamp(27px, 7vw, 34px) !important; }
+}
