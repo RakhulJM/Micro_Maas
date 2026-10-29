@@ -315,7 +315,7 @@ const firstEvent = orderedEvents[0];
     if (carouselElements.mapVenue) carouselElements.mapVenue.textContent = event.venue;
     if (carouselElements.category) carouselElements.category.textContent = event.category;
     if (carouselElements.date) {
-      carouselElements.date.textContent = formatLongDate(event.startDate) + ' · ' + formatTime(event.startTime);
+      carouselElements.date.textContent = formatLongDate(event.startDate) + (event.endDate !== event.startDate ? ' – ' + formatShortDate(event.endDate) : '') + ' · ' + formatTime(event.startTime);
     }
     if (carouselElements.title) carouselElements.title.textContent = event.title;
     if (carouselElements.description) carouselElements.description.textContent = String(event.description || '');
@@ -508,7 +508,7 @@ const firstEvent = orderedEvents[0];
   const planNotesInput = el('planNotes');
 
   const eventsForDate = (key) => events
-    .filter((event) => event.startDate === key)
+    .filter((event) => event.startDate <= key && event.endDate >= key)
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   const plansForDate = (key) => plans
