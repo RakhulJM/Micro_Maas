@@ -11,9 +11,9 @@ const campusEvents = [...events].sort((a, b) =>
 );
 ---
 
-<MainLayout title="CampusMaaS">
+<MainLayout title="KEC Campus">
   <main class="user-map-page">
-    <div id="map" class="map map-local" aria-label="CampusMaaS campus map"></div>
+    <div id="map" class="map map-local" aria-label="KEC Campus campus map"></div>
     <div class="user-location-controls">
       <button type="button" id="userLocateButton" class="user-locate-button" aria-pressed="false" aria-describedby="userLocationStatus">
         <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1756,7 +1756,7 @@ const start = async () => {
     !perimeterResponse.ok ||
     !accessRulesResponse.ok
   ) {
-    throw new Error('CampusMaaS map or access-policy data could not be loaded.');
+    throw new Error('KEC Campus map or access-policy data could not be loaded.');
   }
 
   const [places, loadedPathData, loadedGates, perimeter, loadedAccessPolicy] = await Promise.all([
@@ -1777,7 +1777,7 @@ const start = async () => {
   const radius = Number(perimeterFeature?.properties?.radius_m) || 1000;
 
   if (!Array.isArray(perimeterCoordinates) || !Array.isArray(centerCoordinates)) {
-    throw new Error('CampusMaaS perimeter data is invalid.');
+    throw new Error('KEC Campus perimeter data is invalid.');
   }
 
   const center = L.latLng(
@@ -1804,7 +1804,7 @@ const start = async () => {
     maxBoundsViscosity: 1
   }).setView(center, 18);
 
-  mapElement.setAttribute('aria-label', 'CampusMaaS campus map');
+  mapElement.setAttribute('aria-label', 'KEC Campus campus map');
 
   /*
    * Initial user trip: the logical campus entry point is Gate - 09,
@@ -3508,7 +3508,7 @@ const start = async () => {
     }
 
     if (!window.isSecureContext) {
-      setLocationStatus('Location access requires HTTPS or localhost. Open CampusMaaS through a secure URL and try again.');
+      setLocationStatus('Location access requires HTTPS or localhost. Open KEC Campus through a secure URL and try again.');
       return;
     }
 
@@ -5081,7 +5081,7 @@ void start().catch((error) => {
 
 
 <style is:global>
-/* CampusMaaS HUD redesign — unified visual system and responsive layout */
+/* KEC Campus HUD redesign — unified visual system and responsive layout */
 .user-map-page {
   --hud-ink: #eaf5ff;
   --hud-muted: #8ca6c0;
