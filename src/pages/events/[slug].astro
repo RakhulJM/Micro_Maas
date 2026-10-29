@@ -95,7 +95,7 @@ const formatTime = (value) => {
   const normalizePlaceName = (value) =>
     String(value || '')
       .normalize('NFD')
-      .replace(/[\\u0300-\\u036f]/g, '')
+      .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, ' ')
       .trim();
@@ -131,18 +131,25 @@ const formatTime = (value) => {
       if (!response.ok) throw new Error('Campus building data could not be loaded.');
       const places = await response.json();
       const wanted = normalizePlaceName(eventVenue);
-      const venueTerms = wanted.split(' ').filter((term) => term.length > 2);
       const features = (places.features || []).filter((feature) => {
         const properties = feature?.properties || {};
         return Boolean(properties.name && properties.building && feature?.geometry?.coordinates);
       });
 
+      const aliases = [
+        { when: /\\bece\\b|electronics and communication engineering/i, name: 'ECE block' },
+        { when: /automobile engineering/i, name: 'Mechanical and Mechatronics block' }
+      ];
+      const alias = aliases.find((entry) => entry.when.test(eventVenue));
       const exact = features.find((feature) => normalizePlaceName(feature.properties.name) === wanted);
       const partial = features.find((feature) => {
         const name = normalizePlaceName(feature.properties.name);
         return name && (wanted.includes(name) || name.includes(wanted));
       });
-      const venueMatch = exact || partial;
+      const aliasMatch = alias
+        ? features.find((feature) => normalizePlaceName(feature.properties.name) === normalizePlaceName(alias.name))
+        : null;
+      const venueMatch = exact || partial || aliasMatch;
 
       if (!venueMatch) {
         routeStatus.textContent = 'This venue does not have an exact named building match in the campus GeoJSON yet. No approximate destination was chosen.';
