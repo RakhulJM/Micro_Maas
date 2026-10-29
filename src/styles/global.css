@@ -1719,3 +1719,35 @@ button, input, select, textarea { font: inherit; }
   body { font-size: 16px; }
   :where(p, li, label, td, th) { line-height: 1.5; }
 }
+
+
+/* CampusMaaS UI system: accessible controls and consistent interaction states. */
+:root {
+  --maas-ink: #183247;
+  --maas-muted: #607586;
+  --maas-green: #176b4d;
+  --maas-green-dark: #10533c;
+  --maas-green-soft: #eaf4ee;
+  --maas-border: #dce6df;
+  --maas-surface: #ffffff;
+  --maas-page: #f4f7f4;
+  --maas-radius-sm: 10px;
+  --maas-radius-md: 16px;
+  --maas-radius-lg: 22px;
+  --maas-shadow-card: 0 10px 28px rgba(25, 55, 41, .08);
+}
+:where(button, a, input, select, textarea, summary, [role="button"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+:where(button, a, input, select, textarea, summary, [role="button"]):focus-visible {
+  outline: 3px solid #78b8a0;
+  outline-offset: 3px;
+}
+:where(button, input, select, textarea) { accent-color: var(--maas-green); }
+::selection { background: #cfe8d9; color: #163b2b; }
+@media (prefers-reduced-motion: no-preference) {
+  :where(button, a, [role="button"]) { transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
