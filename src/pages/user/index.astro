@@ -314,7 +314,7 @@ const setupUserServicesDrawer = () => {
   const panel = document.getElementById('userServicesCard');
   const toggle = document.getElementById('userServicesToggle');
   if (!panel || !toggle) return;
-  const mobile = window.matchMedia('(max-width: 560px)');
+  const mobile = window.matchMedia('(max-width: 760px)');
   const setExpanded = (expanded) => {
     panel.classList.toggle('is-collapsed', !expanded);
     toggle.setAttribute('aria-expanded', String(expanded));
