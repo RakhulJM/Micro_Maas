@@ -3371,15 +3371,19 @@ const start = async () => {
     if (!hasAutoSetLocationAsStart) {
       clearRouteRendering();
       pointA = latlng;
-      pointB = null;
-      resetTripSummary();
+      if (!hasRequestedEventDestination) {
+        pointB = null;
+        resetTripSummary();
+        if (userTripTo) userTripTo.textContent = 'Select Point B';
+      }
       if (userTripFrom) userTripFrom.textContent = 'Your current location';
-      if (userTripTo) userTripTo.textContent = 'Select Point B';
       renderEndpointMarkers();
+      if (pointB) renderUserRoute();
       hasAutoSetLocationAsStart = true;
     } else if (userTripFrom?.textContent === 'Your current location' && pointA) {
       pointA = latlng;
       renderEndpointMarkers();
+      if (pointB) renderUserRoute();
     }
 
     if (!userLocationAccuracy) {
@@ -3437,12 +3441,18 @@ const start = async () => {
 
     clearRouteRendering();
     pointA = L.latLng(lastKnownUserLatLng.lat, lastKnownUserLatLng.lng);
-    pointB = null;
-    resetTripSummary();
+    if (!pointB) {
+      resetTripSummary();
+      if (userTripTo) userTripTo.textContent = 'Select Point B';
+    }
     if (userTripFrom) userTripFrom.textContent = 'Your current location';
-    if (userTripTo) userTripTo.textContent = 'Select Point B';
     renderEndpointMarkers();
-    setLocationStatus('Your current location is set as Point A. Select a destination on the map.');
+    if (pointB) {
+      renderUserRoute();
+      setLocationStatus('Your current location is set as Point A. The selected destination has been kept.');
+    } else {
+      setLocationStatus('Your current location is set as Point A. Select a destination on the map.');
+    }
   });
 
   const locationErrorMessage = (error) => {
