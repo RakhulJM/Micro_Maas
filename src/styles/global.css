@@ -1778,3 +1778,129 @@ body {
     -1px 0 0 rgba(255,255,255,.98),
     0 -1px 0 rgba(255,255,255,.98);
 }
+
+
+/* CampusMaaS design system — restrained institutional navy, green and neutral surfaces */
+:root {
+  color-scheme: light;
+  --maas-ink: #172b3a;
+  --maas-muted: #5d7180;
+  --maas-navy: #102f4b;
+  --maas-navy-deep: #0b253c;
+  --maas-blue: #245f8b;
+  --maas-green: #176b4d;
+  --maas-green-soft: #e8f2eb;
+  --maas-surface: #ffffff;
+  --maas-canvas: #f2f5f3;
+  --maas-border: #dbe3df;
+  --maas-focus: #76a98a;
+  --maas-radius: 12px;
+  --maas-shadow: 0 6px 20px rgba(18, 42, 34, .10);
+}
+html { font-family: "DM Sans", "Segoe UI", Arial, sans-serif; }
+body { font-family: "DM Sans", "Segoe UI", Arial, sans-serif; }
+button, input, select, textarea { font: inherit; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid rgba(23, 107, 77, .45);
+  outline-offset: 2px;
+}
+:where(button, input, select, textarea) { font-size: 14px; }
+:where(input, select, textarea) {
+  min-height: 40px;
+  border-radius: 8px;
+}
+:where(button) { min-height: 38px; border-radius: 8px; font-weight: 600; }
+:where(a) { text-underline-offset: 3px; }
+.floating-header {
+  top: 16px; left: 18px; right: 18px; gap: 12px;
+}
+.brand {
+  gap: 10px; padding: 7px 14px 7px 7px; border-radius: 11px;
+  border-color: var(--maas-border); background: var(--maas-surface);
+  color: var(--maas-ink); box-shadow: var(--maas-shadow); backdrop-filter: none;
+}
+.brand-mark {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--maas-navy); box-shadow: none; font-size: 14px;
+}
+.brand strong { font: 700 15px "DM Sans", "Segoe UI", sans-serif; letter-spacing: -.025em; }
+.top-actions { gap: 8px; }
+.ghost-btn, .profile, .map-switch, .map-controls button, .path-toggle, .route-toggle, .gate-toggle, .edit-toggle {
+  color: var(--maas-ink); border: 1px solid var(--maas-border);
+  background: var(--maas-surface); box-shadow: 0 3px 10px rgba(18,42,34,.08);
+  backdrop-filter: none;
+}
+.ghost-btn { min-height: 38px; padding: 0 13px; border-radius: 8px; font-size: 12px; font-weight: 650; }
+.map-switch { min-height: 38px; border-radius: 9px; padding: 5px 10px; gap: 8px; }
+.map-switch-label { font-size: 10px; }
+.map-switch-track { background: var(--maas-green); box-shadow: none; }
+.map-switch-terrain .map-switch-track { background: var(--maas-navy); }
+.profile { width: 36px; height: 36px; font-size: 11px; font-weight: 700; }
+.map-controls { right: 18px; bottom: 22px; gap: 6px; }
+.map-controls button, .path-toggle, .route-toggle, .gate-toggle, .edit-toggle {
+  width: 40px; height: 40px; border-radius: 10px; font-size: 19px;
+}
+.path-toggle { bottom: 126px; }
+.route-toggle { bottom: 172px; }
+.edit-toggle { bottom: 218px; }
+.gate-toggle { bottom: 264px; }
+.path-toggle.is-active, .route-toggle.is-active, .gate-toggle.is-active, .edit-toggle.is-active {
+  border-color: var(--maas-navy); background: var(--maas-navy); color: #fff; box-shadow: none;
+}
+.route-card, .gate-card, .path-type-palette, .ground-shape-palette, .edit-card,
+.dev-panel-shell, .gate-name-dialog, .delete-point-dialog {
+  border: 1px solid var(--maas-border); border-radius: 14px;
+  background: var(--maas-surface); color: var(--maas-ink); box-shadow: var(--maas-shadow);
+  backdrop-filter: none;
+}
+.route-card { padding: 16px; }
+.route-card-kicker, .edit-card-kicker, .path-type-palette-title, .dev-panel-kicker { color: var(--maas-green); }
+.route-card-top strong, .edit-card-top strong, .route-result strong, .edit-action { color: var(--maas-ink); }
+.route-result { border-top-color: var(--maas-border); }
+.route-card-close, .edit-action, .gate-name-actions button {
+  border: 1px solid var(--maas-border); border-radius: 8px; background: #f6f8f6; color: var(--maas-ink);
+}
+.edit-action-primary, .edit-save-action { background: var(--maas-green-soft); color: var(--maas-green); border-color: #bfd8c6; }
+.edit-delete-action { background: #fff3f1; color: #a83232; border-color: #efd0cc; }
+.gate-name-field input { border: 1px solid var(--maas-border); background: #fff; color: var(--maas-ink); }
+.gate-name-field input:focus { border-color: var(--maas-green); box-shadow: 0 0 0 3px rgba(23,107,77,.10); }
+.delete-point-option, .path-type-option, .ground-shape-option {
+  border: 1px solid var(--maas-border); border-radius: 9px; background: #f8faf8; color: var(--maas-ink);
+}
+.delete-point-option:hover, .path-type-option:hover, .ground-shape-option:hover { background: var(--maas-green-soft); border-color: #b7d2c0; }
+.path-type-option.is-selected { background: var(--maas-green-soft); border-color: #9ec5aa; }
+.map-note { border: 1px solid var(--maas-border); border-radius: 9px; background: rgba(255,255,255,.94); color: var(--maas-muted); box-shadow: var(--maas-shadow); }
+.leaflet-tooltip { border: 1px solid var(--maas-border); border-radius: 7px; background: #fff; color: var(--maas-ink); box-shadow: var(--maas-shadow); }
+.leaflet-tooltip-top::before { border-top-color: #fff; }
+.dev-panel-shell { color: var(--maas-ink); }
+.dev-panel-header { border-bottom-color: var(--maas-border); }
+.dev-card { border: 1px solid var(--maas-border); border-radius: 10px; background: #f8faf8; }
+.dev-card-title > span { background: var(--maas-green-soft); color: var(--maas-green); }
+.map-file-row { border-color: var(--maas-border); background: #fff; }
+.map-file-row strong, .zoom-setting strong { color: var(--maas-ink); }
+.map-file-row small, .zoom-setting span, .dev-panel-hint { color: var(--maas-muted); }
+.dev-action { border: 1px solid #bfd8c6; border-radius: 8px; background: var(--maas-green-soft); color: var(--maas-green); }
+.gate-name-modal, .delete-point-modal, .dev-panel { background: rgba(16, 35, 48, .38); }
+@media (max-width: 760px) {
+  .floating-header { top: 10px; left: 10px; right: 10px; align-items: flex-start; }
+  .brand { padding-right: 10px; }
+  .brand strong { font-size: 13px; }
+  .top-actions { flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+  .ghost-btn { min-height: 36px; padding: 0 9px; font-size: 11px; }
+  .map-switch { min-height: 36px; padding: 4px 7px; gap: 5px; }
+  .profile { width: 34px; height: 34px; }
+  .map-controls { right: 10px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .map-controls button, .path-toggle, .route-toggle, .gate-toggle, .edit-toggle { width: 42px; height: 42px; }
+  .map-note { max-width: calc(100vw - 80px); }
+}
+@media (max-width: 430px) {
+  .floating-header { gap: 6px; }
+  .brand { gap: 7px; }
+  .brand-mark { width: 30px; height: 30px; }
+  .brand strong { font-size: 12px; }
+  .ghost-btn { font-size: 10px; padding: 0 7px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
