@@ -1775,3 +1775,39 @@ body :is(strong, b) { font-size: max(15px, 1em); }
   }
 }
 
+/* Campus map event discovery: compact card, prominent poster. */
+.user-map-page .user-event-discovery {
+  width: min(430px, calc(100vw - 72px)) !important;
+  padding: 10px !important;
+}
+.user-map-page .user-event-discovery-body {
+  grid-template-columns: 92px minmax(0, 1fr) !important;
+  gap: 11px !important;
+}
+.user-map-page .user-event-poster-link {
+  width: 92px !important;
+  min-width: 92px !important;
+  height: 122px !important;
+  overflow: hidden !important;
+  border-radius: 13px !important;
+}
+.user-map-page .user-event-poster {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+@media (max-width: 760px) {
+  .user-map-page .user-event-discovery {
+    width: min(390px, calc(100vw - 32px)) !important;
+  }
+  .user-map-page .user-event-discovery-body {
+    grid-template-columns: 84px minmax(0, 1fr) !important;
+    gap: 9px !important;
+  }
+  .user-map-page .user-event-poster-link {
+    width: 84px !important;
+    min-width: 84px !important;
+    height: 112px !important;
+  }
+}
