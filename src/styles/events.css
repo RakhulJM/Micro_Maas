@@ -1634,3 +1634,96 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
+
+
+/* KEC contrast correction: keep the official green vivid and repair button states. */
+.events-page {
+  --kec-green: #91C04A;
+  --kec-green-hover: #7EAC35;
+  --kec-green-ink: #182A46;
+  --kec-blue: #009EDB;
+}
+.events-page .plan-private-label,
+.events-page .plan-save-status,
+.events-page .events-notice,
+.events-page .event-chip-demo {
+  background: #91C04A !important;
+  border-color: #91C04A !important;
+  color: #182A46 !important;
+}
+.events-page .events-notice > span,
+.events-page .event-chip-demo {
+  color: #182A46 !important;
+}
+.events-page .calendar-indicator-plan,
+.events-page .legend-plan,
+.events-page .map-live-dot {
+  background-color: #91C04A !important;
+  box-shadow: 0 0 0 2px rgba(145,192,74,.18);
+}
+.events-page .calendar-day-count,
+.events-page .agenda-item-time,
+.events-page .agenda-list-heading,
+.events-page .plan-editor-heading h4,
+.events-page .calendar-toolbar-kicker {
+  color: #527A22 !important;
+}
+.events-page .calendar-day:hover,
+.events-page .agenda-event-item:hover,
+.events-page .events-backlink:hover,
+.events-page .icon-button:hover,
+.events-page .events-button:not(.events-button-primary):hover,
+.events-page .event-save-button:not(.is-saved):hover,
+.events-page .agenda-mini-button:hover {
+  background: rgba(145,192,74,.22) !important;
+  border-color: #91C04A !important;
+  color: #182A46 !important;
+}
+.events-page .calendar-day.is-selected {
+  background: linear-gradient(135deg, rgba(0,158,219,.16), rgba(145,192,74,.3)) !important;
+  border-color: #009EDB !important;
+  color: #182A46 !important;
+}
+.events-page .events-button-primary,
+.events-page .events-button-primary:visited,
+.events-page .events-button-primary:hover,
+.events-page .events-button-primary:focus-visible,
+.events-page .event-save-button.is-saved,
+.events-page .event-save-button.is-saved:hover {
+  background: #009EDB !important;
+  border-color: #009EDB !important;
+  color: #FFFFFF !important;
+}
+.events-page .events-button-primary:hover,
+.events-page .event-save-button.is-saved:hover {
+  background: #007FAF !important;
+  border-color: #007FAF !important;
+}
+.events-page .events-button:not(.events-button-primary),
+.events-page .event-save-button:not(.is-saved),
+.events-page .agenda-mini-button,
+.events-page .icon-button,
+.events-page .events-backlink {
+  background: rgba(255,255,255,.94) !important;
+  color: #182A46 !important;
+  border-color: rgba(24,42,70,.2) !important;
+}
+.events-page .agenda-delete-button,
+.events-page .agenda-delete-button:hover {
+  background: #FFF0F0 !important;
+  border-color: #D66B73 !important;
+  color: #9D2632 !important;
+}
+.events-page :where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid rgba(0,158,219,.55) !important;
+  outline-offset: 2px;
+}
+.events-page .event-chip:not(.event-chip-demo) {
+  background: #E5F5FC !important;
+  border-color: #009EDB !important;
+  color: #075477 !important;
+}
+.events-page .event-map-bottomline,
+.events-page .event-map-bottomline strong {
+  color: #F3F7FA !important;
+}
