@@ -718,7 +718,8 @@ const routeSummary = (
   endPoint,
   accessPolicy,
   userGroup = 'boys',
-  gates = []
+  gates = [],
+  destinationConnectRadius = USER_ROUTE_CONNECT_RADIUS_M
 ) => {
   const temporal = policyTemporalState(
     accessPolicy?.timezone || 'Asia/Kolkata'
@@ -1329,7 +1330,7 @@ const routeSummary = (
       : null;
   };
 
-  const candidateAnchors = (point, direction) => {
+  const candidateAnchors = (point, direction, maxDistance = USER_ROUTE_CONNECT_RADIUS_M) => {
     const candidates = [];
     const preferredGate = preferredGateForPoint(point, direction);
 
@@ -1347,7 +1348,7 @@ const routeSummary = (
 
       if (
         projection.distance <=
-        USER_ROUTE_CONNECT_RADIUS_M
+        maxDistance
       ) {
         const preferredDistance = preferredGate
           ? L.latLng(
@@ -1405,7 +1406,7 @@ const routeSummary = (
   }
 
   const startCandidates = candidateAnchors(startPoint, 'in');
-  const endCandidates = candidateAnchors(endPoint, 'out');
+  const endCandidates = candidateAnchors(endPoint, 'out', destinationConnectRadius);
 
   if (!startCandidates.length || !endCandidates.length) {
     return null;
@@ -3114,7 +3115,8 @@ const start = async () => {
       pointB,
       accessPolicy,
       selectedUserGroup,
-      gates.features
+      gates.features,
+      hasRequestedEventDestination ? 120 : USER_ROUTE_CONNECT_RADIUS_M
     );
 
     if (!summary) {
@@ -3162,6 +3164,7 @@ const start = async () => {
     }
     if (userTripTime) userTripTime.textContent = minutes + ' min';
     if (userTripDistance) userTripDistance.textContent = formatDistance(summary.distance);
+    map.fitBounds(routeLine.getBounds().pad(0.18), { maxZoom: 19, animate: true });
   };
 
     const minutesFromClock = (value) => {
@@ -3532,6 +3535,12 @@ const start = async () => {
       }
     );
   });
+
+  // Event pages arrive with Point B already selected. Request the user's
+  // location immediately so the walking route is calculated without a second click.
+  if (eventDestinationPreset && pointB) {
+    locateButton?.click();
+  }
 
   const handleUserMapClick = (event) => {
     const clicked = event.latlng;
