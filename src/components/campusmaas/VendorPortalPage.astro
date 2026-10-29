@@ -1,9 +1,14 @@
 ---
 const { pageKind = 'root', vendorId = '', optionId = '', initialData = null } = Astro.props;
+const defaultInitialData = {
+  catalogue: { version: 1, vendors: [] },
+  orders: { version: 1, orders: [] },
+  pageCards: { version: 1, root: {}, categories: {} }
+};
 ---
 
 <main class="vendor-portal" data-page-kind={pageKind} data-vendor-id={vendorId} data-option-id={optionId}>
-  <script type="application/json" id="vendorPortalInitialData" set:html={JSON.stringify(initialData || { catalogue: { version: 1, vendors: [] }, orders: { version: 1, orders: [] }, pageCards: { version: 1, root: {}, categories: {} } })}></script>
+  <script type="application/json" id="vendorPortalInitialData" set:html={JSON.stringify(initialData ?? defaultInitialData)}></script>
   <div class="vendor-portal-glow vendor-portal-glow-a" aria-hidden="true"></div>
   <div class="vendor-portal-glow vendor-portal-glow-b" aria-hidden="true"></div>
 
