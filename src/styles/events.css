@@ -1727,3 +1727,39 @@
 .events-page .event-map-bottomline strong {
   color: #F3F7FA !important;
 }
+
+
+/* Published event browsing and navigation controls */
+.events-topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.events-page .event-chip-published {
+  background: rgba(145,192,74,.24) !important;
+  border-color: #91C04A !important;
+  color: #29451A !important;
+  font-weight: 800;
+}
+.events-page .events-topbar-actions .events-backlink {
+  background: rgba(255,255,255,.9);
+  color: #182A46;
+  border-color: rgba(24,42,70,.16);
+}
+.events-page .events-topbar-actions .events-backlink:hover {
+  background: rgba(145,192,74,.25);
+  border-color: #91C04A;
+  color: #182A46;
+}
+@media (max-width: 560px) {
+  .events-topbar-actions {
+    align-items: stretch;
+    gap: 6px;
+  }
+  .events-topbar-actions .events-backlink {
+    padding: 8px 9px;
+    font-size: 11px;
+  }
+}
