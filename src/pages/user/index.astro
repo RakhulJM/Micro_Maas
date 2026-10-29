@@ -3883,3 +3883,249 @@ void start().catch((error) => {
   .user-map-page .user-trip-card, .user-map-page .user-event-discovery, .user-map-page .user-services-stack, .user-map-page .user-location-controls { animation: none !important; }
 }
 </style>
+
+
+<style is="global">
+/* Complete user-map visual refresh: clearer hierarchy, larger type, landscape event posters */
+.user-map-page {
+  --user-ink: #142c3d;
+  --user-muted: #536b7b;
+  --user-navy: #103651;
+  --user-green: #176b4d;
+  --user-green-soft: #e8f2eb;
+  --user-paper: #ffffff;
+  --user-canvas: #f3f6f4;
+  --user-border: #d5e0da;
+  font-family: "DM Sans", "Segoe UI", Arial, sans-serif !important;
+  font-size: 16px !important;
+  color: var(--user-ink) !important;
+  background: var(--user-canvas) !important;
+}
+.user-map-page :where(button, input, select, textarea, a) { font-family: inherit !important; }
+.user-map-page :where(button, input, select, textarea) { font-size: 14px !important; }
+.user-map-page .user-trip-card,
+.user-map-page .user-services-label,
+.user-map-page .user-vendor-card,
+.user-map-page .user-orders-card,
+.user-map-page .user-order-composer,
+.user-map-page .user-event-discovery,
+.user-map-page .user-location-status {
+  border: 1px solid var(--user-border) !important;
+  border-radius: 16px !important;
+  background: rgba(255,255,255,.97) !important;
+  color: var(--user-ink) !important;
+  box-shadow: 0 12px 32px rgba(19,48,37,.14) !important;
+  backdrop-filter: blur(12px);
+}
+.user-map-page .user-trip-card {
+  width: min(350px, calc(100vw - 32px)) !important;
+  padding: 20px !important;
+}
+.user-map-page .user-trip-card::before,
+.user-map-page .user-services-label::before { display: none !important; }
+.user-map-page .user-trip-field > span,
+.user-map-page .user-trip-summary > div > span,
+.user-map-page .user-trip-profile > span,
+.user-map-page .user-services-kicker,
+.user-map-page .user-event-discovery-count {
+  color: var(--user-muted) !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: .045em !important;
+}
+.user-map-page .user-trip-field strong {
+  color: var(--user-ink) !important;
+  font-size: 17px !important;
+  line-height: 1.4 !important;
+  font-weight: 700 !important;
+}
+.user-map-page .user-trip-divider { background: var(--user-border) !important; }
+.user-map-page .user-trip-summary { gap: 10px !important; }
+.user-map-page .user-trip-summary > div {
+  padding: 13px !important;
+  border: 1px solid var(--user-border) !important;
+  border-radius: 12px !important;
+  background: #f6f9f7 !important;
+}
+.user-map-page .user-trip-summary strong {
+  color: var(--user-green) !important;
+  font-size: 21px !important;
+  font-weight: 750 !important;
+}
+.user-map-page .user-gender-toggle { background: #f3f7f4 !important; border-color: var(--user-border) !important; }
+.user-map-page .user-gender-button { min-height: 40px !important; font-size: 13px !important; color: var(--user-muted) !important; }
+.user-map-page .user-gender-button.is-active { background: var(--user-green) !important; color: white !important; border-color: var(--user-green) !important; }
+.user-map-page .user-services-stack {
+  width: min(350px, calc(100vw - 32px)) !important;
+  gap: 10px !important;
+}
+.user-map-page .user-services-label {
+  padding: 16px 18px !important;
+  min-height: 0 !important;
+}
+.user-map-page .user-services-label strong {
+  color: var(--user-ink) !important;
+  font-size: 19px !important;
+  line-height: 1.3 !important;
+  margin-top: 5px !important;
+}
+.user-map-page .user-services-kicker { color: var(--user-green) !important; }
+.user-map-page .user-vendor-card,
+.user-map-page .user-orders-card { padding: 16px !important; }
+.user-map-page .user-vendor-title { padding-bottom: 12px !important; }
+.user-map-page .user-vendor-index { width: 34px !important; height: 34px !important; font-size: 12px !important; background: var(--user-green-soft) !important; color: var(--user-green) !important; border-color: #c9ded0 !important; }
+.user-map-page .user-vendor-title>div:last-child>span { color: var(--user-muted) !important; font-size: 11px !important; }
+.user-map-page .user-vendor-title strong,
+.user-map-page .user-orders-head strong { color: var(--user-ink) !important; font-size: 16px !important; line-height: 1.35 !important; }
+.user-map-page .user-service-option {
+  min-height: 54px !important;
+  padding: 12px !important;
+  border: 1px solid var(--user-border) !important;
+  border-radius: 11px !important;
+  background: #fff !important;
+  color: var(--user-ink) !important;
+}
+.user-map-page .user-service-option:hover { background: #f1f7f3 !important; border-color: #a9cbb6 !important; }
+.user-map-page .user-service-main strong { color: var(--user-ink) !important; font-size: 14px !important; line-height: 1.35 !important; }
+.user-map-page .user-service-main small { color: var(--user-muted) !important; font-size: 12px !important; line-height: 1.4 !important; }
+.user-map-page .user-vendor-status { color: var(--user-green) !important; font-size: 11px !important; }
+.user-map-page .user-service-option .user-service-tail>b { width: 30px !important; height: 30px !important; background: var(--user-green-soft) !important; color: var(--user-green) !important; font-size: 20px !important; }
+.user-map-page .user-orders-head { padding-bottom: 12px !important; }
+.user-map-page .user-orders-head>span { color: var(--user-muted) !important; font-size: 12px !important; }
+.user-map-page .user-order-item { padding: 11px 12px !important; border-color: var(--user-border) !important; background: #f7f9f7 !important; }
+.user-map-page .user-order-item strong { color: var(--user-ink) !important; font-size: 13px !important; }
+.user-map-page .user-order-item span { color: var(--user-muted) !important; font-size: 13px !important; }
+.user-map-page .user-order-item>b { color: var(--user-green) !important; font-size: 13px !important; }
+.user-map-page .user-services-empty { color: var(--user-muted) !important; font-size: 13px !important; }
+.user-map-page .user-order-composer { padding: 16px !important; }
+.user-map-page .user-order-compose-head strong { color: var(--user-ink) !important; font-size: 15px !important; }
+.user-map-page .user-order-compose-head>div span,
+.user-map-page .user-order-compose-meta span { color: var(--user-muted) !important; font-size: 11px !important; }
+.user-map-page .user-order-compose-meta>div { background: #f6f9f7 !important; border-color: var(--user-border) !important; }
+.user-map-page .user-order-compose-meta strong { color: var(--user-ink) !important; font-size: 14px !important; }
+.user-map-page .user-qty-row { font-size: 13px !important; }
+.user-map-page .user-qty-row button { width: 34px !important; height: 34px !important; background: var(--user-green-soft) !important; color: var(--user-green) !important; border-color: #c9ded0 !important; font-size: 18px !important; }
+.user-map-page .user-place-order { min-height: 46px !important; background: var(--user-green) !important; font-size: 13px !important; letter-spacing: .02em !important; }
+.user-map-page .user-events-link {
+  border: 1px solid var(--user-border) !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  padding: 12px 14px !important;
+}
+.user-map-page .user-events-link small { color: var(--user-green) !important; font-size: 12px !important; }
+.user-map-page .user-events-link strong { color: var(--user-ink) !important; font-size: 15px !important; }
+.user-map-page .user-events-arrow { color: var(--user-green) !important; }
+.user-map-page .user-event-discovery {
+  width: min(460px, calc(100vw - 32px)) !important;
+  padding: 16px !important;
+  left: 20px !important;
+  bottom: 20px !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(145px, 44%) !important;
+  align-items: stretch !important;
+  gap: 16px !important;
+}
+.user-map-page .user-event-discovery > :not(.user-event-poster-link):not(.user-event-poster) { min-width: 0; }
+.user-map-page .user-event-discovery-category { color: var(--user-green) !important; font-size: 12px !important; font-weight: 800 !important; }
+.user-map-page .user-event-discovery-title { color: var(--user-ink) !important; font-size: 19px !important; line-height: 1.3 !important; font-weight: 750 !important; }
+.user-map-page .user-event-discovery-date { color: var(--user-ink) !important; font-size: 14px !important; }
+.user-map-page .user-event-discovery-venue { color: var(--user-muted) !important; font-size: 13px !important; }
+.user-map-page .user-event-poster-link,
+.user-map-page .user-event-poster {
+  display: block !important;
+  width: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  overflow: hidden !important;
+  border: 1px solid var(--user-border) !important;
+  border-radius: 11px !important;
+  align-self: center !important;
+}
+.user-map-page .user-event-poster-link img,
+.user-map-page img.user-event-poster,
+.user-map-page .user-event-poster img {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: 16 / 9 !important;
+  object-fit: cover !important;
+  object-position: center !important;
+}
+.user-map-page .user-event-discovery-cta {
+  min-height: 42px !important;
+  padding: 10px 14px !important;
+  border-radius: 9px !important;
+  background: var(--user-green) !important;
+  color: #fff !important;
+  font-size: 13px !important;
+}
+.user-map-page .user-event-discovery-controls button { min-width: 38px !important; min-height: 38px !important; font-size: 17px !important; }
+.user-map-page .user-location-controls { gap: 8px !important; }
+.user-map-page .user-locate-button { min-height: 46px !important; padding: 0 14px !important; border-radius: 10px !important; font-size: 13px !important; }
+.user-map-page .user-location-start-button { background: var(--user-green) !important; border-color: var(--user-green) !important; color: #fff !important; }
+.user-map-page :where(button,a):focus-visible { outline: 3px solid rgba(23,107,77,.5) !important; outline-offset: 3px !important; }
+@media (min-width: 761px) {
+  .user-map-page .user-trip-card { top: 20px !important; left: 20px !important; }
+  .user-map-page .user-services-stack { top: 20px !important; right: 20px !important; }
+  .user-map-page .user-event-discovery { left: 20px !important; bottom: 20px !important; }
+  .user-map-page .user-location-controls { right: 20px !important; bottom: 20px !important; }
+}
+@media (max-width: 760px) {
+  .user-map-page .user-trip-card {
+    top: 10px !important; left: 10px !important;
+    width: min(320px, calc(100vw - 20px)) !important;
+    max-height: 34dvh !important; overflow: auto !important; padding: 14px !important;
+  }
+  .user-map-page .user-trip-field strong { font-size: 15px !important; }
+  .user-map-page .user-trip-summary > div { padding: 9px !important; }
+  .user-map-page .user-trip-summary strong { font-size: 18px !important; }
+  .user-map-page .user-services-stack {
+    right: 10px !important; bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    top: auto !important; width: min(290px, calc(100vw - 20px)) !important;
+    max-height: 43dvh !important;
+  }
+  .user-map-page .user-services-label { min-height: 58px !important; padding: 12px 14px !important; }
+  .user-map-page .user-services-label strong { font-size: 16px !important; }
+  .user-map-page .user-services-content { max-height: calc(43dvh - 68px) !important; overflow: auto !important; padding: 8px !important; border: 1px solid var(--user-border) !important; border-radius: 12px !important; background: #fff !important; box-shadow: 0 8px 20px rgba(20,45,35,.12) !important; }
+  .user-map-page .user-services-stack.is-collapsed .user-services-content { display: none !important; }
+  .user-map-page .user-vendor-card, .user-map-page .user-orders-card { padding: 12px !important; }
+  .user-map-page .user-service-option { min-height: 48px !important; padding: 10px !important; }
+  .user-map-page .user-event-discovery {
+    left: 10px !important; bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+    width: min(360px, calc(100vw - 20px)) !important;
+    grid-template-columns: minmax(0, 1fr) minmax(110px, 42%) !important;
+    gap: 10px !important; padding: 12px !important;
+    max-height: 30dvh !important; overflow: auto !important;
+  }
+  .user-map-page .user-event-discovery-title { font-size: 16px !important; }
+  .user-map-page .user-event-discovery-date { font-size: 12px !important; }
+  .user-map-page .user-event-discovery-venue { font-size: 12px !important; }
+  .user-map-page .user-event-poster-link, .user-map-page .user-event-poster { aspect-ratio: 16 / 9 !important; }
+  .user-map-page .user-location-controls {
+    right: 10px !important; bottom: calc(58px + env(safe-area-inset-bottom, 0px)) !important;
+    max-width: min(210px, calc(100vw - 20px)) !important;
+  }
+  .user-map-page .user-locate-button { min-height: 42px !important; font-size: 12px !important; padding: 0 11px !important; }
+}
+@media (max-width: 430px) {
+  .user-map-page .user-trip-card { width: min(275px, calc(100vw - 20px)) !important; max-height: 31dvh !important; }
+  .user-map-page .user-services-stack { width: min(250px, calc(100vw - 20px)) !important; max-height: 39dvh !important; }
+  .user-map-page .user-event-discovery {
+    display: grid !important;
+    width: min(310px, calc(100vw - 20px)) !important;
+    max-height: 26dvh !important;
+    grid-template-columns: minmax(0, 1fr) minmax(95px, 38%) !important;
+    gap: 8px !important; padding: 10px !important;
+  }
+  .user-map-page .user-event-discovery-title { font-size: 14px !important; }
+  .user-map-page .user-event-discovery-category { font-size: 10px !important; }
+  .user-map-page .user-event-discovery-date,
+  .user-map-page .user-event-discovery-venue { font-size: 11px !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .user-map-page * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+</style>
